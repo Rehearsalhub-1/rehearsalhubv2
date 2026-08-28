@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── USERS & MEMBERSHIPS ──
+model User {
+  id              String       @id @default(uuid())
+  firebaseUid     String       @unique
+  email           String       @unique
+  firstName       String
+  lastName        String
+  avatarUrl       String?
+  role            String       @default("member")
+  hasHqAccess     Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+
+  memberships     Membership[]
+  playlists       Playlist[]
+  attendance      Attendance[]
+  chatMessages    ChatMessage[]
+}
+
+model Zone {
+  id              String       @id @default(uuid())
+  name            String
+  invitationCode  String       @unique
+  isHq            Boolean      @default(false)
+  
+  memberships     Membership[]
+  subgroups       Subgroup[]
+}
+
+model Subgroup {
+  id              String       @id @default(uuid())
+  zoneId          String
+  name            String
+  
+  zone            Zone         @relation(fields: [zoneId], references: [id])
+  songs           Song[]
+  rehearsals      Rehearsal[]
+}
+
+model Membership {
+  id              String       @id @default(uuid())
+  userId          String
+  zoneId          String
+  role            String       @default("member")
+  
+  user            User         @relation(fields: [userId], references: [id])
+  zone            Zone         @relation(fields: [zoneId], references: [id])
+
+  @@unique([userId, zoneId])
+}
+
+// ── SONGS & REHEARSALS ──
+model Song {
+  id              String       @id @default(uuid())
+  subgroupId      String?
+  title           String
+  key             String?
+  lyrics          String?      @db.Text
+  audioUrl        String?
+  status          String       @default("new")
+  isActive        Boolean      @default(true)
+  
+  subgroup        Subgroup?    @relation(fields: [subgroupId], references: [id])
+  rehearsals      RehearsalSong[]
+}
+
+model Rehearsal {
+  id              String       @id @default(uuid())
+  subgroupId      String
+  name            String
+  date            DateTime
+  location        String?
+  status          String       @default("pre-rehearsal")
+
+  subgroup        Subgroup     @relation(fields: [subgroupId], references: [id])
+  songs           RehearsalSong[]
+}
+
+model RehearsalSong {
+  rehearsalId     String
+  songId          String
+  order           Int          @default(0)
+
+  rehearsal       Rehearsal    @relation(fields: [rehearsalId], references: [id])
+  song            Song         @relation(fields: [songId], references: [id])
+
+  @@id([rehearsalId, songId])
+}
+
+// ── EXTRAS ──
+model Playlist {
+  id              String       @id @default(uuid())
+  userId          String
+  name            String
+  songIds         String[]
+
+  user            User         @relation(fields: [userId], references: [id])
+}
+
+model Attendance {
+  id              String       @id @default(uuid())
+  userId          String
+  rehearsalId     String
+  scannedAt       DateTime     @default(now())
+
+  user            User         @relation(fields: [userId], references: [id])
+}
+
+model ChatMessage {
+  id              String       @id @default(uuid())
+  roomId          String
+  userId          String
+  text            String
+  createdAt       DateTime     @default(now())
+
+  user            User         @relation(fields: [userId], references: [id])
+}
+
+
+model firestore_export {
+  id              Int      @id @default(autoincrement())
+  collection_path String
+  firestore_id    String
+  data            Json
+  migrated_at     DateTime? @default(now())
+
+  @@unique([collection_path, firestore_id])
+}

@@ -1,0 +1,1339 @@
+    {
+      collection: 'achievement_templates',
+      table: schema.achievementTemplates,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        createdAt: data.created_at,
+        description: data.description,
+        migratedAt: data.migrated_at,
+        migratedFromSupabase: !!data.migrated_from_supabase,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'activity_logs',
+      table: schema.activityLogs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        action: data.action,
+        zoneId: data.zoneId,
+        message: data.message,
+        section: data.section,
+        itemName: data.itemName,
+        userName: data.userName,
+        zoneName: data.zoneName,
+        createdAt: data.createdAt,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'admin_playlists',
+      table: schema.adminPlaylists,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        type: data.type,
+        forHQ: !!data.forHQ,
+        isPublic: !!data.isPublic,
+        videoIds: data.videoIds,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        thumbnail: data.thumbnail,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        isFeatured: !!data.isFeatured,
+        description: data.description,
+        createdByName: data.createdByName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'analytics_events',
+      table: schema.analyticsEvents,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        page: data.page,
+        type: data.type,
+        browser: data.browser,
+        metadata: data.metadata,
+        referrer: data.referrer,
+        sessionId: data.sessionId,
+        timestamp: data.timestamp,
+        userAgent: data.userAgent,
+        deviceType: data.deviceType,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'analytics_monthly',
+      table: schema.analyticsMonthly,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        year: data.year,
+        month: data.month,
+        cities: data.cities,
+        userIds: data.userIds,
+        browsers: data.browsers,
+        countries: data.countries,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        pageViews: data.pageViews,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        totalEvents: data.totalEvents,
+        uniqueUsers: data.uniqueUsers,
+        totalSessions: data.totalSessions,
+        mobileSessions: data.mobileSessions,
+        tabletSessions: data.tabletSessions,
+        totalPageViews: data.totalPageViews,
+        desktopSessions: data.desktopSessions,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'analytics_sessions',
+      table: schema.analyticsSessions,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        city: data.city,
+        pages: data.pages,
+        browser: data.browser,
+        country: data.country,
+        endTime: data.endTime,
+        duration: data.duration,
+        pageViews: data.pageViews,
+        sessionId: data.sessionId,
+        startTime: data.startTime,
+        deviceType: data.deviceType,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'app_settings',
+      table: schema.appSettings,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        downloadUrl: data.downloadUrl,
+        releaseNotes: data.releaseNotes,
+        latestVersion: data.latestVersion,
+        minRequiredVersion: data.minRequiredVersion,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'attendance',
+      table: schema.attendance,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        qrCode: data.qrCode,
+        status: data.status,
+        userId: data.userId,
+        zoneId: data.zoneId,
+        userId: data.user_id,
+        userName: data.userName,
+        eventName: data.eventName,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        userName: data.user_name,
+        eventName: data.event_name,
+        checkInTime: data.check_in_time,
+        recordedByAdminId: data.recordedByAdminId,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'audiolab_playlists',
+      table: schema.audiolabPlaylists,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        title: data.title,
+        userId: data.userId,
+        zoneId: data.zoneId,
+        songIds: data.songIds,
+        isPublic: !!data.isPublic,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'audiolab_progress',
+      table: schema.audiolabProgress,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        xp: data.xp,
+        level: data.level,
+        userId: data.userId,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        averageScore: data.averageScore,
+        totalMinutes: data.totalMinutes,
+        weeklyTarget: data.weeklyTarget,
+        currentStreak: data.currentStreak,
+        longestStreak: data.longestStreak,
+        totalSessions: data.totalSessions,
+        weeklyProgress: data.weeklyProgress,
+        averageAccuracy: data.averageAccuracy,
+        lastPracticeDate: data.lastPracticeDate,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'audiolab_projects',
+      table: schema.audiolabProjects,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        tempo: data.tempo,
+        tracks: data.tracks,
+        zoneId: data.zoneId,
+        ownerId: data.ownerId,
+        duration: data.duration,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        collaborators: data.collaborators,
+        timeSignature: data.timeSignature,
+        referenceSongId: data.referenceSongId,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'audiolab_sessions',
+      table: schema.audiolabSessions,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        mode: data.mode,
+        score: data.score,
+        songId: data.songId,
+        streak: data.streak,
+        userId: data.userId,
+        endedAt: data.endedAt,
+        accuracy: data.accuracy,
+        duration: data.duration,
+        startedAt: data.startedAt ? new Date(data.startedAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'calendar_events',
+      table: schema.calendarEvents,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        end: data.end ? new Date(data.end._seconds * 1000) : null,
+        type: data.type,
+        color: data.color,
+        start: data.start ? new Date(data.start._seconds * 1000) : null,
+        title: data.title,
+        allDay: !!data.allDay,
+        zoneId: data.zoneId,
+        location: data.location,
+        attendees: data.attendees,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        reminders: data.reminders,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        isRecurring: !!data.isRecurring,
+        createdByName: data.createdByName,
+        recurringPattern: data.recurringPattern,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'calls_v2',
+      table: schema.callsV2,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        chatId: data.chatId,
+        status: data.status,
+        callerId: data.callerId,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        callerName: data.callerName,
+        receiverId: data.receiverId,
+        isGroupCall: !!data.isGroupCall,
+        callerAvatar: data.callerAvatar,
+        participants: data.participants,
+        receiverName: data.receiverName,
+        receiverAvatar: data.receiverAvatar,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'categories',
+      table: schema.categories,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        icon: data.icon,
+        name: data.name,
+        color: data.color,
+        isActive: !!data.isActive,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'chat_users',
+      table: schema.chatUsers,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        email: data.email,
+        zoneId: data.zoneId,
+        fullName: data.fullName,
+        isOnline: !!data.isOnline,
+        lastName: data.lastName,
+        lastSeen: data.lastSeen ? new Date(data.lastSeen._seconds * 1000) : null,
+        zoneName: data.zoneName,
+        firstName: data.firstName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'chats',
+      table: schema.chats,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        admins: data.admins,
+        pinned: data.pinned,
+        isActive: !!data.isActive,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        lastMessage: data.lastMessage,
+        unreadCount: data.unreadCount,
+        participants: data.participants,
+        participantNames: data.participantNames,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'chats_v2',
+      table: schema.chatsV2,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        unreadCount: data.unreadCount,
+        participants: data.participants,
+        participantDetails: data.participantDetails,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'cloudinary_media',
+      table: schema.cloudinaryMedia,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        url: data.url,
+        name: data.name,
+        size: data.size,
+        type: data.type,
+        width: data.width,
+        folder: data.folder,
+        format: data.format,
+        height: data.height,
+        zoneId: data.zoneId,
+        duration: data.duration,
+        publicId: data.publicId,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        resourceType: data.resourceType,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'countdowns',
+      table: schema.countdowns,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        targetDate: data.targetDate,
+        praiseNightId: data.praiseNightId,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'fcm_tokens',
+      table: schema.fcmTokens,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        token: data.token,
+        userId: data.userId,
+        lastUsed: data.lastUsed ? new Date(data.lastUsed._seconds * 1000) : null,
+        platform: data.platform,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'group_messages',
+      table: schema.groupMessages,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        read: !!data.read,
+        content: data.content,
+        groupId: data.group_id,
+        senderId: data.sender_id,
+        timestamp: data.timestamp,
+        senderName: data.sender_name,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'hq_members',
+      table: schema.hqMembers,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        role: data.role,
+        status: data.status,
+        userId: data.userId,
+        joinedAt: data.joinedAt ? new Date(data.joinedAt._seconds * 1000) : null,
+        userName: data.userName,
+        hqGroupId: data.hqGroupId,
+        invitedBy: data.invitedBy,
+        userEmail: data.userEmail,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'kingschat_auth_sessions',
+      table: schema.kingschatAuthSessions,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        otp: data.otp,
+        message: data.message,
+        success: !!data.success,
+        authData: data.authData,
+        verified: !!data.verified,
+        processed: !!data.processed,
+        timestamp: data.timestamp,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'master_programs',
+      table: schema.masterPrograms,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        songIds: data.songIds,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        sortOrder: data.sortOrder,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        publishedBy: data.publishedBy,
+        publishedByName: data.publishedByName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'master_songs',
+      table: schema.masterSongs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        key: data.key,
+        solfa: data.solfa,
+        tempo: data.tempo,
+        title: data.title,
+        lyrics: data.lyrics,
+        writer: data.writer,
+        drummer: data.drummer,
+        category: data.category,
+        imageUrl: data.imageUrl,
+        audioFile: data.audioFile,
+        audioUrls: data.audioUrls,
+        conductor: data.conductor,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        categories: data.categories,
+        leadSinger: data.leadSinger,
+        sourceType: data.sourceType,
+        customParts: data.customParts,
+        importCount: data.importCount,
+        publishedAt: data.publishedAt ? new Date(data.publishedAt._seconds * 1000) : null,
+        publishedBy: data.publishedBy,
+        bassGuitarist: data.bassGuitarist,
+        leadKeyboardist: data.leadKeyboardist,
+        publishedByName: data.publishedByName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'media',
+      table: schema.media,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        url: data.url,
+        name: data.name,
+        size: data.size,
+        type: data.type,
+        folder: data.folder,
+        publicid: data.publicid,
+        createdat: data.createdat,
+        updatedat: data.updatedat,
+        uploadedat: data.uploadedat,
+        migratedAt: data.migrated_at,
+        storagepath: data.storagepath,
+        cloudinaryPreset: data.cloudinary_preset,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'media_categories',
+      table: schema.mediaCategories,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        slug: data.slug,
+        order: data.order,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'media_comments',
+      table: schema.mediaComments,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        likes: data.likes,
+        userId: data.userId,
+        content: data.content,
+        likedBy: data.likedBy,
+        mediaId: data.mediaId,
+        dislikes: data.dislikes,
+        parentId: data.parentId,
+        userName: data.userName,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        userEmail: data.userEmail,
+        dislikedBy: data.dislikedBy,
+        parentUserName: data.parentUserName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'media_doodles',
+      table: schema.mediaDoodles,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        strokes: data.strokes,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'media_playlists',
+      table: schema.mediaPlaylists,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        userId: data.userId,
+        isPublic: !!data.isPublic,
+        isSystem: !!data.isSystem,
+        videoIds: data.videoIds,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        thumbnail: data.thumbnail,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        systemType: data.systemType,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'media_videos',
+      table: schema.mediaVideos,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        forHQ: !!data.forHQ,
+        likes: data.likes,
+        title: data.title,
+        views: data.views,
+        hidden: !!data.hidden,
+        featured: !!data.featured,
+        videoUrl: data.videoUrl,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        isYouTube: !!data.isYouTube,
+        thumbnail: data.thumbnail,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        createdByName: data.createdByName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'messages',
+      table: schema.messages,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        text: data.text,
+        chatId: data.chatId,
+        edited: !!data.edited,
+        senderId: data.senderId,
+        reactions: data.reactions,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        senderName: data.senderName,
+        messageType: data.messageType,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'messages_v2',
+      table: schema.messagesV2,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        text: data.text,
+        type: data.type,
+        callId: data.callId,
+        chatId: data.chatId,
+        edited: !!data.edited,
+        status: data.status,
+        callType: data.callType,
+        senderId: data.senderId,
+        reactions: data.reactions,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        senderName: data.senderName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'notifications',
+      table: schema.notifications,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        title: data.title,
+        zoneId: data.zoneId,
+        isRead: !!data.is_read,
+        message: data.message,
+        category: data.category,
+        priority: data.priority,
+        senderId: data.sender_id,
+        actionUrl: data.action_url,
+        createdAt: data.created_at,
+        senderName: data.sender_name,
+        targetUserId: data.target_user_id,
+        targetAudience: data.target_audience,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'page_categories',
+      table: schema.pageCategories,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        image: data.image,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'praise_night_songs',
+      table: schema.praiseNightSongs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        key: data.key,
+        tempo: data.tempo,
+        title: data.title,
+        lyrics: data.lyrics,
+        solfas: data.solfas,
+        status: data.status,
+        writer: data.writer,
+        zoneId: data.zoneId,
+        drummer: data.drummer,
+        history: data.history,
+        mediaId: data.mediaId,
+        category: data.category,
+        comments: data.comments,
+        isActive: !!data.isActive,
+        notation: data.notation,
+        audioFile: data.audioFile,
+        audioUrls: data.audioUrls,
+        conductor: data.conductor,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        categories: data.categories,
+        leadSinger: data.leadSinger,
+        customParts: data.customParts,
+        bassGuitarist: data.bassGuitarist,
+        leadGuitarist: data.leadGuitarist,
+        praiseNightId: data.praiseNightId,
+        availableParts: data.availableParts,
+        rehearsalCount: data.rehearsalCount,
+        leadKeyboardist: data.leadKeyboardist,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'praise_nights',
+      table: schema.praiseNights,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        date: data.date,
+        name: data.name,
+        scope: data.scope,
+        songs: data.songs,
+        zoneId: data.zoneId,
+        category: data.category,
+        location: data.location,
+        countdown: data.countdown,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt,
+        firebaseId: data.firebaseId,
+        bannerImage: data.bannerImage,
+        pageCategory: data.pageCategory,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'presence',
+      table: schema.presence,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        status: data.status,
+        lastSeen: data.lastSeen,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'profiles',
+      table: schema.profiles,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        role: data.role,
+        email: data.email,
+        lastName: data.last_name,
+        createdAt: data.created_at,
+        firstName: data.first_name,
+        updatedAt: data.updated_at,
+        kingschatId: data.kingschat_id,
+        hasHqAccess: !!data.has_hq_access,
+        profileCompleted: !!data.profile_completed,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'push_notifications',
+      table: schema.pushNotifications,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        category: data.category,
+        priority: data.priority,
+        broadcast: !!data.broadcast,
+        timestamp: data.timestamp,
+        actionUrl: data.action_url,
+        createdAt: data.created_at,
+        expiresAt: data.expires_at,
+        updatedAt: data.updated_at,
+        notificationId: data.notificationId,
+        targetAudience: data.target_audience,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'schedule_categories',
+      table: schema.scheduleCategories,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        icon: data.icon,
+        color: data.color,
+        label: data.label,
+        order: data.order,
+        zoneId: data.zoneId,
+        isActive: !!data.isActive,
+        parentId: data.parentId,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        iconColor: data.iconColor,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'schedule_programs',
+      table: schema.schedulePrograms,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        days: data.days,
+        name: data.name,
+        weeks: data.weeks,
+        zoneId: data.zoneId,
+        swapped: data.swapped,
+        newSongs: data.newSongs,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        isArchived: !!data.isArchived,
+        submitters: data.submitters,
+        carriedOver: data.carriedOver,
+        nameChanges: data.nameChanges,
+        invalidSongs: data.invalidSongs,
+        dailySchedules: data.dailySchedules,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'schedule_songs',
+      table: schema.scheduleSongs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        order: data.order,
+        title: data.title,
+        writer: data.writer,
+        zoneId: data.zoneId,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        categoryId: data.categoryId,
+        leadSinger: data.leadSinger,
+        dateReceived: data.dateReceived,
+        rehearsalCount: data.rehearsalCount,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'settings',
+      table: schema.settings,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        radius: data.radius,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'simplified_analytics',
+      table: schema.simplifiedAnalytics,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        year: data.year,
+        month: data.month,
+        cities: data.cities,
+        browsers: data.browsers,
+        countries: data.countries,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        pageViews: data.pageViews,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        totalLogins: data.totalLogins,
+        uniqueUsers: data.uniqueUsers,
+        totalSignups: data.totalSignups,
+        songMinistries: data.songMinistries,
+        featureEngagements: data.featureEngagements,
+        totalSongMinistries: data.totalSongMinistries,
+        totalFeatureEngagements: data.totalFeatureEngagements,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'song_history',
+      table: schema.songHistory,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        title: data.title,
+        songId: data.song_id,
+        newValue: data.new_value,
+        oldValue: data.old_value,
+        createdAt: data.created_at,
+        createdBy: data.created_by,
+        updatedAt: data.updated_at,
+        description: data.description,
+        migratedAt: data.migrated_at,
+        migratedFromSupabase: !!data.migrated_from_supabase,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'song_notifications',
+      table: schema.songNotifications,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        read: !!data.read,
+        type: data.type,
+        songId: data.songId,
+        zoneId: data.zoneId,
+        message: data.message,
+        zoneName: data.zoneName,
+        createdAt: data.createdAt,
+        songTitle: data.songTitle,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        submittedBy: data.submittedBy,
+        submittedByEmail: data.submittedByEmail,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'songs',
+      table: schema.songs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        key: data.key,
+        tempo: data.tempo,
+        title: data.title,
+        lyrics: data.lyrics,
+        solfas: data.solfas,
+        status: data.status,
+        writer: data.writer,
+        drummer: data.drummer,
+        audioUrl: data.audioUrl,
+        category: data.category,
+        conductor: data.conductor,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        leadSinger: data.leadSinger,
+        leadGuitarist: data.leadGuitarist,
+        rehearsalCount: data.rehearsalCount,
+        leadKeyboardist: data.leadKeyboardist,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'statuses_v2',
+      table: schema.statusesV2,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        likes: data.likes,
+        userId: data.userId,
+        zoneId: data.zoneId,
+        caption: data.caption,
+        viewers: data.viewers,
+        mediaUrl: data.mediaUrl,
+        userName: data.userName,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        userAvatar: data.userAvatar,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'subgroup_praise_nights',
+      table: schema.subgroupPraiseNights,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        date: data.date,
+        name: data.name,
+        scope: data.scope,
+        zoneId: data.zoneId,
+        songIds: data.songIds,
+        category: data.category,
+        location: data.location,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        subGroupId: data.subGroupId,
+        description: data.description,
+        subGroupName: data.subGroupName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'subgroup_songs',
+      table: schema.subgroupSongs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        key: data.key,
+        solfa: data.solfa,
+        tempo: data.tempo,
+        title: data.title,
+        lyrics: data.lyrics,
+        status: data.status,
+        writer: data.writer,
+        zoneId: data.zoneId,
+        category: data.category,
+        isActive: !!data.isActive,
+        audioFile: data.audioFile,
+        audioUrls: data.audioUrls,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        createdBy: data.createdBy,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        importedAt: data.importedAt ? new Date(data.importedAt._seconds * 1000) : null,
+        leadSinger: data.leadSinger,
+        subGroupId: data.subGroupId,
+        importedFrom: data.importedFrom,
+        originalSongId: data.originalSongId,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'subgroups',
+      table: schema.subgroups,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        type: data.type,
+        status: data.status,
+        zoneId: data.zoneId,
+        createdAt: data.createdAt,
+        memberIds: data.memberIds,
+        description: data.description,
+        coordinatorId: data.coordinatorId,
+        coordinatorName: data.coordinatorName,
+        coordinatorEmail: data.coordinatorEmail,
+        estimatedMembers: data.estimatedMembers,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'submitted_songs',
+      table: schema.submittedSongs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        key: data.key,
+        notes: data.notes,
+        tempo: data.tempo,
+        title: data.title,
+        lyrics: data.lyrics,
+        solfas: data.solfas,
+        status: data.status,
+        writer: data.writer,
+        zoneId: data.zoneId,
+        drummer: data.drummer,
+        audioUrl: data.audioUrl,
+        category: data.category,
+        zoneName: data.zoneName,
+        conductor: data.conductor,
+        createdAt: data.createdAt,
+        isUpdated: !!data.isUpdated,
+        updatedAt: data.updatedAt,
+        leadSinger: data.leadSinger,
+        reviewedBy: data.reviewedBy,
+        reviewNotes: data.reviewNotes,
+        submittedBy: data.submittedBy,
+        leadGuitarist: data.leadGuitarist,
+        hasNewUserReply: !!data.hasNewUserReply,
+        leadKeyboardist: data.leadKeyboardist,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'support_messages',
+      table: schema.supportMessages,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        text: data.text,
+        chatId: data.chatId,
+        status: data.status,
+        senderId: data.senderId,
+        timestamp: data.timestamp ? new Date(data.timestamp._seconds * 1000) : null,
+        senderName: data.senderName,
+        senderType: data.senderType,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'sys_metadata',
+      table: schema.sysMetadata,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        type: data.type,
+        zoneId: data.zoneId,
+        lastUpdated: data.lastUpdated ? new Date(data.lastUpdated._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'upcoming_events',
+      table: schema.upcomingEvents,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        date: data.date,
+        time: data.time,
+        type: data.type,
+        image: data.image,
+        title: data.title,
+        location: data.location,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        showInCarousel: !!data.showInCarousel,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'user_favorites',
+      table: schema.userFavorites,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        songs: data.songs,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'user_groups',
+      table: schema.userGroups,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        userId: data.user_id,
+        groupName: data.group_name,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'user_notifications',
+      table: schema.userNotifications,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        read: !!data.read,
+        type: data.type,
+        title: data.title,
+        userId: data.userId,
+        message: data.message,
+        createdAt: data.createdAt,
+        subGroupName: data.subGroupName,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'user_playlists',
+      table: schema.userPlaylists,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        songs: data.songs,
+        userId: data.userId,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'user_sessions',
+      table: schema.userSessions,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        osInfo: data.osInfo,
+        userId: data.userId,
+        deviceId: data.deviceId,
+        isActive: !!data.isActive,
+        sessions: data.sessions,
+        loginTime: data.loginTime ? new Date(data.loginTime._seconds * 1000) : null,
+        sessionId: data.sessionId,
+        deviceInfo: data.deviceInfo,
+        browserInfo: data.browserInfo,
+        deviceModel: data.deviceModel,
+        lastUpdated: data.lastUpdated,
+        lastActivity: data.lastActivity ? new Date(data.lastActivity._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'user_song_notes',
+      table: schema.userSongNotes,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        note: data.note,
+        strokes: data.strokes,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'watch_history',
+      table: schema.watchHistory,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        userId: data.userId,
+        mediaId: data.mediaId,
+        progress: data.progress,
+        lastWatched: data.lastWatched ? new Date(data.lastWatched._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'whatsapp_users',
+      table: schema.whatsappUsers,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        about: data.about,
+        email: data.email,
+        zoneId: data.zoneId,
+        privacy: data.privacy,
+        fullName: data.fullName,
+        isOnline: !!data.isOnline,
+        lastName: data.lastName,
+        lastSeen: data.lastSeen ? new Date(data.lastSeen._seconds * 1000) : null,
+        zoneName: data.zoneName,
+        firstName: data.firstName,
+        profilePic: data.profilePic,
+        blockedUsers: data.blockedUsers,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_admin_messages',
+      table: schema.zoneAdminMessages,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        title: data.title,
+        sentAt: data.sentAt,
+        sentBy: data.sentBy,
+        zoneId: data.zoneId,
+        message: data.message,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_categories',
+      table: schema.zoneCategories,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        icon: data.icon,
+        name: data.name,
+        color: data.color,
+        zoneId: data.zoneId,
+        isActive: !!data.isActive,
+        createdAt: data.createdAt,
+        updatedAt: data.updatedAt,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_cloudinary_media',
+      table: schema.zoneCloudinaryMedia,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        url: data.url,
+        name: data.name,
+        size: data.size,
+        type: data.type,
+        width: data.width,
+        folder: data.folder,
+        format: data.format,
+        height: data.height,
+        zoneId: data.zoneId,
+        duration: data.duration,
+        publicId: data.publicId,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        resourceType: data.resourceType,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_members',
+      table: schema.zoneMembers,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        role: data.role,
+        status: data.status,
+        userId: data.userId,
+        zoneId: data.zoneId,
+        joinedAt: data.joinedAt ? new Date(data.joinedAt._seconds * 1000) : null,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_notifications',
+      table: schema.zoneNotifications,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        read: !!data.read,
+        type: data.type,
+        title: data.title,
+        zoneId: data.zoneId,
+        message: data.message,
+        createdAt: data.createdAt,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_page_categories',
+      table: schema.zonePageCategories,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        image: data.image,
+        zoneId: data.zoneId,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        description: data.description,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_praise_nights',
+      table: schema.zonePraiseNights,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        date: data.date,
+        name: data.name,
+        scope: data.scope,
+        songs: data.songs,
+        zoneId: data.zoneId,
+        category: data.category,
+        location: data.location,
+        countdown: data.countdown,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        firebaseId: data.firebaseId,
+        bannerImage: data.bannerImage,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zone_songs',
+      table: schema.zoneSongs,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        key: data.key,
+        tempo: data.tempo,
+        title: data.title,
+        lyrics: data.lyrics,
+        solfas: data.solfas,
+        status: data.status,
+        writer: data.writer,
+        zoneId: data.zoneId,
+        drummer: data.drummer,
+        history: data.history,
+        mediaId: data.mediaId,
+        category: data.category,
+        comments: data.comments,
+        isActive: !!data.isActive,
+        notation: data.notation,
+        audioFile: data.audioFile,
+        audioUrls: data.audioUrls,
+        conductor: data.conductor,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        categories: data.categories,
+        leadSinger: data.leadSinger,
+        customParts: data.customParts,
+        bassGuitarist: data.bassGuitarist,
+        leadGuitarist: data.leadGuitarist,
+        praiseNightId: data.praiseNightId,
+        availableParts: data.availableParts,
+        rehearsalCount: data.rehearsalCount,
+        leadKeyboardist: data.leadKeyboardist,
+        raw_data: data
+      })
+    },
+    {
+      collection: 'zones',
+      table: schema.zones,
+      mapFn: (id: string, data: any) => ({
+        id: raw.firestore_id,
+        name: data.name,
+        slug: data.slug,
+        region: data.region,
+        createdAt: data.createdAt ? new Date(data.createdAt._seconds * 1000) : null,
+        updatedAt: data.updatedAt ? new Date(data.updatedAt._seconds * 1000) : null,
+        maxMembers: data.maxMembers,
+        themeColor: data.themeColor,
+        memberCount: data.memberCount,
+        invitationCode: data.invitationCode,
+        subscriptionTier: data.subscriptionTier,
+        subscriptionStatus: data.subscriptionStatus,
+        raw_data: data
+      })
+    },

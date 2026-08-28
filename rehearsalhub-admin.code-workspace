@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../rehearsalhub-admin"
+		},
+		{
+			"path": "../rehearsalhub-api"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../clones/Loveworld-Singers-Rehearsal-Hub-Portal-Zonal-Mode"
+		}
+	]
+}

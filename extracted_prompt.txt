@@ -1,0 +1,27 @@
+<USER_REQUEST>
+I have a React Native app with multiple issues that need fixing in this exact order:
+
+---
+
+## 1. ONESIGNAL PUSH NOTIFICATIONS SETUP
+
+Replace my current FCM/notification setup with OneSignal.
+
+Steps to do:
+- Install: `npm install react-native-onesignal`
+- For Android: add the OneSignal gradle plugin in android/build.gradle and android/app/build.gradle
+- For iOS: run `cd ios && pod install`
+- Initialize OneSignal in my App.js or index.js root file with my OneSignal App ID
+- Request notification permissions on app start
+- Add background notification handler that works when app is killed or in background
+- Add foreground notification handler
+- Export a helper function `sendLocalNotification(title, message)` I can call anywhere
+- Make sure it works for both Android and iOS
+
+---
+
+## 2. REACT-NATIVE-TRACK-PLAYER: LOCK SCREEN CONTROLS NOT WORKING
+
+Fix my lock screen controls so play/pause/next/prev all respond properly.
+
+<truncated 3530 bytes>

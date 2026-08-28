@@ -1,0 +1,118 @@
+{
+  "expo": {
+    "name": "Rehearsal Hub Portal",
+    "slug": "Rehearsal Hub Portal",
+    "scheme": "rehearsalhub",
+    "version": "2.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio",
+          "voip"
+        ],
+        "NSMicrophoneUsageDescription": "RehearsalHub needs microphone access for voice and video calls",
+        "NSCameraUsageDescription": "RehearsalHub needs camera access for video calls",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.karaoke.rehearsalhubv2",
+      "associatedDomains": [
+        "applinks:www.loveworldsingersrehearsalhubportal.org"
+      ]
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "predictiveBackGestureEnabled": false,
+      "package": "com.karaoke.rehearsalhubv2",
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+        "android.permission.WAKE_LOCK",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.MANAGE_OWN_CALLS",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "www.loveworldsingersrehearsalhubportal.org",
+              "pathPrefix": "/songs"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "rehearsalhub.net",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font",
+      "expo-video",
+      "expo-web-browser",
+      "expo-secure-store",
+      "./plugins/withKotlinJvmTarget",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "lwsrhp",
+          "project": "rehearsal-hub-mobile"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8d220f21-f2b2-44f5-bfcd-668fc0877172"
+      }
+    },
+    "owner": "rickson01",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/8d220f21-f2b2-44f5-bfcd-668fc0877172",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
+  }
+}

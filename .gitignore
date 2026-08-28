@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+package-lock.json.bak
+yarn.lock.bak
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# Debug & Logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.pem
+
+# Local env files
+.env
+.env*
+.env*.local
+**/.env
+**/.env*
+!*.env.example
+
+# Service accounts & credentials
+*service-account*.json
+**/*service-account*.json
+*.json.json
+google-services.json
+GoogleService-Info.plist
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE & Tools
+.vscode/
+.idea/
+.agents/
+.gemini/
+
+# Generated native folders
+/ios
+/android
+
+# Android build cache
+android/.cxx/
+android/.gradle/
+android/app/build/
+android/build/
