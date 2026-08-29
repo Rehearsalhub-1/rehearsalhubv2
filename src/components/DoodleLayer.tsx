@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { StyleSheet, View, PanResponder, Dimensions } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useAnnotationStore } from '../stores/useAnnotationStore';
+import { apiClient } from '../lib/apiClient';
 
 export const DoodleLayer = React.memo(({ 
   isAnnotationMode, 
@@ -24,6 +25,45 @@ export const DoodleLayer = React.memo(({
   useEffect(() => {
     annotationToolRef.current = annotationTool;
   }, [annotationTool]);
+
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleSave = (strokes: any[]) => {
+    if (!activeTrackId) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await apiClient.patch(`/songs/annotations/${activeTrackId}`, { data: { strokes } });
+      } catch (e) {
+        console.warn('[DoodleLayer] Failed to save annotation:', e);
+      }
+    }, 500);
+  };
+
+  useEffect(() => {
+    if (!activeTrackId) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await apiClient.get<{ success: boolean; data: any }>(`/songs/annotations/${activeTrackId}`);
+        if (!active) return;
+        const serverStrokes = res?.data?.data?.strokes;
+        if (Array.isArray(serverStrokes) && serverStrokes.length > 0) {
+          storeSetStrokes(serverStrokes);
+          if (setStrokes) setStrokes(serverStrokes);
+        }
+      } catch (e) {
+        console.warn('[DoodleLayer] Failed to load annotation:', e);
+      }
+    })();
+    return () => { active = false; };
+  }, [activeTrackId]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     latestStrokesRef.current = strokes || [];
@@ -191,10 +231,7 @@ export const DoodleLayer = React.memo(({
       onPanResponderRelease: async () => {
         const tool = annotationToolRef.current;
         if (tool === 'eraser') {
-          if (!activeTrackId) return;
-          try {
-            // doodle saved locally
-          } catch {}
+          scheduleSave(latestStrokesRef.current);
           return;
         }
 
@@ -210,6 +247,7 @@ export const DoodleLayer = React.memo(({
         const updatedStrokes = [...latestStrokesRef.current, strokeToSave];
         storeSetStrokes(updatedStrokes);
         if (setStrokes) setStrokes(updatedStrokes);
+        scheduleSave(updatedStrokes);
 
         if (!activeTrackId) return;
       }

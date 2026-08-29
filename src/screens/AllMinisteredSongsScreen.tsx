@@ -30,7 +30,7 @@ const getTrackImage = (track: any, index: number) => {
   if (track.image && typeof track.image === 'string' && track.image.startsWith('http')) return track.image;
   if (track.imageUrl) return track.imageUrl;
   if (track.image && typeof track.image !== 'string') return track.image; // Local require
-  return require('../../assets/image/song_art.webp');
+  return require('../../assets/banner/praisenight28.jpg');
 };
 
 const getRehearsalCount = (song: any): number => {

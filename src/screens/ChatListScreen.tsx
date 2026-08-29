@@ -215,18 +215,12 @@ export default function ChatListScreen({ route, navigation }: any) {
     }, 800);
   }, []);
 
-  // Shimmer animation
+  // Shimmer animation - DISABLED to reduce CPU heat
   const shimmerAnim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (!loading) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmerAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmerAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
+    // Disabled for performance: const loop = Animated.loop(...)
+    // Users see static placeholder instead of shimmer
+    return () => {};
   }, [loading]);
 
   const shimmerOpacity = shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.7] });

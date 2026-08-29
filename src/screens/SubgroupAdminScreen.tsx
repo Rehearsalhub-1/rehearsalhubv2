@@ -1,6 +1,5 @@
 import { useTheme } from '../context/ThemeContext';
 import { apiClient } from '../lib/apiClient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ScrollView,
@@ -61,7 +60,6 @@ export default function SubgroupAdminScreen({ navigation }: any) {
   const [isAddingMember, setIsAddingMember] = useState(false);
   
   const [zoneMembers, setZoneMembers]       = useState<any[]>([]);
-  const [globalProfiles, setGlobalProfiles] = useState<any[]>([]);
   const [rehearsals, setRehearsals] = useState<any[]>([]);
   const [rehearsalsLoading, setRehearsalsLoading] = useState(true);
   const [selectedRehearsalId, setSelectedRehearsalId] = useState<string | null>(null);
@@ -138,28 +136,36 @@ export default function SubgroupAdminScreen({ navigation }: any) {
   const selectedRehearsal = rehearsals.find(r => r.id === selectedRehearsalId) || null;
 
   useEffect(() => {
+    let active = true;
     const fetchMembers = async () => {
-      if (!activeSubgroup?.memberIds?.length) { 
-        setMembers([]); 
+      if (!activeSubgroupId) {
+        setMembers([]);
         setStats(prev => ({ ...prev, recentMembers: [] }));
-        return; 
+        return;
       }
       setMembersLoading(true);
       try {
-        const ids = activeSubgroup.memberIds || [];
-        const profRes = await apiClient.get<{ success: boolean; data: any[] }>('/profiles').catch(() => null);
-        const allProfiles: any[] = profRes?.data || [];
-        const fetchedMembers = allProfiles.filter((p: any) => ids.includes(p.id) || ids.includes(p.uid) || ids.includes(p.userId));
+        const res = await apiClient.get<{ success: boolean; data: any[] }>(
+          `/subgroups/${activeSubgroupId}/members`
+        );
+        if (!active) return;
+        const fetchedMembers = Array.isArray(res?.data) ? res.data : [];
         setMembers(fetchedMembers);
         setStats(prev => ({
-           ...prev,
-           recentMembers: fetchedMembers.slice(0, 5)
+          ...prev,
+          recentMembers: fetchedMembers.slice(0, 5)
         }));
-      } catch (e) { console.error(e); }
-      finally { setMembersLoading(false); }
+      } catch (e) {
+        if (!active) return;
+        console.error(e);
+        setMembers([]);
+      } finally {
+        if (active) setMembersLoading(false);
+      }
     };
     fetchMembers();
-  }, [activeSubgroupId, activeSubgroup?.memberIds]);
+    return () => { active = false; };
+  }, [activeSubgroupId]);
 
   useEffect(() => {
      if (!activeSubgroupId) return;
@@ -191,12 +197,16 @@ export default function SubgroupAdminScreen({ navigation }: any) {
      };
   }, [activeSubgroupId]);
   useEffect(() => {
-    if (searchModalVisible && activeSubgroup?.zoneId) {
+    if (searchModalVisible && (activeSubgroup?.organizationId || activeSubgroup?.zoneId)) {
       const fetchZoneMembers = async () => {
+        const zoneId = activeSubgroup?.organizationId || activeSubgroup?.zoneId;
+        if (!zoneId) return;
         setIsSearching(true);
         try {
-          const profRes = await apiClient.get<{ success: boolean; data: any[] }>('/profiles').catch(() => null);
-          setZoneMembers(profRes?.data || []);
+          const res = await apiClient.get<{ success: boolean; data: any[] }>(
+            `/members/zone/${encodeURIComponent(zoneId)}`
+          );
+          setZoneMembers(Array.isArray(res?.data) ? res.data : []);
         } catch (e) {
           console.error('Error fetching zone members:', e);
         } finally {
@@ -204,29 +214,9 @@ export default function SubgroupAdminScreen({ navigation }: any) {
         }
       };
 
-      const loadCachedProfiles = async () => {
-        try {
-          const cached = await AsyncStorage.getItem('cached_all_profiles');
-          if (cached) {
-            setGlobalProfiles(JSON.parse(cached));
-          } else {
-
-            const profRes = await apiClient.get<{ success: boolean; data: any[] }>('/profiles').catch(() => null);
-            const fetched: any[] = profRes?.data || [];
-            setGlobalProfiles(fetched);
-            await AsyncStorage.setItem('cached_all_profiles', JSON.stringify(fetched));
-            await AsyncStorage.setItem('last_profiles_sync_time', Date.now().toString());
-          }
-        } catch (e) {
-          console.error('[SubgroupAdminScreen] Error loading cached profiles:', e);
-        }
-      };
-
       fetchZoneMembers();
-      loadCachedProfiles();
     } else {
       setZoneMembers([]);
-      setGlobalProfiles([]);
       setSearchResults([]);
       setSearchQuery('');
     }
@@ -242,21 +232,12 @@ export default function SubgroupAdminScreen({ navigation }: any) {
     }
 
     try {
-      const localResults = zoneMembers.filter(p => 
+      const results = zoneMembers.filter(p => 
         (p.first_name + ' ' + (p.last_name || '')).toLowerCase().includes(term) || 
         (p.email || '').toLowerCase().includes(term)
       );
-      const globalResults = globalProfiles.filter(p => 
-        (p.first_name + ' ' + (p.last_name || '')).toLowerCase().includes(term) || 
-        (p.email || '').toLowerCase().includes(term)
-      );
-      const mergedMap = new Map();
-      localResults.forEach(r => mergedMap.set(r.id, r));
-      globalResults.forEach(r => {
-        if (!mergedMap.has(r.id)) mergedMap.set(r.id, r);
-      });
 
-      setSearchResults(Array.from(mergedMap.values()).slice(0, 30));
+      setSearchResults(results.slice(0, 30));
     } catch (e) { 
       console.error(e);
       Alert.alert('Error', 'Search failed.'); 
@@ -269,9 +250,10 @@ export default function SubgroupAdminScreen({ navigation }: any) {
     try {
       const res = await apiClient.post<{ success: boolean }>('/subgroups/members', { subGroupId: activeSubgroup.id, userId, role: 'member', addedBy: user?.uid });
       if (res?.success) {
-        setSubgroups(prev => prev.map(sg =>
-          sg.id === activeSubgroup.id ? { ...sg, memberIds: [...(sg.memberIds || []), userId] } : sg
-        ));
+        const refreshRes = await apiClient.get<{ success: boolean; data: any[] }>(
+          `/subgroups/${activeSubgroup.id}/members`
+        );
+        setMembers(Array.isArray(refreshRes?.data) ? refreshRes.data : []);
         setSearchModalVisible(false);
         setSearchQuery('');
         setSearchResults([]);
@@ -290,11 +272,10 @@ export default function SubgroupAdminScreen({ navigation }: any) {
         try {
           const res = await apiClient.delete<{ success: boolean }>(`/subgroups/members?subGroupId=${activeSubgroup?.id}&userId=${userId}`);
           if (res?.success) {
-            setSubgroups(prev => prev.map(sg =>
-              sg.id === activeSubgroup?.id
-                ? { ...sg, memberIds: (sg.memberIds || []).filter((id: string) => id !== userId) }
-                : sg
-            ));
+            const refreshRes = await apiClient.get<{ success: boolean; data: any[] }>(
+              `/subgroups/${activeSubgroup!.id}/members`
+            );
+            setMembers(Array.isArray(refreshRes?.data) ? refreshRes.data : []);
           } else { Alert.alert('Error', 'Failed to remove member.'); }
         } catch { Alert.alert('Error', 'Something went wrong.'); }
       }},
@@ -459,7 +440,12 @@ export default function SubgroupAdminScreen({ navigation }: any) {
       await apiClient.patch(`/subgroups/songs/${song.id}`, { isActive: nextActive });
 
       if (nextActive) {
-        const memberIds = activeSubgroup?.memberIds || [];
+        const memberIds = activeSubgroup?.memberIds || [];
+
+
+
+
+
       }
     } catch (e) {
       console.error(e);

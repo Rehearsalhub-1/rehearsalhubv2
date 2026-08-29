@@ -154,11 +154,12 @@ export default function SettingsScreen({ navigation }: any) {
         const timestamp = Math.floor(Date.now() / 1000); // 1-second precision
         const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
         setQrToken(`LW-ATTEND-${currentUser?.uid || ""}-${timestamp}-${randomCode}`);
-        setQrTimeLeft(5);
+        setQrTimeLeft(300); // 5 minutes max
       };
 
       generateQR();
-      const tokenInterval = setInterval(generateQR, 5000);
+      // Generate QR every 5 minutes (300 seconds) — max validity
+      const tokenInterval = setInterval(generateQR, 300000);
       const countdownInterval = setInterval(() => {
         setQrTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
       }, 1000);

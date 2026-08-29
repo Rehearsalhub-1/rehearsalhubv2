@@ -42,6 +42,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image as ExpoImage, ImageBackground as ExpoImageBackground } from 'expo-image';
 import { subscribe as wsSubscribe } from './src/hooks/useWebSocket';
 import { sendLocalNotification, sendPushNotification } from './src/lib/notifications';
 import { OneSignal } from 'react-native-onesignal';
@@ -59,6 +60,22 @@ import { debugSessionLog, flushDebugSessionLogs } from './src/lib/debugSessionLo
 import { IncomingCallManager } from './src/lib/IncomingCallManager';
 
 const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/+$/, '');
+
+const disableAnimatedImagePlayback = () => {
+  const imageProps = (ExpoImage as any)?.defaultProps ?? {};
+  (ExpoImage as any).defaultProps = {
+    ...imageProps,
+    autoplay: false,
+  };
+
+  const backgroundProps = (ExpoImageBackground as any)?.defaultProps ?? {};
+  (ExpoImageBackground as any).defaultProps = {
+    ...backgroundProps,
+    autoplay: false,
+  };
+};
+
+disableAnimatedImagePlayback();
 
 // Initialize OneSignal with App ID
 const onesignalAppId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID || "dfbfea23-ddeb-42a8-97d8-8b51fc0756d0";

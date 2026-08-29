@@ -30,7 +30,7 @@ const getTrackImage = (track: any, index: number) => {
   }
   if (track.imageUrl) return { uri: track.imageUrl };
   
-  return require('../../assets/image/song_art.webp');
+  return require('../../assets/banner/praisenight28.jpg');
 };
 
 let cachedSearchSongs: any[] | null = null;

@@ -3,7 +3,7 @@
     "name": "Rehearsal Hub Portal",
     "slug": "Rehearsal Hub Portal",
     "scheme": "rehearsalhub",
-    "version": "2.1.0",
+    "version": "2.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",

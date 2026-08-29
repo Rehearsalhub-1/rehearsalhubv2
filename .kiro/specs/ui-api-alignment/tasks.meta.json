@@ -1,0 +1,116 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "2. Create rehearsalhub-api/src/routes/audiolab.routes.ts": [
+      {
+        "executionId": "f9e879c1-29e1-456f-8c08-d1a9be9e5020",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788004775761
+      },
+      {
+        "executionId": "f9e879c1-29e1-456f-8c08-d1a9be9e5020",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788004794163
+      },
+      {
+        "executionId": "54e3f262-e463-428f-9b88-f081a11a8055",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005304415
+      },
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005773273
+      }
+    ],
+    "3. Create rehearsalhub-api/src/routes/analytics.routes.ts": [
+      {
+        "executionId": "f9e879c1-29e1-456f-8c08-d1a9be9e5020",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788004796017
+      },
+      {
+        "executionId": "54e3f262-e463-428f-9b88-f081a11a8055",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005305187
+      },
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005774748
+      }
+    ],
+    "4. Register audiolab and analytics routers in rehearsalhub-api index.ts": [
+      {
+        "executionId": "f9e879c1-29e1-456f-8c08-d1a9be9e5020",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788004796901
+      },
+      {
+        "executionId": "54e3f262-e463-428f-9b88-f081a11a8055",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005305969
+      },
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005782759
+      }
+    ],
+    "5. Add clearTokens export to rehearsalhubv2/src/lib/apiClient.ts": [
+      {
+        "executionId": "f9e879c1-29e1-456f-8c08-d1a9be9e5020",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788004797266
+      },
+      {
+        "executionId": "54e3f262-e463-428f-9b88-f081a11a8055",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005306915
+      },
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005774131
+      }
+    ],
+    "8. Fix SubgroupAdminScreen member loading": [
+      {
+        "executionId": "f9e879c1-29e1-456f-8c08-d1a9be9e5020",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788004797675
+      },
+      {
+        "executionId": "54e3f262-e463-428f-9b88-f081a11a8055",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005308129
+      },
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005785132
+      }
+    ],
+    "6. Fix useUser.tsx signOut to use clearTokens + clearCache correctly": [
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005783905
+      }
+    ],
+    "9. Update rehearsalhub-admin useWebSocket.ts with RESOURCE_ALIASES and cursor tracking": [
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005785839
+      }
+    ],
+    "22. Fix BackendAPI.generic.delete routing in api-client.ts": [
+      {
+        "executionId": "77f8898a-6448-4fd8-8ac2-a4c6a3cca533",
+        "chatSessionId": "1787e82b-a35d-4e27-a9bf-9d61b290f44a",
+        "timestamp": 1788005787055
+      }
+    ]
+  }
+}

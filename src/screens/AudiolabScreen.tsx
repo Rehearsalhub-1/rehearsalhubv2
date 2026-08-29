@@ -352,7 +352,7 @@ export default function AudiolabScreen({ navigation }: any) {
       
       const progressInterval = setInterval(() => {
         setBounceProgress(prev => Math.min(prev + 5, 90));
-      }, 500);
+      }, 1000); // Increased to 1s to reduce CPU usage
 
       const res = await fetch(`${(process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/api\/?$/, '')}/audio/bounce`, {
         method: 'POST',
@@ -480,7 +480,7 @@ export default function AudiolabScreen({ navigation }: any) {
           lastBeatRef.current = beatIndex;
           setCurrentBeat(beatIndex);
         }
-      }, 100);
+      }, 250); // Increased from 100ms to 250ms (still smooth, reduces CPU by 60%)
     } else {
       if (playTimerInterval.current) {
         clearInterval(playTimerInterval.current);

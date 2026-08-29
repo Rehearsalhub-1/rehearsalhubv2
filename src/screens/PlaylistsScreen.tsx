@@ -29,11 +29,11 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRACKS_DB: Record<string, any> = {
   '1': { id: '1', title: 'Global Communion Service', subtitle: 'Live Recording', program: 'Global Communion Service', leadSinger: 'Pastor Saki', writer: 'Pastor Saki', conductor: 'Evang. Kathy', key: 'Eb Major', tempo: '68 BPM', category: 'Global Communion', image: require('../../assets/image/home1.jpg') },
   '2': { id: '2', title: 'Praise Night 18', subtitle: 'Loveworld Singers', program: 'Praise Night 18', leadSinger: 'Evang. Kathy', writer: 'Loveworld Singers', conductor: 'Evang. Kathy', key: 'G Major', tempo: '72 BPM', category: 'Praise Night', image: require('../../assets/image/home9.jpg') },
-  '3': { id: '3', title: 'Midweek Service', subtitle: 'Session 1', program: 'Midweek Service', leadSinger: 'Sylvia', writer: 'Loveworld Singers', conductor: 'Evang. Kathy', key: 'C Major', tempo: '65 BPM', category: 'Midweek', image: require('../../assets/image/song_art.webp') },
-  '4': { id: '4', title: 'Sunday Special', subtitle: 'Choir Ministration', program: 'Sunday Special', leadSinger: 'Eli-J', writer: 'Eli-J', conductor: 'Pastor Saki', key: 'D Major', tempo: '80 BPM', category: 'Sunday Special', image: require('../../assets/image/song_art.webp') },
-  '5': { id: '5', title: 'Your Loveworld Specials', subtitle: 'Day 2', program: 'Your Loveworld Specials', leadSinger: 'Rozey', writer: 'Rozey', conductor: 'Pastor Saki', key: 'F Major', tempo: '70 BPM', category: 'Special Events', image: require('../../assets/image/song_art.webp') },
-  '6': { id: '6', title: 'Healing Streams', subtitle: 'Live Service', program: 'Healing Streams Live', leadSinger: 'Chookar', writer: 'Chookar', conductor: 'Evang. Kathy', key: 'A Major', tempo: '75 BPM', category: 'Special Events', image: require('../../assets/image/song_art.webp') },
-  '7': { id: '7', title: 'IPPC 2026', subtitle: 'Choir Session', program: 'IPPC 2026', leadSinger: 'Pastor Saki', writer: 'Loveworld Singers', conductor: 'Pastor Saki', key: 'Bb Major', tempo: '68 BPM', category: 'Special Events', image: require('../../assets/image/song_art.webp') }
+  '3': { id: '3', title: 'Midweek Service', subtitle: 'Session 1', program: 'Midweek Service', leadSinger: 'Sylvia', writer: 'Loveworld Singers', conductor: 'Evang. Kathy', key: 'C Major', tempo: '65 BPM', category: 'Midweek', image: require('../../assets/banner/praisenight28.jpg') },
+  '4': { id: '4', title: 'Sunday Special', subtitle: 'Choir Ministration', program: 'Sunday Special', leadSinger: 'Eli-J', writer: 'Eli-J', conductor: 'Pastor Saki', key: 'D Major', tempo: '80 BPM', category: 'Sunday Special', image: require('../../assets/banner/praisenight28.jpg') },
+  '5': { id: '5', title: 'Your Loveworld Specials', subtitle: 'Day 2', program: 'Your Loveworld Specials', leadSinger: 'Rozey', writer: 'Rozey', conductor: 'Pastor Saki', key: 'F Major', tempo: '70 BPM', category: 'Special Events', image: require('../../assets/banner/praisenight28.jpg') },
+  '6': { id: '6', title: 'Healing Streams', subtitle: 'Live Service', program: 'Healing Streams Live', leadSinger: 'Chookar', writer: 'Chookar', conductor: 'Evang. Kathy', key: 'A Major', tempo: '75 BPM', category: 'Special Events', image: require('../../assets/banner/praisenight28.jpg') },
+  '7': { id: '7', title: 'IPPC 2026', subtitle: 'Choir Session', program: 'IPPC 2026', leadSinger: 'Pastor Saki', writer: 'Loveworld Singers', conductor: 'Pastor Saki', key: 'Bb Major', tempo: '68 BPM', category: 'Special Events', image: require('../../assets/banner/praisenight28.jpg') }
 };
 
 const getTrackImage = (track: any, index: number) => {
@@ -43,7 +43,7 @@ const getTrackImage = (track: any, index: number) => {
   }
   if (track.imageUrl) return { uri: track.imageUrl };
   
-  return require('../../assets/image/song_art.webp');
+  return require('../../assets/banner/praisenight28.jpg');
 };
 
 const programCache: Record<string, string> = {};
@@ -407,7 +407,8 @@ export default function PlaylistsScreen({ navigation, route }: any) {
         />
       </View>
     );
-  }
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
@@ -514,7 +515,8 @@ const getStyles = (theme: any) => {
   },
   content: {
     flex: 1
-  },
+  },
+
   libraryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -560,7 +562,8 @@ const getStyles = (theme: any) => {
     color: theme.colors.textMuted,
     fontSize: 13,
     fontWeight: '400'
-  },
+  },
+
   backButton: {
     paddingHorizontal: 16,
     marginBottom: 20

@@ -70,21 +70,24 @@ export default function LexiconScreen({ navigation }: any) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(-SCREEN_WIDTH * 0.85)).current;
 
   const flatListRef = useRef<FlatList>(null);
   const dotAnim1 = useRef(new Animated.Value(0)).current;
   const dotAnim2 = useRef(new Animated.Value(0)).current;
-  const dotAnim3 = useRef(new Animated.Value(0)).current;
+  const dotAnim3 = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     Animated.timing(slideAnim, {
       toValue: isSidebarOpen ? 0 : -SCREEN_WIDTH * 0.85,
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen]);
+
   useEffect(() => {
     const loadSessions = async () => {
       if (!user) return;
@@ -93,7 +96,8 @@ export default function LexiconScreen({ navigation }: any) {
         if (history) {
           const parsed: ChatSession[] = JSON.parse(history);
           if (parsed && parsed.length > 0) {
-            setSessions(parsed);
+            setSessions(parsed);
+
             const mostRecent = parsed.reduce((prev, current) => (prev.updatedAt > current.updatedAt) ? prev : current);
             setActiveSessionId(mostRecent.id);
             setMessages(mostRecent.messages);
@@ -107,14 +111,16 @@ export default function LexiconScreen({ navigation }: any) {
       }
     };
     loadSessions();
-  }, []);
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     if (sessions.length === 0) return;
     
     AsyncStorage.setItem(`lexicon_sessions_${user.uid}`, JSON.stringify(sessions))
       .catch(e => console.error('Failed to save lexicon sessions', e));
-  }, [sessions]);
+  }, [sessions]);
+
   useEffect(() => {
     if (!isTyping) return;
 
@@ -137,7 +143,8 @@ export default function LexiconScreen({ navigation }: any) {
     a3.start();
 
     return () => { a1.stop(); a2.stop(); a3.stop(); };
-  }, [isTyping]);
+  }, [isTyping]);
+
   useEffect(() => {
     if (!activeSessionId || messages.length <= 1) return;
     setSessions(prev => prev.map(s => {
@@ -237,8 +244,10 @@ export default function LexiconScreen({ navigation }: any) {
 
   const handleSend = useCallback(() => {
     sendMessage(inputText);
-  }, [inputText, sendMessage]);
-  const formatContent = (content: string) => {
+  }, [inputText, sendMessage]);
+
+  const formatContent = (content: string) => {
+
     const parts = content.split(/(\*\*[^*]+\*\*)/g);
     return parts.map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) {
@@ -306,7 +315,7 @@ export default function LexiconScreen({ navigation }: any) {
     <View style={styles.container}>
       <StatusBar style="light" />
       <Image
-        source={require('../../assets/video/cloud3_min.webp')}
+        source={require('../../assets/image/home5.jpg')}
         style={StyleSheet.absoluteFill}
         contentFit="cover"
       />
@@ -482,7 +491,8 @@ const getStyles = (theme: any) => {
   },
   keyboardAvoid: {
     flex: 1,
-  },
+  },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -536,7 +546,8 @@ const getStyles = (theme: any) => {
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,
-  },
+  },
+
   sidebar: {
     position: 'absolute',
     top: 0,
@@ -620,7 +631,8 @@ const getStyles = (theme: any) => {
   },
   deleteSessionBtn: {
     padding: 10,
-  },
+  },
+
   chipsContainer: {
     paddingBottom: 8,
     borderBottomWidth: 1,
@@ -644,7 +656,8 @@ const getStyles = (theme: any) => {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 13,
     fontWeight: '600',
-  },
+  },
+
   chatContent: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -697,7 +710,8 @@ const getStyles = (theme: any) => {
   userMessageText: {
     color: theme.colors.textPrimary,
     fontWeight: '500',
-  },
+  },
+
   typingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -710,7 +724,8 @@ const getStyles = (theme: any) => {
     height: 7,
     borderRadius: 3.5,
     backgroundColor: 'rgba(139, 92, 246, 0.6)',
-  },
+  },
+
   inputBarOuter: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.06)',

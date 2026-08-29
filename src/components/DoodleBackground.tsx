@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../context/ThemeContext';
-const ICON_COUNT = 60;
+import { useTheme } from '../context/ThemeContext';
+
+
+const ICON_COUNT = 35; // Reduced from 60 for better performance
 const ICON_NAMES = ['musical-notes', 'mic', 'radio', 'headset', 'play-circle', 'volume-medium', 'mic-outline', 'headset-outline', 'musical-note', 'radio-outline', 'play-outline'];
 
 export const DoodleBackground = React.memo(function DoodleBackground() {

@@ -89,7 +89,7 @@ const getTrackImage = (track: any, index: number) => {
   if (track.coverImage) return track.coverImage;
   if (track.image && typeof track.image !== 'string') return track.image; // Local require
 
-  return require('../../assets/image/song_art.webp');
+  return require('../../assets/banner/praisenight28.jpg');
 };
 
 const getRehearsalCount = (song: any): number => {

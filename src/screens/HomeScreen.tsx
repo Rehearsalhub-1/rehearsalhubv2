@@ -35,10 +35,10 @@ const SLIDE_IMAGES = [
   require('../../assets/image/home3.png'),
   require('../../assets/image/home4.png'),
   require('../../assets/image/home5.jpg'),
-  require('../../assets/image/home6.webp'),
   require('../../assets/image/home8.jpg'),
   require('../../assets/image/home9.jpg'),
-  require('../../assets/image/home10.jpg')
+  require('../../assets/image/home10.jpg'),
+  require('../../assets/image/home1.jpg')
 ];
 
 const MENU_SECTIONS = [
@@ -81,9 +81,9 @@ const MENU_SECTIONS = [
 ];
 
 const CLOUD_ASSETS = [
-require('../../assets/video/cloud2_min.webp'),
-require('../../assets/video/cloud3_min.webp'),
-require('../../assets/video/cloud4_min.webp')];
+require('../../assets/image/home1.jpg'),
+require('../../assets/image/home5.jpg'),
+require('../../assets/image/home8.jpg')];
 
 const INITIAL_CARDS = [
   {
@@ -462,12 +462,12 @@ export default function HomeScreen({ navigation }: any) {
             colors={theme.gradients.bgBase}
             locations={theme.gradients.bgBaseLocations}
             style={StyleSheet.absoluteFill} />
-      <DoodleBackground />
+          {/* DoodleBackground removed from sidebar - already rendered in main bg */}
           <LinearGradient
             colors={theme.gradients.bgGlow}
             locations={theme.gradients.bgGlowLocations}
             start={{ x: 0, y: 0.3 }}
-            end={{ x: 1, y: 0.7 }}
+            end={{ x: 0.5, y: 0.7 }}
             style={StyleSheet.absoluteFill} />
           {}
           <LinearGradient

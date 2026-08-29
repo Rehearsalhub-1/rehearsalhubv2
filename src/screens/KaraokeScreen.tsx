@@ -748,7 +748,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
         </View>
       )}
       <ImageBackground
-        source={require('../../assets/karoake background.webp')}
+        source={require('../../assets/image/home1.jpg')}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
       />

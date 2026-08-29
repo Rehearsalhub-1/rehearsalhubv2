@@ -451,7 +451,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
     const { user } = get();
     try {
       if (user?.uid) {
-
         try {
           const { apiClient } = require('../lib/apiClient');
           await apiClient.patch(`/profiles/${user.uid}`, {
@@ -461,18 +460,41 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
         await AsyncStorage.removeItem(`user_context_cache_${user.uid}`);
       }
-      clearCache();
 
+      // 1. Tell the server to revoke the refresh token (best-effort)
       try {
-        const { apiClient, clearTokens } = require('../lib/apiClient');
-        const refreshToken = await require('expo-secure-store').getItemAsync('refreshToken');
+        const { apiClient } = require('../lib/apiClient');
+        const refreshToken = await SecureStore.getItemAsync('refreshToken');
         if (refreshToken) {
           await apiClient.post('/auth/logout', { refreshToken }).catch(() => {});
         }
-        await clearTokens();
-      } catch {
+      } catch {}
 
-      }
+      // 2. Wipe credentials from SecureStore
+      try {
+        const { clearTokens: ct } = require('../lib/apiClient');
+        await ct();
+      } catch {}
+
+      // 3. Flush in-memory GET cache
+      clearCache();
+
+      // 4. Reset Zustand store to unauthenticated state
+      set({
+        user: null,
+        isAuthenticated: false,
+        profile: null,
+        isProfileLoading: false,
+        currentZone: null,
+        userZones: [],
+        isZoneLoading: false,
+        isHQ: false,
+        zoneVersion: 0,
+        subscription: null,
+        isPremium: false,
+      });
+
+      try { OneSignal.logout(); } catch {}
     } catch (e) {
       console.error('[useUserStore] Sign out error:', e);
     }
