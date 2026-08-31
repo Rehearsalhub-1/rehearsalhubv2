@@ -29,6 +29,8 @@ export function isHQAdmin(profile: UserProfile | null | undefined): boolean {
  */
 export function canAccessArchive(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
+  const hf = getHiddenFeatures(profile);
+  if (hf.hideArchives === true) return false;
   if (isHQAdmin(profile)) return true;
 
   const raw = (profile as any)?.raw || {};
@@ -47,6 +49,8 @@ export function canAccessArchive(profile: UserProfile | null | undefined): boole
  */
 export function canAccessPreRehearsal(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
+  const hf = getHiddenFeatures(profile);
+  if (hf.hidePreRehearsal === true) return false;
   if (isHQAdmin(profile)) return true;
   if (isZoneCoordinator(profile)) return true;
 

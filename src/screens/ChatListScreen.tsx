@@ -282,18 +282,24 @@ export default function ChatListScreen({ route, navigation }: any) {
         });
 
         const rooms: ChatRoom[] = rows.map((data: any) => {
-          let title = data.name || 'Chat';
+          const isGroup = ['group', 'channel', 'announcement'].includes(String(data.type || '').toLowerCase()) || data.isGroup === true;
+          let title = data.name || data.title || (isGroup ? 'Group Chat' : 'Chat');
+          
           const participants: string[] = Array.isArray(data.participants)
             ? data.participants.map(String)
             : Array.isArray(data.memberIds)
               ? data.memberIds.map(String)
               : [];
 
-          if (data.type === 'direct') {
+          if (!isGroup) {
             const otherUserId = participants.find((id: string) => id !== currentUser.uid)
               || data.id.split('_').find((id: string) => id !== currentUser.uid);
-            if (otherUserId && data.participantDetails?.[otherUserId]) {
-              title = cleanSenderName(data.participantDetails[otherUserId].name || 'Direct Chat');
+            if (otherUserId && data.participantDetails?.[otherUserId]?.name) {
+              title = cleanSenderName(data.participantDetails[otherUserId].name);
+            } else if (data.name && data.name !== 'Chat' && data.name !== 'Direct Chat' && data.name !== 'Direct Message') {
+              title = data.name;
+            } else if (data.title && data.title !== 'Chat' && data.title !== 'Direct Chat') {
+              title = data.title;
             }
           }
 
@@ -310,8 +316,8 @@ export default function ChatListScreen({ route, navigation }: any) {
             ? 'You'
             : cleanSenderName(data.participantDetails?.[lastSenderId]?.name || '').split(' ')[0] || '';
 
-          let roomAvatar: any = data.avatar ? { uri: data.avatar } : null;
-          if (data.type === 'direct') {
+          let roomAvatar: any = data.avatar ? (typeof data.avatar === 'string' ? { uri: data.avatar } : data.avatar) : null;
+          if (!isGroup) {
             const otherId = participants.find((id: string) => id !== currentUser.uid)
               || data.id.split('_').find((id: string) => id !== currentUser.uid);
             if (otherId && data.participantDetails?.[otherId]?.avatar) {
@@ -346,8 +352,8 @@ export default function ChatListScreen({ route, navigation }: any) {
             timestampObj: isCleared ? new Date(0) : dateVal,
             unread: isCleared ? 0 : (typeof data.unreadCount === 'object' ? (data.unreadCount?.[currentUser.uid] || 0) : (data.unreadCount || 0)),
             avatar: roomAvatar,
-            isGroup: data.type === 'group',
-            category: (data.type === 'group' ? 'Groups' : 'Direct') as 'Groups' | 'Direct',
+            isGroup,
+            category: (isGroup ? 'Groups' : 'Direct') as 'Groups' | 'Direct',
             participantDetails: data.participantDetails || {},
             clearedAt: data.clearedAt || {},
             lastMessageStatus: data.lastMessage?.status || 'sent',

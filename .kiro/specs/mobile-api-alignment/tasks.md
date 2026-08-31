@@ -7,7 +7,7 @@
 ## Tasks
 
 - [ ] 1. Create `src/lib/mediaUtils.ts` with pure image/audio utility functions
-  - [-] 1.1 Create the file and export `optimizeImage(url, opts?)`, `thumbnailImage(url)`, `bannerImage(url)`, `optimizeAudio(url)`
+  - [ ] 1.1 Create the file and export `optimizeImage(url, opts?)`, `thumbnailImage(url)`, `bannerImage(url)`, `optimizeAudio(url)`
   - [x] 1.2 Copy the exact implementation from `lowDataOptimizer.ts` for each function
   - [x] 1.3 Verify the file has zero imports from HTTP libraries, SecureStore, or Sentry
 
@@ -47,37 +47,37 @@
 - [ ] 7. Fix `src/screens/SearchScreen.tsx`
   - [x] 7.1 Remove `import { optimizeAudio, fetchJSON } from '../lib/lowDataOptimizer'`
   - [ ] 7.2 Add `import { optimizeAudio } from '../lib/mediaUtils'`
-  - [~] 7.3 Remove `const BACKEND_URL = ...` declaration
-  - [~] 7.4 Replace `fetchJSON<any>(url, null)` for master songs with `apiClient.get<any>('/songs/master')`
-  - [~] 7.5 Replace `fetchJSON<any>(zoneUrl, null)` with `apiClient.get<any>('/songs/zone?zoneId=...')`
-  - [~] 7.6 Replace `fetchJSON<any>(subgroupUrl, null)` with `apiClient.get<any>('/songs/subgroup?zoneId=...')`
-  - [~] 7.7 Update the response parsing to handle `{ success, data }` envelope where needed
-  - [~] 7.8 Verify TypeScript compilation passes
+  - [ ] 7.3 Remove `const BACKEND_URL = ...` declaration
+  - [ ] 7.4 Replace `fetchJSON<any>(url, null)` for master songs with `apiClient.get<any>('/songs/master')`
+  - [ ] 7.5 Replace `fetchJSON<any>(zoneUrl, null)` with `apiClient.get<any>('/songs/zone?zoneId=...')`
+  - [ ] 7.6 Replace `fetchJSON<any>(subgroupUrl, null)` with `apiClient.get<any>('/songs/subgroup?zoneId=...')`
+  - [ ] 7.7 Update the response parsing to handle `{ success, data }` envelope where needed
+  - [ ] 7.8 Verify TypeScript compilation passes
 
 - [ ] 8. Fix `src/screens/SubgroupScreen.tsx`
-  - [~] 8.1 Remove `import { fetchJSON, optimizeImage, optimizeAudio, clearResponseCache } from '../lib/lowDataOptimizer'`
-  - [~] 8.2 Add `import { optimizeImage, optimizeAudio } from '../lib/mediaUtils'`
-  - [~] 8.3 Add `import { clearCache } from '../lib/apiClient'` (or add to existing import)
-  - [~] 8.4 Remove `const BACKEND_URL = ...` declaration (if present — SubgroupScreen may already be mostly migrated)
-  - [~] 8.5 Replace `clearResponseCache()` with `clearCache()`
-  - [~] 8.6 Verify TypeScript compilation passes
+  - [ ] 8.1 Remove `import { fetchJSON, optimizeImage, optimizeAudio, clearResponseCache } from '../lib/lowDataOptimizer'`
+  - [ ] 8.2 Add `import { optimizeImage, optimizeAudio } from '../lib/mediaUtils'`
+  - [ ] 8.3 Add `import { clearCache } from '../lib/apiClient'` (or add to existing import)
+  - [ ] 8.4 Remove `const BACKEND_URL = ...` declaration (if present — SubgroupScreen may already be mostly migrated)
+  - [ ] 8.5 Replace `clearResponseCache()` with `clearCache()`
+  - [ ] 8.6 Verify TypeScript compilation passes
 
 - [ ] 9. Fix `src/screens/ArchiveScreen.tsx`
-  - [~] 9.1 Remove `import { optimizeImage, clearResponseCache } from '../lib/lowDataOptimizer'`
-  - [~] 9.2 Add `import { optimizeImage } from '../lib/mediaUtils'`
-  - [~] 9.3 Add `import { clearCache } from '../lib/apiClient'` (or add to existing import)
-  - [~] 9.4 Replace `clearResponseCache()` with `clearCache()`
-  - [~] 9.5 Verify TypeScript compilation passes
+  - [ ] 9.1 Remove `import { optimizeImage, clearResponseCache } from '../lib/lowDataOptimizer'`
+  - [ ] 9.2 Add `import { optimizeImage } from '../lib/mediaUtils'`
+  - [ ] 9.3 Add `import { clearCache } from '../lib/apiClient'` (or add to existing import)
+  - [ ] 9.4 Replace `clearResponseCache()` with `clearCache()`
+  - [ ] 9.5 Verify TypeScript compilation passes
 
 - [ ] 10. Fix `src/screens/PlayerScreen.tsx`
-  - [~] 10.1 Replace `import { optimizeAudio } from '../lib/lowDataOptimizer'` with `import { optimizeAudio } from '../lib/mediaUtils'`
-  - [~] 10.2 Verify TypeScript compilation passes
+  - [ ] 10.1 Replace `import { optimizeAudio } from '../lib/lowDataOptimizer'` with `import { optimizeAudio } from '../lib/mediaUtils'`
+  - [ ] 10.2 Verify TypeScript compilation passes
 
 - [ ] 11. Fix `src/screens/MediaScreen.tsx`
-  - [~] 11.1 Replace `import { optimizeImage, optimizeAudio } from '@/lib/lowDataOptimizer'` with `import { optimizeImage, optimizeAudio } from '@/lib/mediaUtils'`
-  - [~] 11.2 Verify TypeScript compilation passes
+  - [ ] 11.1 Replace `import { optimizeImage, optimizeAudio } from '@/lib/lowDataOptimizer'` with `import { optimizeImage, optimizeAudio } from '@/lib/mediaUtils'`
+  - [ ] 11.2 Verify TypeScript compilation passes
 
 - [ ] 12. Delete `src/lib/lowDataOptimizer.ts`
-  - [~] 12.1 Confirm zero remaining imports of `lowDataOptimizer` across the entire codebase (search `rehearsalhubv2/src` and `App.tsx`)
-  - [~] 12.2 Delete the file
-  - [~] 12.3 Run TypeScript build and confirm zero errors
+  - [ ] 12.1 Confirm zero remaining imports of `lowDataOptimizer` across the entire codebase (search `rehearsalhubv2/src` and `App.tsx`)
+  - [ ] 12.2 Delete the file
+  - [ ] 12.3 Run TypeScript build and confirm zero errors

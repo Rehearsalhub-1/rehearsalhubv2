@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { OneSignal } from 'react-native-onesignal';
-import { ZONES, Zone, getZoneByInvitationCode, isHQGroup } from '../config/zones';
+import { Zone, isHQGroup } from '../config/zones';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { joinZoneChatRoom } from '../lib/zoneChat';
 import { clearCache, setV2TenantScope } from '../lib/apiClient';
@@ -147,12 +147,20 @@ async function loadZoneMemberships(
     }
 
 
+    // Fetch all zones from DB to resolve membership zone details
+    let dbZones: Zone[] = [];
+    try {
+      const zonesRes = await apiClient.get('/organizations');
+      if (zonesRes.success && Array.isArray(zonesRes.data)) dbZones = zonesRes.data;
+    } catch {}
+
     const zones: Zone[] = [];
     for (const mem of allMemberships) {
       const zId = mem.zoneId || mem.hqGroupId;
       if (zId) {
-        const zoneConfig = ZONES.find(z => z.id === zId || z.invitationCode === zId || z.slug === zId);
-        if (zoneConfig && !zones.some(z => z.id === zoneConfig.id)) {
+        const zoneConfig = dbZones.find((z: Zone) => z.id === zId || z.invitationCode === zId) ||
+          ({ id: zId, name: mem.zoneName || mem.hqGroupName || zId, invitationCode: zId } as Zone);
+        if (!zones.some(z => z.id === zoneConfig.id)) {
           zones.push({
             ...zoneConfig,
             membershipId: mem.id,
