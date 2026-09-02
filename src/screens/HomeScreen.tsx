@@ -333,7 +333,8 @@ export default function HomeScreen({ navigation }: any) {
               onPress={() => navigation.navigate('Settings')}>
               <SyncAvatar 
                 userId={user?.uid}
-                fallbackName={userProfile?.first_name || "Me"}
+                initialAvatar={contextProfile?.avatar}
+                fallbackName={contextProfile?.firstName || userProfile?.first_name || "Me"}
                 size={28}
                 bgColor="rgba(255,255,255,0.08)"
               />
@@ -599,7 +600,8 @@ export default function HomeScreen({ navigation }: any) {
               <View style={{ marginRight: 14 }}>
                 <SyncAvatar 
                   userId={user?.uid}
-                  fallbackName="Me"
+                  initialAvatar={contextProfile?.avatar}
+                  fallbackName={contextProfile?.firstName || userProfile?.first_name || "Me"}
                   size={42}
                   bgColor="rgba(255,255,255,0.1)"
                 />
@@ -607,14 +609,15 @@ export default function HomeScreen({ navigation }: any) {
               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View>
                   <Text style={styles.userName}>
-                    {userProfile?.first_name 
-                      ? `${userProfile.first_name} ${userProfile.last_name || ''}`.trim() 
-                      : ((user as any)?.displayName || (user as any)?.name || "Rehearsal Hub User" || 'Rehearsal Hub User')}
+                    {[contextProfile?.firstName || userProfile?.first_name, contextProfile?.lastName || userProfile?.last_name].filter(Boolean).join(' ') 
+                      || contextProfile?.username
+                      || (user as any)?.displayName 
+                      || "Rehearsal Hub User"}
                   </Text>
                   <Text style={styles.userRole}>
-                    {userProfile?.administration === 'Boss' 
+                    {contextProfile?.administration === 'Boss' || userProfile?.administration === 'Boss'
                       ? 'Central Admin' 
-                      : (userProfile?.role === 'boss' ? 'Zone Admin' : 'Member Account')}
+                      : (contextProfile?.role === 'boss' || userProfile?.role === 'boss' ? 'Zone Admin' : 'Member Account')}
                   </Text>
                 </View>
                 <Ionicons name="log-out-outline" size={20} color={theme.colors.textMuted} style={{ marginRight: 8 }} />
