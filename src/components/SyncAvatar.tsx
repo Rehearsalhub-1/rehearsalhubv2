@@ -36,12 +36,9 @@ export const SyncAvatar = memo(function SyncAvatar({
   useEffect(() => {
     if (initialAvatar) {
       setAvatar(initialAvatar);
-    } else {
-      setAvatar(null);
+      return;
     }
-  }, [initialAvatar]);
 
-  useEffect(() => {
     if (!isGroup && userId) {
       const storeUser = useUserStore.getState().user;
       if (storeUser && userId === storeUser.uid) {
@@ -74,15 +71,15 @@ export const SyncAvatar = memo(function SyncAvatar({
           if (url) setAvatar(url);
           return url;
         })
-        .catch(err => {
+        .catch(() => {
           pendingRequests.delete(userId);
-          console.error('[SyncAvatar] error:', err);
+          // Silently falls back to initials
           return null;
         });
 
       pendingRequests.set(userId, reqPromise);
     }
-  }, [userId, isGroup]);
+  }, [userId, isGroup, initialAvatar]);
 
   if (avatar) {
     return (

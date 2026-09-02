@@ -65,7 +65,7 @@ async function savePushToken(token: string) {
       expoPushToken: token,
     });
   } catch (error) {
-    console.error('Error saving push token:', error);
+    // Silently ignore transient network errors on push token registration
   }
 }
 
