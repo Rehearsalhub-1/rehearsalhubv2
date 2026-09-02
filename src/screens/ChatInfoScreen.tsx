@@ -156,6 +156,33 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     ]);
   };
 
+  const handleDeleteChat = () => {
+    Alert.alert('Delete Chat', 'Are you sure you want to permanently delete this chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.chats.deleteChat(room.id).catch(() => {});
+            if (currentUser?.uid) {
+              const stored = await AsyncStorage.getItem(`deleted_chats_${currentUser.uid}`);
+              const list: string[] = stored ? JSON.parse(stored) : [];
+              if (!list.includes(room.id)) {
+                await AsyncStorage.setItem(`deleted_chats_${currentUser.uid}`, JSON.stringify([...list, room.id]));
+              }
+            }
+            await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
+            await AsyncStorage.removeItem(`cached_messages_${room.id}`);
+            navigation.navigate('ChatRooms');
+          } catch {
+            Alert.alert('Error', 'Failed to delete chat');
+          }
+        }
+      }
+    ]);
+  };
+
   const handleLeaveGroup = () => {
     if (!currentUser) return;
     Alert.alert('Leave Group', `Leave "${room?.title}"?`, [
@@ -427,6 +454,10 @@ export default function ChatInfoScreen({ route, navigation }: any) {
             <TouchableOpacity style={styles.dangerRow} onPress={handleClearChat}>
               <Ionicons name="trash-outline" size={20} color="#ef4444" style={styles.settingIcon} />
               <Text style={[styles.settingLabel, { color: '#ef4444' }]}>Clear chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dangerRow} onPress={handleDeleteChat}>
+              <Ionicons name="trash" size={20} color="#ef4444" style={styles.settingIcon} />
+              <Text style={[styles.settingLabel, { color: '#ef4444' }]}>Delete chat</Text>
             </TouchableOpacity>
             {isGroup && (
               <TouchableOpacity style={styles.dangerRow} onPress={handleLeaveGroup}>

@@ -267,11 +267,15 @@ export default function ChatListScreen({ route, navigation }: any) {
         const storedArchived = await AsyncStorage.getItem(`archived_chats_${currentUser.uid}`);
         const archivedIds: string[] = storedArchived ? JSON.parse(storedArchived) : [];
 
+        const storedDeleted = await AsyncStorage.getItem(`deleted_chats_${currentUser.uid}`);
+        const deletedIds: string[] = storedDeleted ? JSON.parse(storedDeleted) : [];
+
         const res = await api.chats.getAll();
         const allRows = res.success && Array.isArray(res.data) ? res.data : [];
 
-        // Web parity: strictly filter chats where current user is a participant or creator
+        // Strictly filter chats where user is active participant and chat is not deleted
         const rows = allRows.filter((data: any) => {
+          if (deletedIds.includes(data.id)) return false;
           const participants: string[] = Array.isArray(data.participants)
             ? data.participants.map(String)
             : Array.isArray(data.memberIds)
@@ -279,9 +283,8 @@ export default function ChatListScreen({ route, navigation }: any) {
               : typeof data.participants === 'object' && data.participants !== null
                 ? Object.keys(data.participants)
                 : [];
-          const createdBy = String(data.createdBy || data.rawData?.createdBy || '');
           if (participants.length === 0) return true;
-          return participants.includes(currentUser.uid) || createdBy === currentUser.uid;
+          return participants.includes(currentUser.uid);
         });
 
         const rooms: ChatRoom[] = rows.map((data: any) => {
@@ -610,12 +613,20 @@ export default function ChatListScreen({ route, navigation }: any) {
                             onPress: async () => {
                               try {
                                 if (room.isGroup) {
-                                  await api.chats.leave(room.id, user?.uid);
-                                } else {
-                                  await api.chats.clearFor(room.id, user?.uid);
-                                  await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
-                                  await AsyncStorage.removeItem(`cached_messages_${room.id}`);
+                                  await api.chats.leave(room.id, user?.uid).catch(() => {});
                                 }
+                                await api.chats.deleteChat(room.id).catch(() => {});
+                                await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
+                                await AsyncStorage.removeItem(`cached_messages_${room.id}`);
+
+                                if (user?.uid) {
+                                  const stored = await AsyncStorage.getItem(`deleted_chats_${user.uid}`);
+                                  const list: string[] = stored ? JSON.parse(stored) : [];
+                                  if (!list.includes(room.id)) {
+                                    await AsyncStorage.setItem(`deleted_chats_${user.uid}`, JSON.stringify([...list, room.id]));
+                                  }
+                                }
+
                                 setChatRooms(prev => prev.filter(r => r.id !== room.id));
                                 showToast(room.isGroup ? 'Left group' : 'Chat deleted');
                               } catch (err) {

@@ -161,6 +161,8 @@ export const api = {
       apiClient.patch<{ success: boolean }>(`/chats/${chatId}`, { clearFor: userId }),
     clearMessages: (chatId: string) =>
       apiClient.delete<{ success: boolean }>(`/chats/${chatId}/messages`),
+    deleteChat: (chatId: string) =>
+      apiClient.delete<{ success: boolean }>(`/chats/${chatId}`),
     acceptRequest: (chatId: string) =>
       apiClient.post<{ success: boolean }>(`/chats/requests/${chatId}/accept`, {}),
     declineRequest: (chatId: string) =>
