@@ -503,7 +503,6 @@ export default function HomeScreen({ navigation }: any) {
                 if (item.id === 'studio' && hf.hideAudioLab) return false;
                 if (item.id === 'media' && hf.hideAudioLab) return false;
                 if (item.id === 'subgroups' && hf.hideSubgroups) return false;
-                if (item.id === 'status') return true;
                 return true;
               });
 
@@ -557,9 +556,6 @@ export default function HomeScreen({ navigation }: any) {
                   } else if (item.id === 'media') {
                     toggleSidebar();
                     navigation.navigate('Media');
-                  } else if (item.id === 'status') {
-                    toggleSidebar();
-                    navigation.navigate('Status');
                   }
                 }}>
                 

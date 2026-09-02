@@ -16,7 +16,6 @@ import LyricsScreen from '../screens/LyricsScreen';
 import SolfaScreen from '../screens/SolfaScreen';
 import ConductorScreen from '../screens/ConductorScreen';
 import HistoryScreen from '../screens/HistoryScreen';
-import SubgroupAdminScreen from '../screens/SubgroupAdminScreen';
 import CommentsScreen from '../screens/CommentsScreen';
 import DetailsScreen from '../screens/DetailsScreen';
 import ArchiveScreen from '../screens/ArchiveScreen';
@@ -42,7 +41,6 @@ import PaymentScreen from '../screens/PaymentScreen';
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
 import MediaScreen from '@/screens/MediaScreen';
-import StatusScreen from '@/screens/StatusScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -82,7 +80,6 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
           />
         ), 'Subgroups')} 
       />
-      <Stack.Screen name="SubgroupAdmin" component={withErrorBoundary(SubgroupAdminScreen, 'SubgroupAdmin')} />
       <Stack.Screen 
         name="Search" 
         component={withErrorBoundary(SearchScreen, 'Search')} 
@@ -211,11 +208,6 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
       <Stack.Screen 
         name="Media" 
         component={withErrorBoundary(MediaScreen, 'Media')} 
-        options={{ animation: 'slide_from_bottom' }}
-      />
-      <Stack.Screen 
-        name="Status" 
-        component={withErrorBoundary(StatusScreen, 'Status')} 
         options={{ animation: 'slide_from_bottom' }}
       />
       <Stack.Screen name="Links" component={withErrorBoundary(LinksScreen, 'Links')} options={{ animation: 'slide_from_bottom' }} />

@@ -147,6 +147,8 @@ export const api = {
       apiClient.post<{ success: boolean }>('/subgroups/members', data),
     removeMember: (subgroupId: string, userId: string) =>
       apiClient.delete<{ success: boolean }>(`/subgroups/members?subGroupId=${subgroupId}&userId=${userId}`),
+    update: (subgroupId: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/subgroups/${subgroupId}`, data),
     createSong: (data: Record<string, any>) =>
       apiClient.post<{ success: boolean; data?: any }>('/subgroups/songs', data),
     updateSong: (songId: string, data: Record<string, any>) =>
@@ -155,6 +157,14 @@ export const api = {
       apiClient.delete<{ success: boolean }>(`/subgroups/songs/${songId}`),
     requestJoin: (data: Record<string, any>) =>
       apiClient.post<{ success: boolean }>('/subgroups/requests', data),
+    updatePraiseNight: (rehearsalId: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/subgroups/praise-nights/${rehearsalId}`, data),
+    createPraiseNight: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data?: any }>('/subgroups/praise-nights', data),
+    deletePraiseNight: (rehearsalId: string) =>
+      apiClient.delete<{ success: boolean }>(`/subgroups/praise-nights/${rehearsalId}`),
+    getZoneMembers: (zoneId: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/members/zone/${encodeURIComponent(zoneId)}`),
   },
 
   // ── Organizations & Zones ────────────────────────────────────────────────

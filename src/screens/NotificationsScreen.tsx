@@ -114,7 +114,7 @@ const getNavigationRoute = (actionUrl?: string) => {
     }
     return { screen: 'Player' };
   }
-  if (url.includes('subgroup-admin')) return { screen: 'SubgroupAdmin' };
+  if (url.includes('subgroup-admin')) return { screen: 'Subgroups' };
   if (url.includes('subgroup')) return { screen: 'Subgroups' };
   if (url.includes('chat') || url.includes('conversation')) {
     const match = actionUrl.match(/(?:chat|conversation|groups\/)([^\/?#&]+)/i) || actionUrl.match(/(?:[?&]chat|[?&]conversation)=([^&]+)/i);
