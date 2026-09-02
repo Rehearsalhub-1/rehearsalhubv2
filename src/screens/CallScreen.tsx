@@ -1,5 +1,5 @@
 import { useWebSocket } from '../hooks/useWebSocket';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -190,7 +190,7 @@ export default function CallScreen({ route, navigation }: any) {
       if (!isIncoming) {
         await joinChannel();
         if (callId && !isGroupCall) {
-          if (callId) await apiClient.patch(`/calls/${callId}`, { status: 'ringing' }).catch(() => {});
+          if (callId) await api.calls.update(callId, { status: 'ringing' }).catch(() => {});
         }
         if (isGroupCall) {
           setStatus('connected');
@@ -207,7 +207,7 @@ export default function CallScreen({ route, navigation }: any) {
       let token: string | null = null;
       let dynamicUrl: string | null = null;
       try {
-        const data: any = await apiClient.get(`/livekit-token?room=${callId}&participant=${cu?.uid || 'user'}`);
+        const data: any = await api.calls.getToken(callId, cu?.uid || 'user');
         token = data?.token || null;
         dynamicUrl = data?.url || null;
       } catch (err) {
@@ -243,7 +243,7 @@ export default function CallScreen({ route, navigation }: any) {
   const acceptCall = async () => {
     setStatus('connecting');
     try {
-      if (callId) await apiClient.patch(`/calls/${callId}`, { status: 'accepted' });
+      if (callId) await api.calls.update(callId, { status: 'accepted' });
       await joinChannel();
     } catch {
       setStatus('ringing');
@@ -255,7 +255,7 @@ export default function CallScreen({ route, navigation }: any) {
     navigatedRef.current = true;
     try {
       cleanupLiveKit();
-      if (callId) await apiClient.patch(`/calls/${callId}`, { status: 'ended' }).catch(() => {});
+      if (callId) await api.calls.update(callId, { status: 'ended' }).catch(() => {});
       let callResult: 'completed' | 'missed' | 'canceled' | 'declined' = 'completed';
       if (duration === 0) {
         if (!isIncoming) {

@@ -1,4 +1,4 @@
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import React, { useState, useCallback } from 'react';
 import {
@@ -67,7 +67,7 @@ export default function CallsScreen({ navigation }: any) {
     else setLoading(true);
 
     try {
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/calls');
+      const res = await api.calls.getAll();
       if (res?.success && Array.isArray(res.data)) {
         const logs: CallLog[] = res.data.map((d: any) => {
           const isCaller = currentUser?.uid ? (d.callerId || d.caller_id) === currentUser.uid : false;
@@ -149,7 +149,7 @@ export default function CallsScreen({ navigation }: any) {
       setCalls(prev => prev.filter(c => !selectedCalls.has(c.id)));
       setSelectionMode(false);
       setSelectedCalls(new Set());
-      await apiClient.delete('/calls', { ids: idsToDelete });
+      await api.calls.deleteMany(idsToDelete);
     } catch (e) {
       console.error('Failed to delete calls:', e);
       loadCalls();
@@ -164,7 +164,7 @@ export default function CallsScreen({ navigation }: any) {
     const contactName = isOutgoing ? item.receiverName : item.callerName;
     const contactAvatar = isOutgoing ? item.receiverAvatar : item.callerAvatar;
     try {
-      const callRes = await apiClient.post<{ success: boolean; data: any }>('/calls', {
+      const callRes = await api.calls.create({
         receiver_id: contactId,
         type: item.type,
       });

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Vibration } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { SafeNotifee as notifee } from '../lib/safeNativeModules';
 
 const { width, height } = Dimensions.get('window');
@@ -30,7 +30,7 @@ export default function IncomingCallScreen() {
   const handleDecline = async () => {
     Vibration.cancel();
     if (callId) {
-      apiClient.patch(`/calls/${callId}`, { status: 'declined' }).catch(console.warn);
+      api.calls.update(callId, { status: 'declined' }).catch(console.warn);
     }
     
     if (notificationId) {

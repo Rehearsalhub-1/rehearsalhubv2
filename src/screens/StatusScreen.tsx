@@ -25,7 +25,7 @@ import { Image } from 'expo-image';
 import { useNavigation } from '@react-navigation/native';
 
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { uploadMedia } from '../lib/cloudinary';
 import { useUserStore } from '../hooks/useUser';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -101,8 +101,8 @@ export default function StatusScreen() {
 
   const loadStatuses = useCallback(async () => {
     try {
-      const response = await apiClient.get<{ success: boolean; data?: StatusItem[] }>('/statuses');
-      if (response.success && Array.isArray(response.data)) {
+      const response = await api.statuses.getAll();
+      if (response?.success && Array.isArray(response.data)) {
         setStatuses(response.data);
       }
     } catch (error) {
@@ -130,7 +130,7 @@ export default function StatusScreen() {
     setStatuses((prev) =>
       prev.map((item) => (item.id === currentStatus.id ? { ...item, isViewed: true } : item))
     );
-    apiClient.post(`/statuses/${encodeURIComponent(currentStatus.id)}/view`).catch(() => {});
+    api.statuses.view(currentStatus.id);
   }, [activeIndex, currentStatus?.id]);
 
   // 1-Tap Pick Media
@@ -167,7 +167,7 @@ export default function StatusScreen() {
       if (!mediaUrl) throw new Error('Could not upload media');
 
       setUploadProgressMsg('Publishing status...');
-      const response = await apiClient.post<{ success: boolean; data?: StatusItem }>('/statuses', {
+      const response = await api.statuses.create({
         mediaUrl,
         type,
         caption: captionInput.trim(),
@@ -201,7 +201,7 @@ export default function StatusScreen() {
       prev.map((item) => (item.id === statusId ? { ...item, likes: updatedLikes } : item))
     );
 
-    apiClient.post<{ success: boolean; data: any }>(`/statuses/${encodeURIComponent(statusId)}/like`).catch(() => {});
+    api.statuses.like(statusId);
   };
 
   // Double tap to like
@@ -237,7 +237,7 @@ export default function StatusScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await apiClient.delete(`/statuses/${encodeURIComponent(statusId)}`).catch(() => {});
+          await api.statuses.delete(statusId);
           setStatuses((prev) => prev.filter((item) => item.id !== statusId));
           if (activeIndex > 0) setActiveIndex(activeIndex - 1);
         },
@@ -259,14 +259,14 @@ export default function StatusScreen() {
     setReplySending(true);
     try {
       // Find or create direct chat with author
-      const chatRes = await apiClient.post<{ success: boolean; data: any }>('/chats', {
+      const chatRes = await api.chats.create({
         type: 'direct',
         participants: [currentStatus.userId],
       });
 
       if (chatRes?.success && chatRes.data?.id) {
-        await apiClient.post(`/chats/${chatRes.data.id}/messages`, {
-          text: `Replying to status: "${currentStatus.caption || 'Photo/Video'}"\n\n${replyText.trim()}`,
+        await api.chats.sendMessage(chatRes.data.id, {
+          content: `Replying to status: "${currentStatus.caption || 'Photo/Video'}"\n\n${replyText.trim()}`,
         });
         setShowReplyModal(false);
         setReplyText('');

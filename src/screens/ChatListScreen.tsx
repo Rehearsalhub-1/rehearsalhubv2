@@ -25,7 +25,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUserStore } from '../hooks/useUser';
 import { cleanSenderName } from '../components/chat';
 import { useIsFocused } from '@react-navigation/native';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -267,7 +267,7 @@ export default function ChatListScreen({ route, navigation }: any) {
         const storedArchived = await AsyncStorage.getItem(`archived_chats_${currentUser.uid}`);
         const archivedIds: string[] = storedArchived ? JSON.parse(storedArchived) : [];
 
-        const res = await apiClient.get<{ success: boolean; data?: any[] }>('/chats');
+        const res = await api.chats.getAll();
         const allRows = res.success && Array.isArray(res.data) ? res.data : [];
 
         // Web parity: strictly filter chats where current user is a participant or creator
@@ -402,7 +402,7 @@ export default function ChatListScreen({ route, navigation }: any) {
 
   useWebSocket('chats', user?.uid || '', () => {
     if (!user) return;
-    apiClient.get<{ success: boolean; data?: any[] }>('/chats').then(res => {
+    api.chats.getAll().then(res => {
       if (res.success && Array.isArray(res.data) && res.data.length > 0) {
         handleRefresh();
       }
@@ -584,7 +584,7 @@ export default function ChatListScreen({ route, navigation }: any) {
                               setChatRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread: newUnread } : r));
                               try {
                                 if (newUnread === 0) {
-                                  await apiClient.patch(`/chats/${room.id}/read`);
+                                  await api.chats.markRead(room.id);
                                 }
                               } catch {}
                             }
@@ -595,7 +595,7 @@ export default function ChatListScreen({ route, navigation }: any) {
                               const nextArchived = !room.isArchived;
                               setChatRooms(prev => prev.map(r => r.id === room.id ? { ...r, isArchived: nextArchived } : r));
                               try {
-                                await apiClient.patch(`/chats/${room.id}/archive`, { archived: nextArchived });
+                                await api.chats.archive(room.id, nextArchived);
                                 const stored = await AsyncStorage.getItem(`archived_chats_${user?.uid}`);
                                 const list = stored ? JSON.parse(stored) : [];
                                 const updatedList = nextArchived ? Array.from(new Set([...list, room.id])) : list.filter((id: string) => id !== room.id);
@@ -610,9 +610,9 @@ export default function ChatListScreen({ route, navigation }: any) {
                             onPress: async () => {
                               try {
                                 if (room.isGroup) {
-                                  await apiClient.patch(`/chats/${room.id}/leave`, { userId: user?.uid });
+                                  await api.chats.leave(room.id, user?.uid);
                                 } else {
-                                  await apiClient.patch(`/chats/${room.id}`, { clearFor: user?.uid });
+                                  await api.chats.clearFor(room.id, user?.uid);
                                   await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
                                   await AsyncStorage.removeItem(`cached_messages_${room.id}`);
                                 }

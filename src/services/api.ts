@@ -95,10 +95,26 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>(`/chats/${chatId}/messages?limit=${limit}`),
     sendMessage: (chatId: string, message: Record<string, any>) =>
       apiClient.post<{ success: boolean; data: any }>(`/chats/${chatId}/messages`, message),
+    updateMessage: (chatId: string, messageId: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}/messages/${messageId}`, data),
+    deleteMessage: (chatId: string, messageId: string) =>
+      apiClient.delete<{ success: boolean }>(`/chats/${chatId}/messages/${messageId}`),
+    updateChat: (chatId: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}`, data),
     markRead: (chatId: string) =>
-      apiClient.post<{ success: boolean }>(`/chats/${chatId}/read`, {}),
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}/read`, {}).catch(() => apiClient.post(`/chats/${chatId}/read`, {})),
+    archive: (chatId: string, archived: boolean) =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}/archive`, { archived }),
+    leave: (chatId: string, userId?: string) =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}/leave`, { userId }),
+    clearFor: (chatId: string, userId?: string) =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}`, { clearFor: userId }),
     clearMessages: (chatId: string) =>
       apiClient.delete<{ success: boolean }>(`/chats/${chatId}/messages`),
+    acceptRequest: (chatId: string) =>
+      apiClient.post<{ success: boolean }>(`/chats/requests/${chatId}/accept`, {}),
+    declineRequest: (chatId: string) =>
+      apiClient.post<{ success: boolean }>(`/chats/requests/${chatId}/decline`, {}),
   },
 
   // ── Statuses (Stories) ───────────────────────────────────────────────────
@@ -174,6 +190,30 @@ export const api = {
     get: (docId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/settings/${docId}`),
   },
+
+  // ── Calls ───────────────────────────────────────────────────────────────
+  calls: {
+    getAll: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/calls'),
+    create: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data: any }>('/calls', data),
+    update: (callId: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/calls/${callId}`, data),
+    deleteMany: (ids: string[]) =>
+      apiClient.delete<{ success: boolean }>('/calls', { ids }),
+    getToken: (room: string, participant: string) =>
+      apiClient.get<{ success: boolean; token?: string; [key: string]: any }>(`/livekit-token?room=${encodeURIComponent(room)}&participant=${encodeURIComponent(participant)}`),
+  },
+
+  // ── Reports ──────────────────────────────────────────────────────────────
+  reports: {
+    submit: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean }>('/reports', data),
+  },
+
+  // ── Health ───────────────────────────────────────────────────────────────
+  health: () =>
+    apiClient.get<{ ok: boolean }>('/health').catch(() => null),
 };
 
 export default api;

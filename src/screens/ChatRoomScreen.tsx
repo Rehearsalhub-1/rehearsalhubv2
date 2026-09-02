@@ -39,7 +39,7 @@ import { sendPushNotification } from '../lib/notifications';
 import { useIsMounted } from '../hooks/useIsMounted';
 import * as Sentry from '@sentry/react-native';
 import { debugSessionLog } from '../lib/debugSessionLog';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -276,7 +276,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!incomingRoom && deepLinkRoomId) {
       const fetchRoom = async () => {
         try {
-          const res = await apiClient.get<{ success: boolean; data: any }>(`/chats/${deepLinkRoomId}`);
+          const res = await api.chats.getById(deepLinkRoomId);
           if (res?.success && res.data) {
             setRoom(res.data);
           } else {
@@ -444,7 +444,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           const name = msgObj.playlistData?.name || 'Playlist';
           lastMsgText = `🎼 Shared Playlist: ${name}`;
         }
-        await apiClient.post(`/chats/${room?.id}/messages`, msgObj || {});
+        await api.chats.sendMessage(room?.id, msgObj || {});
       } catch (e) {
         console.error('Forward send error', e);
       }
@@ -541,7 +541,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       for (const item of queue) {
         try {
           if (item.id) setMessages(prev => prev.map(m => m.id === item.id ? { ...m, status: 'sending' } : m));
-          await apiClient.post(`/chats/${room?.id}/messages`, item || {});
+          await api.chats.sendMessage(room?.id, item || {});
           if (item.id) setMessages(prev => prev.map(m => m.id === item.id ? { ...m, status: 'sent' } : m));
         } catch {
           remaining.push(item); // keep failed ones
@@ -559,7 +559,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const checkOnline = async (): Promise<boolean> => {
     try {
       // Ping our own API health endpoint — works in all regions
-      const res = await apiClient.get<{ ok: boolean }>('/health').catch(() => null);
+      const res = await api.health();
       return !!res;
     } catch { return false; }
   };
@@ -580,7 +580,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!item) return;
     setMessages(prev => prev.map(message => message.id === messageId ? { ...message, status: 'sending' } : message));
     try {
-      await apiClient.post(`/chats/${room?.id}/messages`, item);
+      await api.chats.sendMessage(room?.id, item);
       await AsyncStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue.filter(candidate => candidate.id !== messageId)));
       setMessages(prev => prev.map(message => message.id === messageId ? { ...message, status: 'sent' } : message));
     } catch {
@@ -674,7 +674,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
     const fetchMessages = async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any[] }>(`/chats/${room.id}/messages`);
+        const res = await api.chats.getMessages(room.id);
         if (res?.success && Array.isArray(res.data)) {
           const msgs: ChatMessage[] = res.data.map((m: any) => {
             const displayDt = new Date(m.createdAt || m.created_at || m.timestamp || Date.now());
@@ -734,7 +734,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     };
     fetchMessages();
     if (room?.id) {
-      apiClient.post(`/chats/${room.id}/read`, {}).catch(() => {});
+      api.chats.markRead(room.id);
     }
 
     const pollInterval = setInterval(() => {
@@ -850,7 +850,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       setIsUploading(true); showToast('Sending voice note…');
       const audioUrl = await uploadImageToCloudinary(uri, 'video');
       const bars = downsampleWaveform(waveform, 40);
-      const res = await apiClient.post<{ success: boolean; data?: any }>(`/chats/${room.id}/messages`, {
+      const res = await api.chats.sendMessage(room.id, {
         content: '🎤 Voice note',
         type: 'voice',
         media_url: audioUrl,
@@ -971,7 +971,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         return;
       }
       try {
-        await apiClient.patch(`/chats/${room.id}/messages/${editingMsg.id}`, {
+        await api.chats.updateMessage(room.id, editingMsg.id, {
           content: text,
           edited: true,
         });
@@ -1026,7 +1026,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     setMessages(prev => [optimisticMessage, ...prev.filter(message => message.id !== optimisticMessage.id)]);
 
     try {
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.sendMessage(room.id, {
         content: text,
         type: 'text',
         reply_to: replyingTo?.id,
@@ -1069,7 +1069,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         setIsUploading(true);
         showToast('Uploading video…');
         const videoUrl = await uploadImageToCloudinary(result.assets[0].uri, 'video');
-        await apiClient.post(`/chats/${room.id}/messages`, {
+        await api.chats.sendMessage(room.id, {
           content: '🎥 Video',
           type: 'video',
           media_url: videoUrl,
@@ -1108,7 +1108,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         if (replyingTo && item === pendingItems[0]) {
           data.replyTo = { id: replyingTo.id, text: '📷 Photo', senderName: replyingTo.sender };
         }
-        await apiClient.post(`/chats/${room.id}/messages`, {
+        await api.chats.sendMessage(room.id, {
           content: item.caption || '📷 Photo',
           type: 'image',
           media_url: imageUrl,
@@ -1160,7 +1160,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const targetMsgId = selectedMsg.id;
     setActionVisible(false);
     try {
-      await apiClient.delete(`/chats/${room.id}/messages/${targetMsgId}`);
+      await api.chats.deleteMessage(room.id, targetMsgId);
       setMessages(prev => prev.map(m => m.id === targetMsgId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
       notifyParticipants('This message was deleted', 'delete');
     } catch { showToast('Failed to delete'); }
@@ -1171,7 +1171,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const targetMsg = selectedMsg;
     setActionVisible(false);
     try {
-      await apiClient.patch(`/chats/${room.id}/messages/${targetMsg.id}`, {
+      await api.chats.updateMessage(room.id, targetMsg.id, {
         starred: !targetMsg.starred,
       });
       setMessages(prev => prev.map(m => m.id === targetMsg.id ? { ...m, starred: !m.starred } : m));
@@ -1184,7 +1184,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const targetMsg = selectedMsg;
     setActionVisible(false);
     try {
-      await apiClient.patch(`/chats/${room.id}/messages/${targetMsg.id}`, {
+      await api.chats.updateMessage(room.id, targetMsg.id, {
         pinned: !targetMsg.pinned,
       });
       setMessages(prev => prev.map(m => m.id === targetMsg.id ? { ...m, pinned: !m.pinned } : m));
@@ -1256,7 +1256,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         docData.documentSize = asset.size;
       }
       
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.sendMessage(room.id, {
         content: isAudio ? '🎧 Audio' : `📄 ${asset.name}`,
         type: msgType,
         media_url: uploadedUrl,
@@ -1344,7 +1344,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!room?.id || !currentUser) return;
     try {
       const newVal = !isArchived;
-      await apiClient.patch(`/chats/${room.id}`, { archived: newVal });
+      await api.chats.updateChat(room.id, { archived: newVal });
       setIsArchived(newVal);
       showToast(newVal ? 'Chat archived' : 'Chat unarchived');
     } catch { showToast('Failed to archive chat'); }
@@ -1361,8 +1361,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const handleSetDisappearing = async (seconds: number | null) => {
     if (!room?.id) return;
     try {
-      await apiClient.patch(`/chats/${room.id}`, { disappearingTimer: seconds });
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.updateChat(room.id, { disappearingTimer: seconds });
+      await api.chats.sendMessage(room.id, {
         content: seconds ? `${myName} turned on disappearing messages` : `${myName} turned off disappearing messages`,
         type: 'system',
       });
@@ -1377,7 +1377,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!cu || !room?.id) return;
     try {
       const options = pollOptions.filter(o => o.trim()).map(o => ({ text: o.trim(), votes: [] }));
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.sendMessage(room.id, {
         content: `📊 Poll: ${pollQuestion.trim()}`,
         type: 'poll',
         pollOptions: options,
@@ -1417,11 +1417,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           onPress: async () => {
             try {
               if (isBlocked) {
-                await apiClient.patch(`/chats/${room.id}`, { unblock: currentUser.uid });
+                await api.chats.updateChat(room.id, { unblock: currentUser.uid });
                 setIsBlocked(false);
                 showToast('User unblocked');
               } else {
-                await apiClient.patch(`/chats/${room.id}`, { block: currentUser.uid });
+                await api.chats.updateChat(room.id, { block: currentUser.uid });
                 setIsBlocked(true);
                 showToast('User blocked');
               }
@@ -1444,7 +1444,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await apiClient.post('/reports', {
+              await api.reports.submit({
                 reporterId: currentUser.uid,
                 reporterName: myName,
                 messageId: selectedMsg.id,
@@ -1513,7 +1513,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!cu || !room?.id) return;
     setShowGifPicker(false);
     try {
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.sendMessage(room.id, {
         content: '🎞️ GIF',
         type: 'image',
         media_url: gifUrl,
@@ -1523,7 +1523,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   };
   useEffect(() => {
     if (!room?.id) return;
-    apiClient.get<{ success: boolean; data: any }>(`/chats/${room.id}`).then(res => {
+    api.chats.getById(room.id).then(res => {
       if (res?.success && res.data) {
         const d = res.data;
         setSlowModeSeconds(d.slowMode || 0);
@@ -1536,7 +1536,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     try {
       const linkCode = room.id.slice(-8).toUpperCase();
       const link = `https://www.loveworldsingersrehearsalhubportal.org/join/${room.id}?code=${linkCode}`;
-      await apiClient.patch(`/chats/${room.id}`, { joinLink: link, joinLinkCode: linkCode });
+      await api.chats.updateChat(room.id, { joinLink: link, joinLinkCode: linkCode });
       setJoinLink(link);
       setShowJoinLinkModal(true);
     } catch { showToast('Failed to generate link'); }
@@ -1545,7 +1545,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const cu = currentUser;
     if (!cu || !room?.id) return;
     try {
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.sendMessage(room.id, {
         content: `📇 ${contactProfile.name}`,
         type: 'contact_share',
         contactData: contactProfile,
@@ -1611,7 +1611,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const callerNameToUse = myName || myDetails.name || 'Me';
 
     try {
-      const callRes = await apiClient.post<{ success: boolean; data: any }>('/calls', {
+      const callRes = await api.calls.create({
         receiver_id: isGroup ? room.id : targetUids[0],
         type,
         chat_id: room.id,
@@ -1620,7 +1620,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       });
       const callData = callRes?.data || { id: 'call_' + Date.now() };
 
-      await apiClient.post(`/chats/${room.id}/messages`, {
+      await api.chats.sendMessage(room.id, {
         content: isGroup ? `${displayNameToUse} started a group ${type} call` : `📞 ${type} call started`,
         type: isGroup ? 'group_call' : 'system',
         callType: type,
@@ -2503,7 +2503,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   style={{ flex: 1, backgroundColor: APP_THEME.primaryAccent, paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
                   onPress={async () => {
                     try {
-                      await apiClient.post(`/chats/requests/${room?.id}/accept`);
+                      await api.chats.acceptRequest(room?.id);
                       setHasAccepted(true);
                       showToast('Request accepted');
                     } catch {
@@ -2517,7 +2517,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
                   onPress={async () => {
                     try {
-                      await apiClient.post(`/chats/requests/${room?.id}/decline`);
+                      await api.chats.declineRequest(room?.id);
                       navigation.goBack();
                     } catch {
                       navigation.goBack();
