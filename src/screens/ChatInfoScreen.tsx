@@ -11,7 +11,7 @@ import { BlurView } from 'expo-blur';
 import { DoodleBackground } from '../components/DoodleBackground';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { SyncAvatar } from '../components/SyncAvatar';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { useUserStore } from '../hooks/useUser';
@@ -71,7 +71,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     if (!room?.id) return;
     const fetchRoomDetails = async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any }>(`/chats/${room.id}`);
+        const res = await api.chats.getById(room.id);
         if (res?.success && res.data) {
           const data = res.data;
           setRoom(data);
@@ -81,7 +81,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
             let name = detail?.name;
             let avatar = detail?.avatar;
             if (!name) {
-              const pRes = await apiClient.get<{ success: boolean; data: any }>(`/profiles/${uid}`).catch(() => null);
+              const pRes = await api.profiles.get(uid).catch(() => null);
               if (pRes?.data) {
                 name = [pRes.data.firstName, pRes.data.lastName].filter(Boolean).join(' ');
                 avatar = pRes.data.profile_image_url || pRes.data.avatar;
@@ -110,7 +110,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
   const handleMuteToggle = async (value: boolean) => {
     setMuted(value);
     try {
-      await apiClient.delete(`/chats/${room.id}/messages`).catch(() => {});
+      await api.chats.clearMessages(room.id).catch(() => {});
     } catch (e) {
       console.error('Failed to update mute state:', e);
       setMuted(!value); // revert on error
@@ -142,7 +142,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
         text: 'Clear', style: 'destructive', onPress: async () => {
           try {
             if (!currentUser?.uid) return;
-            await apiClient.delete(`/chats/${room.id}/messages`).catch(() => {});
+            await api.chats.clearMessages(room.id).catch(() => {});
             await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
             await AsyncStorage.removeItem(`cached_messages_${room.id}`);
 
@@ -165,7 +165,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
       {
         text: 'Leave', style: 'destructive', onPress: async () => {
           try {
-            const cRes = await apiClient.get<{ success: boolean; data: any }>(`/chats/${room.id}`).catch(() => null);
+            const cRes = await api.chats.getById(room.id).catch(() => null);
             const chatDoc = { exists: () => !!cRes?.data, data: () => cRes?.data || {} };
             if (!chatDoc.exists()) return;
             const data = chatDoc.data();
@@ -177,9 +177,9 @@ export default function ChatInfoScreen({ route, navigation }: any) {
             const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || (currentUser as any)?.displayName || (currentUser as any)?.name || "Someone" || 'Someone' : (currentUser as any)?.displayName || (currentUser as any)?.name || "Someone" || 'Someone';
             const leaveText = `${myName} left the group`;
 
-            await apiClient.patch(`/chats/${room.id}`, { participants: newParticipants }).catch(() => {});
+            await api.chats.updateChat(room.id, { participants: newParticipants }).catch(() => {});
 
-            await apiClient.post(`/chats/${room.id}/messages`, { content: 'Updated members', type: 'system' }).catch(() => {});
+            await api.chats.sendMessage(room.id, { content: 'Updated members', type: 'system' }).catch(() => {});
 
             navigation.navigate('ChatRooms');
           } catch { Alert.alert('Error', 'Failed to leave group'); }
@@ -196,14 +196,14 @@ export default function ChatInfoScreen({ route, navigation }: any) {
 
   const toggleAdmin = async (member: { id: string; name: string; role?: string }) => {
     try {
-      const cRes = await apiClient.get<{ success: boolean; data: any }>(`/chats/${room.id}`).catch(() => null);
+      const cRes = await api.chats.getById(room.id).catch(() => null);
       const chatDoc = { exists: () => !!cRes?.data, data: () => cRes?.data || {} };
       if (!chatDoc.exists()) return;
       const admins = chatDoc.data().admins || [];
       const newAdmins = member.role === 'Admin' ? admins.filter((a: string) => a !== member.id) : [...admins, member.id];
-      await apiClient.patch(`/chats/${room.id}`, { admins: newAdmins }).catch(() => {});
+      await api.chats.updateChat(room.id, { admins: newAdmins }).catch(() => {});
       
-      await apiClient.post(`/chats/${room.id}/messages`, { content: 'Updated members', type: 'system' }).catch(() => {});
+      await api.chats.sendMessage(room.id, { content: 'Updated members', type: 'system' }).catch(() => {});
     } catch (e) {
       Alert.alert('Error', 'Failed to update admin status');
     }
@@ -214,16 +214,16 @@ export default function ChatInfoScreen({ route, navigation }: any) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
         try {
-          const cRes = await apiClient.get<{ success: boolean; data: any }>(`/chats/${room.id}`).catch(() => null);
+          const cRes = await api.chats.getById(room.id).catch(() => null);
           const chatDoc = { exists: () => !!cRes?.data, data: () => cRes?.data || {} };
           if (!chatDoc.exists()) return;
           const data = chatDoc.data();
           const newParticipants = (data.participants || []).filter((id: string) => id !== member.id);
           const newDetails = { ...data.participantDetails };
           delete newDetails[member.id];
-          await apiClient.patch(`/chats/${room.id}`, { participants: newParticipants }).catch(() => {});
+          await api.chats.updateChat(room.id, { participants: newParticipants }).catch(() => {});
 
-          await apiClient.post(`/chats/${room.id}/messages`, { content: 'Updated members', type: 'system' }).catch(() => {});
+          await api.chats.sendMessage(room.id, { content: 'Updated members', type: 'system' }).catch(() => {});
         } catch (e) {
           Alert.alert('Error', 'Failed to remove member');
         }
@@ -235,7 +235,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     setIsChatOpening(true);
     try {
       const chatId = [currentUser?.uid, member.id].sort().join('_');
-      const dRes = await apiClient.get<{ success: boolean; data: any }>(`/chats/${chatId}`).catch(() => null);
+      const dRes = await api.chats.getById(chatId).catch(() => null);
       const docSnap = { exists: () => !!dRes?.data, data: () => dRes?.data || {} };
 
       if (docSnap.exists()) {
@@ -271,7 +271,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
           lastMessage: null,
         };
 
-        await apiClient.patch(`/chats/${room.id}`, newRoomData).catch(() => {});
+        await api.chats.updateChat(room.id, newRoomData).catch(() => {});
 
         const roomObj = {
           id: chatId,

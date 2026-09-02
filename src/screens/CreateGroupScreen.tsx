@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { SyncAvatar } from '../components/SyncAvatar';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
 import { Image } from 'expo-image';
 import { useUserStore } from '../hooks/useUser';
@@ -76,7 +76,7 @@ export default function CreateGroupScreen({ navigation }: any) {
         return;
       }
 
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/profiles');
+      const res = await api.profiles.directory();
       const snap = { docs: (res?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
       const list: Member[] = [];
       (snap.docs || []).forEach((d: any) => {
@@ -141,7 +141,7 @@ export default function CreateGroupScreen({ navigation }: any) {
       allParticipants.forEach(uid => { unreadCount[uid] = 0; });
 
       const chatId = `group_${Date.now()}_${currentUser.uid}`;
-      const res = await apiClient.post<{ success: boolean; data: any }>('/chats', {
+      const res = await api.chats.create({
         id: chatId,
         name: groupName.trim(),
         avatar: groupAvatar || null,
@@ -151,7 +151,7 @@ export default function CreateGroupScreen({ navigation }: any) {
         admins: [currentUser.uid],
         createdBy: currentUser.uid,
       });
-      await apiClient.post(`/chats/${chatId}/messages`, {
+      await api.chats.sendMessage(chatId, {
         content: `${(currentUser as any)?.displayName || (currentUser as any)?.name || "Admin" || 'Admin'} created group "${groupName.trim()}"`,
         type: 'system',
       });

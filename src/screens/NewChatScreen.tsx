@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SyncAvatar } from '../components/SyncAvatar';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useUserStore } from '../hooks/useUser';
 
 const CACHE_KEY_PROFILES = 'cached_all_profiles';
@@ -88,7 +88,7 @@ export default function NewChatScreen({ route, navigation }: any) {
   const loadData = async () => {
     if (!currentUser) { setLoading(false); return; }
     try {
-      const chatsRes = await apiClient.get<{ success: boolean; data: any[] }>('/chats').catch(() => null);
+      const chatsRes = await api.chats.getAll().catch(() => null);
       const chatsSnap = { docs: (chatsRes?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
 
       const recentMap: Record<string, UserProfile> = {};
@@ -184,7 +184,7 @@ export default function NewChatScreen({ route, navigation }: any) {
       AsyncStorage.setItem(CACHE_KEY_RECENTS, JSON.stringify(
         sortedRecents.map(r => ({ ...r, existingRoom: r.existingRoom }))
       )).catch(() => {});
-      const profRes = await apiClient.get<{ success: boolean; data: any[] }>('/profiles?limit=500').catch(() => null);
+      const profRes = await api.profiles.directory().catch(() => null);
       const rawList: any[] = profRes?.data && Array.isArray(profRes.data) ? profRes.data : [];
       const allProfiles: UserProfile[] = [];
 
@@ -228,7 +228,7 @@ export default function NewChatScreen({ route, navigation }: any) {
     const groupTargetChatId = route.params?.groupTargetChatId;
     if (groupTargetChatId) {
       try {
-        await apiClient.post(`/chats/${groupTargetChatId}/participants`, { userIds: [user.id] });
+        await api.chats.addParticipants(groupTargetChatId, [user.id]);
         navigation.goBack();
       } catch (e) {
         console.error('Failed to add member to group', e);
@@ -246,7 +246,7 @@ export default function NewChatScreen({ route, navigation }: any) {
       const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || (currentUser as any)?.displayName || (currentUser as any)?.name || 'Me' : (currentUser as any)?.displayName || (currentUser as any)?.name || 'Me';
       const myAvatar = profile?.avatar || '';
 
-      await apiClient.post('/chats', { id: chatId, name: user.name, type: 'direct', participants: [currentUser.uid, user.id] }).catch(() => {});
+      await api.chats.create({ id: chatId, name: user.name, type: 'direct', participants: [currentUser.uid, user.id] }).catch(() => {});
 
       const room = {
         id: chatId,

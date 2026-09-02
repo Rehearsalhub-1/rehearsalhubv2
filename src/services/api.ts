@@ -24,7 +24,9 @@ export const api = {
     update: (userId: string, data: Record<string, any>) =>
       apiClient.patch<{ success: boolean; data: any }>(`/profiles/${userId}`, data),
     getDirectory: (limit = 200) =>
-      apiClient.get<{ success: boolean; data: any[] }>(`/profiles/directory?limit=${limit}`),
+      apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}`),
+    directory: (limit = 500) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}`),
   },
 
   // ── Songs & Master Library ───────────────────────────────────────────────
@@ -115,20 +117,8 @@ export const api = {
       apiClient.post<{ success: boolean }>(`/chats/requests/${chatId}/accept`, {}),
     declineRequest: (chatId: string) =>
       apiClient.post<{ success: boolean }>(`/chats/requests/${chatId}/decline`, {}),
-  },
-
-  // ── Statuses (Stories) ───────────────────────────────────────────────────
-  statuses: {
-    getAll: () =>
-      apiClient.get<{ success: boolean; data?: any[] }>('/statuses'),
-    create: (data: Record<string, any>) =>
-      apiClient.post<{ success: boolean; data?: any }>('/statuses', data),
-    view: (statusId: string) =>
-      apiClient.post<{ success: boolean }>(`/statuses/${encodeURIComponent(statusId)}/view`).catch(() => {}),
-    like: (statusId: string) =>
-      apiClient.post<{ success: boolean; data: any }>(`/statuses/${encodeURIComponent(statusId)}/like`).catch(() => {}),
-    delete: (statusId: string) =>
-      apiClient.delete<{ success: boolean }>(`/statuses/${encodeURIComponent(statusId)}`).catch(() => {}),
+    addParticipants: (chatId: string, userIds: string[]) =>
+      apiClient.post<{ success: boolean }>(`/chats/${chatId}/participants`, { userIds }),
   },
 
   // ── Subgroups & Churches ─────────────────────────────────────────────────
