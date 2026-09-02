@@ -26,7 +26,7 @@ import { darkTheme } from '../constants/Colors';
 import { ZONES, Zone, getZoneByInvitationCode, isHQGroup } from '../config/zones';
 import { BiometricService } from '../lib/biometrics';
 import { apiClient } from '../lib/apiClient';
-import { reinitializeUserStore } from '../hooks/useUser';
+import { reinitializeUserStore, useUserStore } from '../hooks/useUser';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -174,7 +174,7 @@ export default function LoginScreen({ route, navigation }: any) {
       if (res.success && res.data) {
         const userId = res.data.user?.id || (res.data as any)?.userId || '';
         await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
-        reinitializeUserStore();
+        await useUserStore.getState().bootstrap();
         navigation.replace('Home');
       } else {
         Alert.alert('Authentication Failed', sanitizeError(res.error || 'Invalid credentials'));
@@ -208,7 +208,7 @@ export default function LoginScreen({ route, navigation }: any) {
       if (res.success && res.data) {
         const userId = res.data.user?.id || (res.data as any)?.userId || '';
         await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
-        reinitializeUserStore();
+        await useUserStore.getState().bootstrap();
         setMultipleAccounts(null);
         navigation.replace('Home');
         return;
@@ -339,7 +339,7 @@ export default function LoginScreen({ route, navigation }: any) {
           await SecureStore.setItemAsync('remembered_password', password);
         }
 
-        reinitializeUserStore();
+        await useUserStore.getState().bootstrap();
 
         if (biometricsAvailable && !biometricsEnabled) {
           Alert.alert(
