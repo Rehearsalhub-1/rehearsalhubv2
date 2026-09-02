@@ -1,16 +1,20 @@
-import TrackPlayer, { Event, State } from 'react-native-track-player';
+import {
+  SafeTrackPlayer as TrackPlayer,
+  SafeEvent as Event,
+  SafeState as State,
+} from '../lib/safeNativeModules';
 
-export async function PlaybackService() {
+export async function PlaybackService() {
   TrackPlayer.addEventListener(Event.RemotePlay, () => TrackPlayer.play());
   TrackPlayer.addEventListener(Event.RemotePause, () => TrackPlayer.pause());
   TrackPlayer.addEventListener(Event.RemoteStop, () => TrackPlayer.reset());
   TrackPlayer.addEventListener(Event.RemoteNext, () => TrackPlayer.skipToNext());
   TrackPlayer.addEventListener(Event.RemotePrevious, () => TrackPlayer.skipToPrevious());
-  TrackPlayer.addEventListener(Event.RemoteSeek, (event) => TrackPlayer.seekTo(event.position));
-  TrackPlayer.addEventListener(Event.RemoteDuck, async (event) => {
-    if (event.paused) {
+  TrackPlayer.addEventListener(Event.RemoteSeek, (event: any) => TrackPlayer.seekTo(event.position));
+  TrackPlayer.addEventListener(Event.RemoteDuck, async (event: any) => {
+    if (event.paused) {
       const currentState = await TrackPlayer.getState();
-      (global as any).wasPlayingBeforeDuck = currentState === State.Playing;
+      (global as any).wasPlayingBeforeDuck = currentState === State.Playing;
       if (!(global as any).isRecording) {
         await TrackPlayer.pause();
       }

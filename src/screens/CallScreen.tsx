@@ -26,7 +26,7 @@ if (typeof global.DOMException === 'undefined') {
 }
 
 import { Room, RoomEvent, Track, VideoPresets } from 'livekit-client';
-import { VideoView, registerGlobals } from '@livekit/react-native';
+import { SafeVideoView as VideoView, safeRegisterGlobals as registerGlobals } from '../lib/safeNativeModules';
 registerGlobals();
 
 const LIVEKIT_URL = process.env.EXPO_PUBLIC_LIVEKIT_URL || 'wss://rehearsal-hub-livekit.cloud';

@@ -260,9 +260,10 @@ export default function CalendarScreen({ route, navigation }: any) {
           }
 
           const cat = data.type || data.category || 'rehearsal';
+          const eventTitle = data.title || data.name || data.eventName || data.event_name || data.summary || data.programName || data.program || data.subject || (data.description ? data.description.slice(0, 35) : '') || 'Ministry Event';
           return {
             id: data.id || `ev_${Math.random().toString(36).slice(2, 7)}`,
-            title: data.title || 'Ministry Event',
+            title: eventTitle,
             description: data.description || data.message || '',
             start: startDate,
             end: endDate,
@@ -471,6 +472,15 @@ export default function CalendarScreen({ route, navigation }: any) {
     });
   }, [events, selected]);
 
+  const upcomingEvents = React.useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return events.filter(ev => {
+      const end = new Date(ev.end);
+      return end >= now;
+    }).slice(0, 5);
+  }, [events]);
+
   return (
     <View style={s.root}>
       <StatusBar style="light" />
@@ -494,7 +504,13 @@ export default function CalendarScreen({ route, navigation }: any) {
 
       <SafeAreaView style={{ flex: 1 }}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.iconBtn}>
+          <TouchableOpacity
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('Home');
+            }}
+            style={s.iconBtn}
+          >
             <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
           </TouchableOpacity>
 
@@ -599,9 +615,36 @@ export default function CalendarScreen({ route, navigation }: any) {
             {eventsLoading ? (
               <ActivityIndicator color={theme.colors.accent} style={{ marginVertical: 20 }} />
             ) : selectedDateEvents.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingVertical: 24 }}>
-                <Ionicons name="calendar-outline" size={36} color={theme.colors.textMuted} />
-                <Text style={{ color: theme.colors.textMuted, marginTop: 10, fontSize: 14 }}>No events for this day</Text>
+              <View style={{ alignItems: 'center', paddingVertical: 18 }}>
+                <Ionicons name="calendar-outline" size={32} color={theme.colors.textMuted} />
+                <Text style={{ color: theme.colors.textMuted, marginTop: 8, fontSize: 13 }}>No events on this date</Text>
+                
+                {upcomingEvents.length > 0 && (
+                  <View style={{ width: '100%', marginTop: 20 }}>
+                    <Text style={[s.sectionLabel, { marginBottom: 12 }]}>UPCOMING SCHEDULE</Text>
+                    {upcomingEvents.map(ev => (
+                      <TouchableOpacity
+                        key={ev.id}
+                        style={s.eventCard}
+                        onPress={() => {
+                          setSelected(ev.start.toISOString().split('T')[0]);
+                        }}
+                      >
+                        <View style={[s.eventStripe, { backgroundColor: ev.color }]} />
+                        <View style={s.eventBody}>
+                          <Text style={s.eventTime}>
+                            {ev.start.toLocaleDateString([], { month: 'short', day: 'numeric' })} · {formatEventTime(ev.start)}
+                          </Text>
+                          <Text style={s.eventTitle}>{ev.title}</Text>
+                          {ev.description ? <Text style={s.eventDesc} numberOfLines={2}>{ev.description}</Text> : null}
+                          <View style={[s.typeBadge, { backgroundColor: ev.color + '22' }]}>
+                            <Text style={[s.typeText, { color: ev.color }]}>{ev.type}</Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
             ) : (
               selectedDateEvents.map(ev => (

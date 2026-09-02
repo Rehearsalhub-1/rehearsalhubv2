@@ -72,10 +72,9 @@ export default function SubmitSongScreen({ navigation }: any) {
     if (!user) return;
     setLoadingSubmissions(true);
     try {
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/submissions/mine');
-      if (res?.data && Array.isArray(res.data)) {
-        setMySubmissions(res.data);
-      }
+      const res = await apiClient.get<any>('/submissions/mine');
+      const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.items) ? res.items : [];
+      setMySubmissions(items);
     } catch (e) {
       console.error('Failed to load my submissions:', e);
     } finally {
@@ -265,8 +264,14 @@ export default function SubmitSongScreen({ navigation }: any) {
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={28} color={theme.colors.textPrimary} />
+          <TouchableOpacity
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('Home');
+            }}
+            style={styles.backButton}
+          >
+            <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Submit Song</Text>
           <View style={{ width: 44 }} />
@@ -408,9 +413,11 @@ export default function SubmitSongScreen({ navigation }: any) {
               ) : (
                 <FlatList
                   data={mySubmissions}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(item, index) => (item?.id ? String(item.id) : `sub-${index}`)}
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+                  refreshing={loadingSubmissions}
+                  onRefresh={fetchMySubmissions}
                   renderItem={({ item }) => {
                     const isExpanded = expandedSubmissionId === item.id;
                     const dateObj = item.createdAt?.toDate ? item.createdAt.toDate() : new Date(item.createdAt);

@@ -175,6 +175,25 @@ export const PlaylistShareCard = React.memo(({
   msg, navigation, theme, APP_THEME, styles
 }: PlaylistShareCardProps) => {
   if (!msg.playlistData) return null;
+  const count = msg.playlistData.songCount !== undefined && msg.playlistData.songCount !== null
+    ? msg.playlistData.songCount
+    : (Array.isArray(msg.playlistData.songs) ? msg.playlistData.songs.length : 0);
+
+  const handleOpenPlaylist = () => {
+    const notesMap: Record<string, string> = {};
+    const rawSongs = Array.isArray(msg.playlistData?.songs) ? msg.playlistData.songs : [];
+    rawSongs.forEach((s: any) => {
+      if (s && typeof s === 'object' && s.id && s.note) notesMap[s.id] = s.note;
+    });
+    navigation.navigate('Playlists', {
+      openPlaylistId: msg.playlistData?.id,
+      openPlaylistName: msg.playlistData?.name,
+      openPlaylistSongs: rawSongs.map((s: any) => typeof s === 'string' ? s : s.id).filter(Boolean),
+      sharedSongs: rawSongs.filter((s: any) => typeof s === 'object' && s.id),
+      openPlaylistSongNotes: notesMap,
+    });
+  };
+
   return (
     <View style={styles.songShareCard}>
       <View style={styles.songShareHeader}>
@@ -183,33 +202,22 @@ export const PlaylistShareCard = React.memo(({
       </View>
       <TouchableOpacity
         activeOpacity={0.8}
-        onPress={() => {
-          const notesMap: Record<string, string> = {};
-          msg.playlistData?.songs?.forEach((s: any) => {
-            if (s.note) notesMap[s.id] = s.note;
-          });
-          navigation.navigate('Playlists', {
-            openPlaylistId: msg.playlistData?.id,
-            openPlaylistName: msg.playlistData?.name,
-            openPlaylistSongs: msg.playlistData?.songs?.map(s => s.id) || [],
-            openPlaylistSongNotes: notesMap,
-          });
-        }}
+        onPress={handleOpenPlaylist}
         style={styles.songShareBody}
       >
         <View style={[styles.songShareIconWrap, { backgroundColor: 'rgba(192,132,252,0.15)' }]}>
           <Ionicons name="musical-notes" size={22} color={APP_THEME.primaryAccent} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.songShareTitle} numberOfLines={1}>{msg.playlistData.name}</Text>
-          <Text style={styles.songShareSub}>{msg.playlistData.songCount} {msg.playlistData.songCount === 1 ? 'song' : 'songs'}</Text>
-          {msg.playlistData.songs?.slice(0, 3).map((s, i) => (
+          <Text style={styles.songShareTitle} numberOfLines={1}>{msg.playlistData.name || 'Shared Playlist'}</Text>
+          <Text style={styles.songShareSub}>{count} {count === 1 ? 'song' : 'songs'}</Text>
+          {Array.isArray(msg.playlistData.songs) && msg.playlistData.songs.slice(0, 3).map((s: any, i: number) => (
             <Text key={i} style={[styles.songShareProg, { marginBottom: 1 }]} numberOfLines={1}>
-              • {s.title}{s.note ? ` (💬 ${s.note})` : ''}
+              • {s?.title || (typeof s === 'string' ? s : 'Track')}{s?.note ? ` (💬 ${s.note})` : ''}
             </Text>
           ))}
-          {msg.playlistData.songCount > 3 && (
-            <Text style={[styles.songShareProg, { fontStyle: 'italic' }]}>+{msg.playlistData.songCount - 3} more</Text>
+          {count > 3 && (
+            <Text style={[styles.songShareProg, { fontStyle: 'italic' }]}>+{count - 3} more</Text>
           )}
         </View>
       </TouchableOpacity>
@@ -220,18 +228,7 @@ export const PlaylistShareCard = React.memo(({
       ) : null}
       <TouchableOpacity
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: APP_THEME.border }}
-        onPress={() => {
-          const notesMap: Record<string, string> = {};
-          msg.playlistData?.songs?.forEach((s: any) => {
-            if (s.note) notesMap[s.id] = s.note;
-          });
-          navigation.navigate('Playlists', {
-            openPlaylistId: msg.playlistData?.id,
-            openPlaylistName: msg.playlistData?.name,
-            openPlaylistSongs: msg.playlistData?.songs?.map(s => s.id) || [],
-            openPlaylistSongNotes: notesMap,
-          });
-        }}
+        onPress={handleOpenPlaylist}
       >
         <Ionicons name="list-outline" size={14} color={APP_THEME.primaryAccent} />
         <Text style={{ fontSize: 12, color: APP_THEME.primaryAccent, fontWeight: '600' }}>View Playlist ›</Text>

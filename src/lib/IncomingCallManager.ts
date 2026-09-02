@@ -1,6 +1,11 @@
 import { Platform } from 'react-native';
-import notifee, { AndroidImportance, AndroidCategory, AndroidVisibility } from '@notifee/react-native';
-import RNCallKeep from 'react-native-callkeep';
+import {
+  SafeNotifee as notifee,
+  SafeAndroidImportance as AndroidImportance,
+  SafeAndroidCategory as AndroidCategory,
+  SafeAndroidVisibility as AndroidVisibility,
+  SafeCallKeep as RNCallKeep,
+} from './safeNativeModules';
 import { navigate } from '../navigation/navigationService';
 
 // Stores call metadata keyed by callUUID so the answerCall event
@@ -14,44 +19,45 @@ const pendingCalls = new Map<string, {
 
 export const IncomingCallManager = {
   setup: () => {
-    // CallKeep works on both platforms:
-    //   iOS  → native CallKit lock-screen UI
-    //   Android → ConnectionService (used alongside notifee full-screen intent)
-    RNCallKeep.setup({
-      ios: {
-        appName: 'RehearsalHub',
-        includesCallsInRecents: false,
-      },
-      android: {
-        alertTitle: 'Permissions required',
-        alertDescription: 'This application needs to access your phone accounts',
-        cancelButton: 'Cancel',
-        okButton: 'ok',
-        additionalPermissions: [],
-        // foregroundService is handled by notifee on Android
-      },
-    }).catch(console.warn);
+    try {
+      if (!RNCallKeep?.setup) return;
+      RNCallKeep.setup({
+        ios: {
+          appName: 'RehearsalHub',
+          includesCallsInRecents: false,
+        },
+        android: {
+          alertTitle: 'Permissions required',
+          alertDescription: 'This application needs to access your phone accounts',
+          cancelButton: 'Cancel',
+          okButton: 'ok',
+          additionalPermissions: [],
+        },
+      }).catch(console.warn);
 
-    // User answered from the native CallKit / lock-screen UI
-    RNCallKeep.addEventListener('answerCall', ({ callUUID }) => {
-      RNCallKeep.backToForeground();
-      const meta = pendingCalls.get(callUUID);
-      pendingCalls.delete(callUUID);
-      navigate('Call', {
-        callId: callUUID,
-        isIncoming: true,
-        callType: meta?.callType || 'voice',
-        contactName: meta?.callerName || 'Incoming Call',
-        contactAvatar: meta?.callerAvatar,
-        roomId: meta?.chatId,
+      // User answered from the native CallKit / lock-screen UI
+      RNCallKeep.addEventListener('answerCall', ({ callUUID }: any) => {
+        RNCallKeep.backToForeground();
+        const meta = pendingCalls.get(callUUID);
+        pendingCalls.delete(callUUID);
+        navigate('Call', {
+          callId: callUUID,
+          isIncoming: true,
+          callType: meta?.callType || 'voice',
+          contactName: meta?.callerName || 'Incoming Call',
+          contactAvatar: meta?.callerAvatar,
+          roomId: meta?.chatId,
+        });
       });
-    });
 
-    // User declined from the native CallKit / lock-screen UI
-    RNCallKeep.addEventListener('endCall', ({ callUUID }) => {
-      pendingCalls.delete(callUUID);
-      RNCallKeep.endCall(callUUID);
-    });
+      // User declined from the native CallKit / lock-screen UI
+      RNCallKeep.addEventListener('endCall', ({ callUUID }: any) => {
+        pendingCalls.delete(callUUID);
+        RNCallKeep.endCall(callUUID);
+      });
+    } catch (e) {
+      console.log('IncomingCallManager skipped (running in Expo Go / simulator):', e);
+    }
   },
 
   displayIncomingCall: async (call: {

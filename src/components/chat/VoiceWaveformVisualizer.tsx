@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Dimensions } from 'react-native';
 import Slider from '@react-native-community/slider';
-import TrackPlayer from 'react-native-track-player';
+import { SafeTrackPlayer as TrackPlayer } from '../../lib/safeNativeModules';
 import { downsampleWaveform } from './ChatTypes';
 
 interface LocalAudioSliderProps {

@@ -45,7 +45,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image as ExpoImage, ImageBackground as ExpoImageBackground } from 'expo-image';
 import { subscribe as wsSubscribe } from './src/hooks/useWebSocket';
 import { sendLocalNotification, sendPushNotification } from './src/lib/notifications';
-import { OneSignal } from 'react-native-onesignal';
+import { SafeOneSignal as OneSignal } from './src/lib/safeNativeModules';
 
 import AnimatedSplashScreen from './src/components/AnimatedSplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -58,6 +58,7 @@ import SessionResumeBanner from './src/components/SessionResumeBanner';
 import { ensureCacheSchema } from './src/lib/ensureCacheSchema';
 import { debugSessionLog, flushDebugSessionLogs } from './src/lib/debugSessionLog';
 import { IncomingCallManager } from './src/lib/IncomingCallManager';
+import { useOTAUpdates } from './src/hooks/useOTAUpdates';
 
 const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/+$/, '');
 
@@ -77,91 +78,61 @@ const disableAnimatedImagePlayback = () => {
 
 disableAnimatedImagePlayback();
 
-// Initialize OneSignal with App ID
-const onesignalAppId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID || "dfbfea23-ddeb-42a8-97d8-8b51fc0756d0";
-OneSignal.initialize(onesignalAppId);
-OneSignal.Location.setShared(false); // CRITICAL: Stop OneSignal from destroying battery via background GPS polling
-// Explicitly request notification permission on Android 13+ real devices.
-// On Android ≤ 12 this is a no-op (permission is auto-granted at install).
-OneSignal.Notifications.requestPermission(true);
+// Initialize OneSignal with App ID safely (graceful fallback in Expo Go / simulator)
+try {
+  const onesignalAppId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID || "dfbfea23-ddeb-42a8-97d8-8b51fc0756d0";
+  if (OneSignal?.initialize) {
+    OneSignal.initialize(onesignalAppId);
+    OneSignal.Location?.setShared?.(false);
+    OneSignal.Notifications?.requestPermission?.(true);
 
-// Add click listener (handles notification clicks when app is in background or killed)
-OneSignal.Notifications.addEventListener('click', (event: any) => {
-  console.log('OneSignal: notification clicked:', event);
-  const data = event.notification.additionalData || {};
-  const uid = useUserStore.getState().user?.uid;
+    // Add click listener (handles notification clicks when app is in background or killed)
+    OneSignal.Notifications?.addEventListener?.('click', (event: any) => {
+      console.log('OneSignal: notification clicked:', event);
+      const data = event.notification?.additionalData || {};
+      const uid = useUserStore.getState().user?.uid;
 
-  // Auto-switch zone if the notification belongs to a specific zone
-  if (data?.zoneCode && uid) {
-    apiClient.patch(`/profiles/${uid}`, { zone_code: data.zoneCode }).catch(console.error);
-  }
+      if (data?.zoneCode && uid) {
+        apiClient.patch(`/profiles/${uid}`, { zone_code: data.zoneCode }).catch(console.error);
+      }
 
-  if (data?.action === 'logout') {
-    useUserStore.getState().signOut().then(() => {
-      reset({ index: 0, routes: [{ name: 'Login' }] });
+      if (data?.action === 'logout') {
+        useUserStore.getState().signOut().then(() => {
+          reset({ index: 0, routes: [{ name: 'Login' }] });
+        });
+      } else if (data?.callId) {
+        navigate('Call', {
+          callId: data.callId,
+          callType: data.callType || 'voice',
+          isIncoming: true,
+          contactName: data.senderName || data.callerName || 'Incoming Call',
+          contactAvatar: data.senderAvatar || data.callerAvatar || '',
+          contactId: '',
+          roomId: data.roomId,
+        });
+      } else if (data?.screen) {
+        navigate(data.screen, data.params || {});
+      } else {
+        navigate('Notifications', {});
+      }
     });
-  } else if (data?.callId) {
-    navigate('Call', {
-      callId: data.callId,
-      callType: data.callType || 'voice',
-      isIncoming: true,
-      contactName: data.senderName || data.callerName || 'Incoming Call',
-      contactAvatar: data.senderAvatar || data.callerAvatar || '',
-      contactId: '',
-      roomId: data.roomId,
+
+    // Add foreground notification handler
+    OneSignal.Notifications?.addEventListener?.('foregroundWillDisplay', (event: any) => {
+      console.log('OneSignal: foregroundWillDisplay:', event);
+      event.preventDefault?.();
+      event.getNotification?.()?.display?.();
     });
-  } else if (data?.screen) {
-    navigate(data.screen, data.params || {});
-  } else {
-    navigate('Notifications', {});
   }
-});
-
-// Add foreground notification handler
-OneSignal.Notifications.addEventListener('foregroundWillDisplay', (event: any) => {
-  console.log('OneSignal: foregroundWillDisplay:', event);
-  event.preventDefault();
-  event.getNotification().display();
-});
-
-let dialogShown = false;
-
-// A real, server-assigned subscription ID is non-empty and not the local- placeholder
-function isRegistered(subscriptionId: string | null | undefined): boolean {
-  return !!subscriptionId && !subscriptionId.startsWith('local-');
-}
-
-function maybeShowIntegrationCompleteDialog(subscriptionId: string | null | undefined): void {
-  if (__DEV__ && isRegistered(subscriptionId) && !dialogShown) {
-    dialogShown = true;
-    showIntegrationCompleteDialog();
-  }
+} catch (err) {
+  console.log('OneSignal skipped (running in Expo Go / simulator):', err);
 }
 
 function setupPushSubscriptionObserver(): void {
-  OneSignal.User.pushSubscription.addEventListener('change', (subscription) => {
-    maybeShowIntegrationCompleteDialog(subscription.current.id);
-  });
-
-  // The ID may already be assigned before the listener attaches,
-  // so evaluate the current value immediately as well.
-  OneSignal.User.pushSubscription.getIdAsync().then(maybeShowIntegrationCompleteDialog);
-}
-
-function showIntegrationCompleteDialog(): void {
-  Alert.alert(
-    'Your OneSignal SDK integration is complete!',
-    'You can now send Push Notifications & In-App Messages through OneSignal. Tap below to enable push notifications.',
-    [
-      {
-        text: 'Got it',
-        onPress: () => {
-          OneSignal.Notifications.requestPermission(true);
-        },
-      },
-    ],
-    { cancelable: false }
-  );
+  try {
+    OneSignal?.User?.pushSubscription?.addEventListener?.('change', () => {});
+    OneSignal?.Notifications?.requestPermission?.(true);
+  } catch (e) {}
 }
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -170,7 +141,9 @@ const incomingCallsCache: Record<string, any> = {};
 function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
   const { theme, themeName } = useTheme();
 
-  // ── Global incoming call listener ─────────────────────────────────────────
+  // ── OTA (Over-the-Air) JS bundle update check ──────────────────────────────
+  useOTAUpdates();
+
   useEffect(() => {
     const STALE_CALL_THRESHOLD_MS = 2 * 60 * 1000;
     let callUnsub: (() => void) | null = null;
@@ -224,69 +197,26 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
       if (nextState === 'active') lastActiveTime = Date.now();
     });
 
-    const setupConcurrentSessionCheck = async () => {
+    const setupPushRegistration = async () => {
       const user = useUserStore.getState().user;
       if (!user) return;
 
-      // Register device
-      let localDeviceId = await AsyncStorage.getItem('device_id');
-      if (!localDeviceId) {
-        localDeviceId = Math.random().toString(36).substring(2, 15) + '_' + Date.now().toString(36);
-        await AsyncStorage.setItem('device_id', localDeviceId);
-      }
-
-      // OneSignal registration
+      // OneSignal registration (silent, non-blocking)
       try {
-        OneSignal.login(user.uid);
-        const subId = await OneSignal.User.pushSubscription.getIdAsync();
+        OneSignal?.login?.(user.uid);
+        const subId = await OneSignal?.User?.pushSubscription?.getIdAsync?.();
         if (subId && !subId.startsWith('local-')) {
           await apiClient.patch(`/profiles/${user.uid}/onesignal`, { subscription_id: subId }).catch(() => {});
         }
       } catch (e) {
-        console.warn('[OneSignal] Failed to save subscription ID:', e);
+        // Silently skip if running in Expo Go or native push unattached
       }
-
-      // Check for device conflict
-      try {
-        const profileRes = await apiClient.get<{
-          success: boolean;
-          data?: { currentDeviceId?: string; current_device_id?: string };
-        }>(`/profiles/${user.uid}`);
-        const previousDeviceId = profileRes.data?.currentDeviceId || profileRes.data?.current_device_id;
-        if (previousDeviceId && previousDeviceId !== localDeviceId) {
-          await sendPushNotification(user.uid, "✅ Secure Login", "You successfully logged in. Your previous device has been securely logged out.").catch(() => {});
-          await sendPushNotification(user.uid, "⚠️ Session Expired", "Your account was logged into from another device. For your security, this device has been logged out.", { action: 'logout' }).catch(() => {});
-        }
-      } catch (e) {
-        console.warn('Could not check previous device:', e);
-      }
-
-      await apiClient.patch(`/profiles/${user.uid}`, { current_device_id: localDeviceId }).catch(() => {});
-
-      // Subscribe to profile updates via WebSocket to detect concurrent login
-      profileUnsub = wsSubscribe('profile', user.uid, async (data: any) => {
-        if (!data) return;
-        if (AppState.currentState !== 'active') return;
-        if (Date.now() - lastActiveTime < 3000) return;
-
-        const remoteDeviceId = data.currentDeviceId || data.current_device_id;
-        if (remoteDeviceId && remoteDeviceId !== localDeviceId) {
-          if (profileUnsub) { profileUnsub(); profileUnsub = null; }
-          try {
-            await sendLocalNotification("⚠️ Session Expired", "Your account was logged into from another device. For your security, this device has been logged out.");
-          } catch {}
-          await useUserStore.getState().signOut();
-          if (navigationRef.isReady()) {
-            navigationRef.reset({ index: 0, routes: [{ name: 'Login' }] });
-          }
-        }
-      });
     };
 
     // Run on mount if user is already logged in
     const user = useUserStore.getState().user;
     if (user) {
-      setupConcurrentSessionCheck();
+      setupPushRegistration();
     }
 
     // Also watch auth state changes via store subscription
@@ -296,10 +226,9 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
       if (newUserId === lastUserId) return;
       lastUserId = newUserId;
       if (newUserId) {
-        setupConcurrentSessionCheck();
+        setupPushRegistration();
       } else {
         OneSignal.logout();
-        if (profileUnsub) { profileUnsub(); profileUnsub = null; }
         if (navigationRef.isReady()) {
           const currentRouteName = navigationRef.getCurrentRoute()?.name;
           if (currentRouteName && currentRouteName !== 'Login' && currentRouteName !== 'Signup') {
@@ -311,7 +240,6 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
 
     return () => {
       appStateSub.remove();
-      if (profileUnsub) profileUnsub();
       unsubAuth();
     };
   }, []);
@@ -394,7 +322,7 @@ function App() {
     setupPushSubscriptionObserver();
 
     // Auto-request notification permissions on boot
-    OneSignal.Notifications.requestPermission(true).catch(err => {
+    OneSignal?.Notifications?.requestPermission?.(true)?.catch?.((err: any) => {
       console.warn('[App] Failed to request notification permission:', err);
     });
 

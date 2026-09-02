@@ -64,23 +64,35 @@ async function refreshSession(): Promise<string> {
     throw new SessionExpiredError();
   }
 
-  const res = await fetch(`${BASE_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': API_KEY,
-    },
-    body: JSON.stringify({ refreshToken, userId }),
-  });
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+      },
+      body: JSON.stringify({ refreshToken, userId }),
+    });
 
-  if (!res.ok) {
-    await clearTokens();
-    throw new SessionExpiredError();
+    if (res.status === 401 || res.status === 403) {
+      await clearTokens();
+      throw new SessionExpiredError();
+    }
+
+    if (!res.ok) {
+      throw new Error(`Server temporarily unavailable (${res.status})`);
+    }
+
+    const body = await res.json();
+    if (body?.data?.accessToken) {
+      await storeTokens(body.data.accessToken, body.data.refreshToken || refreshToken, userId);
+      return body.data.accessToken;
+    }
+    throw new Error('Invalid refresh response');
+  } catch (err) {
+    if (err instanceof SessionExpiredError) throw err;
+    throw err;
   }
-
-  const body = await res.json();
-  await storeTokens(body.data.accessToken, body.data.refreshToken, userId);
-  return body.data.accessToken;
 }
 
 // ── TENANT SCOPE STORE ───────────────────────────────────────────────────────
@@ -120,6 +132,7 @@ async function request<T>(
   path: string,
   body?: unknown,
   retried = false,
+  timeoutMs = 25000,
 ): Promise<T> {
   ensureMessageId(method, path, body);
   const token = await getAccessToken();
@@ -144,12 +157,19 @@ async function request<T>(
   // ─────────────────────────────────────────────────────────────────────────
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  // Create an AbortController so every fetch has a hard timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers,
+      signal: controller.signal,
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+
+    clearTimeout(timeoutId);
 
     const isAuthRoute = path.startsWith('/auth/login') || path.startsWith('/auth/register') || path.startsWith('/auth/refresh');
 
@@ -157,30 +177,74 @@ async function request<T>(
       try {
         const newToken = await refreshSession();
         const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
+        const retryController = new AbortController();
+        const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutMs);
         const retryRes = await fetch(`${BASE_URL}${path}`, {
           method,
           headers: retryHeaders,
+          signal: retryController.signal,
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         });
+        clearTimeout(retryTimeoutId);
         if (retryRes.status !== 401) {
-          const data = await retryRes.json();
+          let data: any = null;
+          const retryText = await retryRes.text();
+          if (retryText && retryText.trim().length > 0 && retryText.trim() !== 'undefined') {
+            try {
+              data = JSON.parse(retryText);
+            } catch {
+              data = { success: retryRes.ok, data: null };
+            }
+          } else {
+            data = { success: retryRes.ok, data: null };
+          }
           if (method === 'GET' && data?.success !== false) {
             apiGetCache.set(path, data);
           }
           return data as T;
         }
-      } catch {
-        await clearTokens();
-        throw new SessionExpiredError();
+      } catch (err) {
+        if (err instanceof SessionExpiredError) {
+          throw err;
+        }
+        console.warn(`[apiClient] Refresh attempt failed:`, err);
+        throw err;
       }
     }
 
-    const json = await res.json();
-    if (method === 'GET' && json?.success !== false && json?.data !== undefined) {
+    let json: any = null;
+    const text = await res.text();
+    if (text && text.trim().length > 0 && text.trim() !== 'undefined') {
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { success: res.ok, data: null };
+      }
+    } else {
+      json = { success: res.ok, data: null };
+    }
+
+    if (method !== 'GET') {
+      if (!res.ok || (json && json.success === false)) {
+        const errMsg = json?.error || json?.message || `Request failed (${res.status})`;
+        console.warn(`[apiClient] ${method} ${path} failed:`, errMsg);
+        const err = new Error(errMsg);
+        (err as any).status = res.status;
+        (err as any).data = json;
+        throw err;
+      }
+      // On any successful write mutation, immediately invalidate the GET cache
+      apiGetCache.clear();
+    } else if (json?.success !== false && json?.data !== undefined) {
       apiGetCache.set(path, json);
     }
     return json as T;
-  } catch (netErr) {
+  } catch (netErr: any) {
+    clearTimeout(timeoutId);
+    // Surface timeout as a user-friendly error
+    if (netErr?.name === 'AbortError') {
+      throw new Error('Request timed out. The server took too long to respond. Please try again.');
+    }
     if (method === 'GET' && apiGetCache.has(path)) {
       console.warn(`[apiClient] Network drop detected. Serving cached response for ${path}`);
       return apiGetCache.get(path) as T;
@@ -191,9 +255,9 @@ async function request<T>(
 
 export const apiClient = {
   get: <T>(path: string) => request<T>('GET', path),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
-  delete: <T>(path: string, body?: unknown) => request<T>('DELETE', path, body),
+  post: <T>(path: string, body?: unknown, timeoutMs?: number) => request<T>('POST', path, body, false, timeoutMs),
+  patch: <T>(path: string, body?: unknown, timeoutMs?: number) => request<T>('PATCH', path, body, false, timeoutMs),
+  delete: <T>(path: string, body?: unknown, timeoutMs?: number) => request<T>('DELETE', path, body, false, timeoutMs),
   getBaseUrl: () => BASE_URL,
   storeTokens,
   clearTokens,
@@ -203,4 +267,3 @@ export const apiClient = {
 };
 
 export { BASE_URL };
-

@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Audio } from 'expo-av';
 import Slider from '@react-native-community/slider';
-import TrackPlayer, { Capability } from 'react-native-track-player';
+import { SafeTrackPlayer as TrackPlayer, SafeCapability as Capability } from '../lib/safeNativeModules';
 import Constants from 'expo-constants';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';

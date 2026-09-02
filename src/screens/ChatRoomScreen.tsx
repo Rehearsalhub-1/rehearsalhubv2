@@ -19,7 +19,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
 import { Audio } from 'expo-av'; // kept for recording only — playback uses TrackPlayer
-import TrackPlayer, { State, Event, useTrackPlayerEvents } from 'react-native-track-player';
+import {
+  SafeTrackPlayer as TrackPlayer,
+  SafeState as State,
+  SafeEvent as Event,
+  safeUseTrackPlayerEvents as useTrackPlayerEvents,
+} from '../lib/safeNativeModules';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
@@ -296,8 +301,37 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') 
       : ((currentUser as any)?.displayName || (currentUser as any)?.name || "Me" || '')
   );
-  const roomTitle: string = room?.title || 'Chat';
-  const roomAvatarUri: string = room?.avatar?.uri || `https://ui-avatars.com/api/?name=${encodeURIComponent(roomTitle)}&background=202c33&color=e9edef&size=128`;
+  const isGroup: boolean = room?.isGroup || room?.type === 'group' || room?.category === 'Groups';
+
+  let resolvedRoomTitle = room?.title || (isGroup ? 'Group Chat' : 'Chat');
+  let resolvedRoomAvatarUri = room?.avatar?.uri || (typeof room?.avatar === 'string' ? room.avatar : null);
+
+  if (!isGroup && currentUser) {
+    const participants: string[] = Array.isArray(room?.participants)
+      ? room.participants.map(String)
+      : typeof room?.participants === 'object' && room?.participants !== null
+        ? Object.keys(room.participants)
+        : [];
+    const otherId = participants.find((id: string) => id !== currentUser.uid)
+      || (typeof room?.id === 'string' && room.id.includes('_') ? room.id.split('_').find((id: string) => id !== currentUser.uid) : null);
+    const otherDetails = otherId ? room?.participantDetails?.[otherId] : null;
+    if (otherDetails?.name && otherDetails.name !== 'Member') {
+      resolvedRoomTitle = cleanSenderName(otherDetails.name);
+    } else if (room?.title && room.title !== 'Chat' && room.title !== 'Direct Chat' && room.title !== 'Direct Message' && room.title !== 'Member') {
+      resolvedRoomTitle = cleanSenderName(room.title);
+    } else if (room?.name && room.name !== 'Chat' && room.name !== 'Direct Chat' && room.name !== 'Direct Message' && room.name !== 'Member') {
+      resolvedRoomTitle = cleanSenderName(room.name);
+    } else if (otherDetails?.email) {
+      const prefix = otherDetails.email.split('@')[0];
+      resolvedRoomTitle = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+    if (otherDetails?.avatar) {
+      resolvedRoomAvatarUri = otherDetails.avatar;
+    }
+  }
+
+  const roomTitle: string = resolvedRoomTitle;
+  const roomAvatarUri: string = resolvedRoomAvatarUri || `https://ui-avatars.com/api/?name=${encodeURIComponent(roomTitle)}&background=202c33&color=e9edef&size=128`;
   if (isLoadingDeepLink) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }]}>
@@ -306,8 +340,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       </View>
     );
   }
-
-  const isGroup: boolean = room?.isGroup || room?.type === 'group' || room?.category === 'Groups';
 
   const notifyParticipants = async (text: string, type: 'new' | 'edit' | 'delete' = 'new') => {
     try {
@@ -321,7 +353,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       if (room.participants && room.participants.length > 0) {
         otherParticipantIds = room.participants.filter((id: string) => id !== currentUser.uid);
       } else if (room.participantDetails) {
-        otherParticipantIds = Object.keys(room.participantDetails).filter((id: string) => id !== currentUser.uid);
+        otherParticipantIds = Object.keys(room.participantDetails || {}).filter((id: string) => id !== currentUser.uid);
       }
 
       if (otherParticipantIds.length === 0) {
@@ -469,6 +501,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [clearedAt, setClearedAt] = useState<Date | null>(initialClearedAt);
   const [chatData, setChatData] = useState<any>(room);
   const [showMessageInfo, setShowMessageInfo] = useState(false);
+  const isDirectRequest = !isGroup && room?.lastMessageSenderId && room.lastMessageSenderId !== currentUser?.uid && (room?.unread > 0 || (room as any)?.isRequest);
+  const [hasAccepted, setHasAccepted] = useState(false);
 
   useWebSocket('chats', room?.id || '', (eventData: any) => {
     if (!eventData) return;
@@ -618,13 +652,20 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     AsyncStorage.getItem(cacheKey).then(raw => {
       if (!raw || cancelled || !isMountedRef.current) return;
       try {
-        const parsed: ChatMessage[] = JSON.parse(raw).map((m: any) => ({
-          ...m,
-          sender: cleanSenderName((room?.participantDetails?.[m.senderId]?.name) || m.sender || ''),
-          isMe: cu ? m.senderId === cu.uid : false,
-          senderColor: getSenderColor(m.senderId || '', themeName === 'light'),
-          timestampObj: m.timestampObj ? new Date(m.timestampObj) : new Date(m.createdAt || m.created_at || m.timestamp || Date.now()),
-        }));
+        const parsed: ChatMessage[] = JSON.parse(raw).map((m: any) => {
+          const rawSender = (room?.participantDetails?.[m.senderId]?.name && room.participantDetails[m.senderId].name !== 'Member' ? room.participantDetails[m.senderId].name : null)
+            || (m.senderName && m.senderName !== 'Member' ? m.senderName : null)
+            || (m.sender && m.sender !== 'Member' ? m.sender : null)
+            || (room?.participantDetails?.[m.senderId]?.email ? room.participantDetails[m.senderId].email.split('@')[0] : null)
+            || 'Member';
+          return {
+            ...m,
+            sender: cleanSenderName(rawSender),
+            isMe: cu ? m.senderId === cu.uid : false,
+            senderColor: getSenderColor(m.senderId || '', themeName === 'light'),
+            timestampObj: m.timestampObj ? new Date(m.timestampObj) : new Date(m.createdAt || m.created_at || m.timestamp || Date.now()),
+          };
+        });
         parsed.sort((a, b) => (b.timestampObj?.getTime?.() || 0) - (a.timestampObj?.getTime?.() || 0));
         setMessages(parsed);
         setIsInitialLoading(false);
@@ -637,10 +678,15 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         if (res?.success && Array.isArray(res.data)) {
           const msgs: ChatMessage[] = res.data.map((m: any) => {
             const displayDt = new Date(m.createdAt || m.created_at || m.timestamp || Date.now());
+            const rawSender = (room?.participantDetails?.[m.senderId]?.name && room.participantDetails[m.senderId].name !== 'Member' ? room.participantDetails[m.senderId].name : null)
+              || (m.senderName && m.senderName !== 'Member' ? m.senderName : null)
+              || (m.sender && m.sender !== 'Member' ? m.sender : null)
+              || (room?.participantDetails?.[m.senderId]?.email ? room.participantDetails[m.senderId].email.split('@')[0] : null)
+              || 'Member';
             return {
               id: m.id,
               senderId: m.senderId || m.sender_id,
-              sender: cleanSenderName((room?.participantDetails?.[m.senderId]?.name) || m.senderName || ''),
+              sender: cleanSenderName(rawSender),
               text: m.text || m.content || '',
               time: displayDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               isMe: cu ? (m.senderId || m.sender_id) === cu.uid : false,
@@ -880,7 +926,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     } catch {}
   };
 
-  useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event) => {
+  useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event: any) => {
     if (event.type === Event.PlaybackQueueEnded || (event.type === Event.PlaybackState && event.state === State.Stopped)) {
       if (playingId) {
         setIsAudioPlaying(false);
@@ -1646,6 +1692,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       if (part.match(urlRegex)) {
         const isSongLink = part.toLowerCase().includes('/song/') || part.toLowerCase().includes('/songs/') || part.toLowerCase().includes('rehearsalhub://song/');
         const isPlaylistLink = part.toLowerCase().includes('/playlist/') || part.toLowerCase().includes('/playlists/') || part.toLowerCase().includes('rehearsalhub://playlist/');
+        const isProfileLink = part.toLowerCase().includes('/profile/') || part.toLowerCase().includes('/profiles/') || part.toLowerCase().includes('/user/') || part.toLowerCase().includes('rehearsalhub://user/');
         
         let label = part;
         let onPress = () => {
@@ -1667,6 +1714,14 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           onPress = () => {
             navigation.navigate('Playlists', {
               openPlaylistId: playlistId,
+            });
+          };
+        } else if (isProfileLink) {
+          const userId = part.split('/').filter(Boolean).pop()?.split('?')[0] || '';
+          label = `👤 View Profile`;
+          onPress = () => {
+            navigation.navigate('UserProfile', {
+              userId,
             });
           };
         }
@@ -1789,6 +1844,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     );
   };
   const renderMessage = ({ item: msg, index }: { item: ChatMessage; index: number }) => {
+    if (!msg) return null;
     const ts = (msg.timestampObj && typeof msg.timestampObj.getTime === 'function' && !isNaN(msg.timestampObj.getTime()))
       ? msg.timestampObj
       : ((msg as any).createdAt ? new Date((msg as any).createdAt) : new Date());
@@ -1806,8 +1862,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     let dateLbl = curDate === now.toDateString() ? 'TODAY' : curDate === yest.toDateString() ? 'YESTERDAY'
       : ts.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}).toUpperCase();
 
-    const reactionEntries = Object.entries(msg.reactions);
-    const reactionSummary = [...new Set(Object.values(msg.reactions))].join('');
+    const reactionEntries = Object.entries(msg?.reactions || {});
+    const reactionSummary = [...new Set(Object.values(msg?.reactions || {}))].join('');
 
     return (
       <View style={{ transform: [{ scaleY: -1 }] }}>
@@ -1974,9 +2030,16 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                     APP_THEME={APP_THEME}
                     styles={styles}
                   />
-                ) : msg.type === 'song_share' && msg.songData ? (
+                ) : msg.type === 'song_share' ? (
                   <SongShareCard
-                    msg={msg}
+                    msg={{
+                      ...msg,
+                      songData: msg.songData || (msg as any).data?.songData || (msg as any).metadata?.songData || {
+                        id: (msg.text?.match(/song\/([a-zA-Z0-9_-]+)/i)?.[1]) || 'song_1',
+                        title: (msg.text?.match(/🎵\s*\*([^*]+)\*/i)?.[1]?.trim()) || 'Shared Song',
+                        leadSinger: (msg.text?.match(/👤\s*([^\n\r]+)/i)?.[1]?.trim()) || 'Singer',
+                      }
+                    }}
                     playingId={playingId}
                     isAudioPlaying={isAudioPlaying}
                     playAudio={playAudio}
@@ -1986,17 +2049,33 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                     APP_THEME={APP_THEME}
                     styles={styles}
                   />
-                ) : msg.type === 'playlist_share' && msg.playlistData ? (
+                ) : msg.type === 'playlist_share' ? (
                   <PlaylistShareCard
-                    msg={msg}
+                    msg={{
+                      ...msg,
+                      playlistData: msg.playlistData || (msg as any).data?.playlistData || (msg as any).metadata?.playlistData || {
+                        id: (msg.text?.match(/playlist\/([a-zA-Z0-9_-]+)/i)?.[1]) || 'favs',
+                        name: (msg.text?.match(/💽\s*\*Playlist:\s*([^*]+)\*/i)?.[1]?.trim()) || 'Shared Playlist',
+                        songCount: parseInt(msg.text?.match(/(\d+)\s+songs/i)?.[1] || '0'),
+                        songs: [],
+                      }
+                    }}
                     navigation={navigation}
                     theme={theme}
                     APP_THEME={APP_THEME}
                     styles={styles}
                   />
-                ) : msg.type === 'profile_share' && msg.profileData ? (
+                ) : (msg.type === 'profile_share' || (msg.type as any) === 'contact_share') ? (
                   <ProfileShareCard
-                    msg={msg}
+                    msg={{
+                      ...msg,
+                      profileData: msg.profileData || (msg as any).contactData || (msg as any).data?.profileData || {
+                        id: (msg as any).contactId || 'user',
+                        name: (msg.text?.match(/👤\s*\*Contact:\s*([^*]+)\*/i)?.[1]?.trim()) || 'Singer',
+                        role: (msg.text?.match(/Role:\s*([^\n\r]+)/i)?.[1]?.trim()) || 'Member',
+                        zone: (msg.text?.match(/Zone:\s*([^\n\r]+)/i)?.[1]?.trim()) || '',
+                      }
+                    }}
                     navigation={navigation}
                     theme={theme}
                     APP_THEME={APP_THEME}
@@ -2153,7 +2232,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           ) : (
             <>
               <View style={styles.headerLeft}>
-                <TouchableOpacity onPress={() => { navigation.goBack(); }} style={styles.backBtn}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (navigation.canGoBack()) navigation.goBack();
+                    else navigation.navigate('ChatList');
+                  }}
+                  style={styles.backBtn}
+                >
                   <Ionicons name="chevron-back" size={26} color={theme.gradients.headerTextColor} />
                 </TouchableOpacity>
                 <View style={[styles.avatarBorder, { borderColor: APP_THEME.primaryAccent }]}>
@@ -2304,7 +2389,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   data={memoizedMessages}
                   extraData={highlightedMsgId}
                   renderItem={renderMessage}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(item, index) => (item?.id ? String(item.id) : `msg-${index}`)}
                   // @ts-ignore
                   estimatedItemSize={100}
                 refreshControl={
@@ -2396,6 +2481,61 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               </ScrollView>
             </View>
           )}
+          {isDirectRequest && !hasAccepted && (
+            <View style={{
+              backgroundColor: theme.colors.cardBackgroundLight,
+              padding: 16,
+              marginHorizontal: 10,
+              marginBottom: 8,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: APP_THEME.border,
+              alignItems: 'center',
+            }}>
+              <Text style={{ color: APP_THEME.primaryText, fontSize: 14, fontWeight: '700', marginBottom: 4 }}>
+                {roomTitle} sent you a message request
+              </Text>
+              <Text style={{ color: APP_THEME.secondaryText, fontSize: 12, marginBottom: 14, textAlign: 'center' }}>
+                You can preview this message safely. They will not know you have seen it until you accept.
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
+                <TouchableOpacity 
+                  style={{ flex: 1, backgroundColor: APP_THEME.primaryAccent, paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                  onPress={async () => {
+                    try {
+                      await apiClient.post(`/chats/requests/${room?.id}/accept`);
+                      setHasAccepted(true);
+                      showToast('Request accepted');
+                    } catch {
+                      setHasAccepted(true);
+                    }
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Accept</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                  onPress={async () => {
+                    try {
+                      await apiClient.post(`/chats/requests/${room?.id}/decline`);
+                      navigation.goBack();
+                    } catch {
+                      navigation.goBack();
+                    }
+                  }}
+                >
+                  <Text style={{ color: APP_THEME.primaryText, fontWeight: '600', fontSize: 14 }}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ flex: 1, backgroundColor: 'rgba(239,68,68,0.15)', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
+                  onPress={handleBlockUser}
+                >
+                  <Text style={{ color: '#ef4444', fontWeight: '700', fontSize: 14 }}>Block</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           <View style={[styles.inputDeck, { backgroundColor:'transparent' }]}>
             <TouchableOpacity style={styles.plusBtn} onPress={() => { setAttachMenuVisible(true); }}>
               <Ionicons name="add" size={26} color={APP_THEME.secondaryText} />
@@ -2597,7 +2737,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   const readers: any[] = [];
                   const delivered: any[] = [];
                   if (chatData?.participantDetails) {
-                    Object.keys(chatData.participantDetails).forEach(uid => {
+                    Object.keys(chatData.participantDetails || {}).forEach(uid => {
                       if (uid === currentUser?.uid) return;
                       const details = chatData.participantDetails[uid];
                       const unread = chatData.unreadCount?.[uid] || 0;
@@ -2854,25 +2994,30 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           </View>
         </Modal>
         <Modal visible={showPollModal} transparent animationType="slide" onRequestClose={() => setShowPollModal(false)}>
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: theme.colors.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, minHeight: 400 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}
+          >
+            <View style={{ backgroundColor: theme.colors.cardBackground, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '85%' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <Text style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: 'bold' }}>Create Poll</Text>
                 <TouchableOpacity onPress={() => setShowPollModal(false)}><Ionicons name="close" size={24} color={theme.colors.textPrimary} /></TouchableOpacity>
               </View>
-              <TextInput style={{ backgroundColor: theme.colors.background, color: theme.colors.textPrimary, padding: 12, borderRadius: 8, marginBottom: 16 }} placeholder="Ask a question..." placeholderTextColor={theme.colors.textMuted} value={pollQuestion} onChangeText={setPollQuestion} />
-              <Text style={{ color: theme.colors.textPrimary, marginBottom: 8, fontWeight: 'bold' }}>Options</Text>
-              {pollOptions.map((opt, idx) => (
-                <TextInput key={idx} style={{ backgroundColor: theme.colors.background, color: theme.colors.textPrimary, padding: 12, borderRadius: 8, marginBottom: 8 }} placeholder={`Option ${idx + 1}`} placeholderTextColor={theme.colors.textMuted} value={opt} onChangeText={(text) => { const newOpts = [...pollOptions]; newOpts[idx] = text; setPollOptions(newOpts); }} />
-              ))}
-              <TouchableOpacity onPress={() => setPollOptions([...pollOptions, ''])} style={{ paddingVertical: 8, marginBottom: 16 }}>
-                <Text style={{ color: APP_THEME.primaryAccent }}>+ Add Option</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleSendPoll} style={{ backgroundColor: APP_THEME.primaryAccent, padding: 14, borderRadius: 8, alignItems: 'center' }}>
-                <Text style={{ color: theme.colors.textPrimary, fontWeight: 'bold' }}>Create Poll</Text>
-              </TouchableOpacity>
+              <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <TextInput style={{ backgroundColor: theme.colors.background, color: theme.colors.textPrimary, padding: 12, borderRadius: 8, marginBottom: 16 }} placeholder="Ask a question..." placeholderTextColor={theme.colors.textMuted} value={pollQuestion} onChangeText={setPollQuestion} />
+                <Text style={{ color: theme.colors.textPrimary, marginBottom: 8, fontWeight: 'bold' }}>Options</Text>
+                {pollOptions.map((opt, idx) => (
+                  <TextInput key={idx} style={{ backgroundColor: theme.colors.background, color: theme.colors.textPrimary, padding: 12, borderRadius: 8, marginBottom: 8 }} placeholder={`Option ${idx + 1}`} placeholderTextColor={theme.colors.textMuted} value={opt} onChangeText={(text) => { const newOpts = [...pollOptions]; newOpts[idx] = text; setPollOptions(newOpts); }} />
+                ))}
+                <TouchableOpacity onPress={() => setPollOptions([...pollOptions, ''])} style={{ paddingVertical: 8, marginBottom: 16 }}>
+                  <Text style={{ color: APP_THEME.primaryAccent }}>+ Add Option</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleSendPoll} style={{ backgroundColor: APP_THEME.primaryAccent, padding: 14, borderRadius: 8, alignItems: 'center', marginBottom: 20 }}>
+                  <Text style={{ color: theme.colors.textPrimary, fontWeight: 'bold' }}>Create Poll</Text>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
         <Modal visible={showGifPicker} transparent animationType="slide" onRequestClose={() => setShowGifPicker(false)}>
           <View style={{ flex: 1, backgroundColor: theme.colors.background, marginTop: 60, borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>

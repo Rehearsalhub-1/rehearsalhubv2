@@ -202,7 +202,7 @@ export default function ChatListScreen({ route, navigation }: any) {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'All' | 'Unread' | 'Groups' | 'Direct' | 'Archived'>('All');
+  const [selectedFilter, setSelectedFilter] = useState<'All' | 'Unread' | 'Groups' | 'Direct' | 'Requests' | 'Archived'>('All');
   const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
   const [loading, setLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
@@ -264,6 +264,9 @@ export default function ChatListScreen({ route, navigation }: any) {
 
     const fetchChats = async () => {
       try {
+        const storedArchived = await AsyncStorage.getItem(`archived_chats_${currentUser.uid}`);
+        const archivedIds: string[] = storedArchived ? JSON.parse(storedArchived) : [];
+
         const res = await apiClient.get<{ success: boolean; data?: any[] }>('/chats');
         const allRows = res.success && Array.isArray(res.data) ? res.data : [];
 
@@ -282,44 +285,62 @@ export default function ChatListScreen({ route, navigation }: any) {
         });
 
         const rooms: ChatRoom[] = rows.map((data: any) => {
-          const isGroup = ['group', 'channel', 'announcement'].includes(String(data.type || '').toLowerCase()) || data.isGroup === true;
-          let title = data.name || data.title || (isGroup ? 'Group Chat' : 'Chat');
+          const isGroup = ['group', 'channel', 'announcement'].includes(String(data.type || '').toLowerCase()) || data.isGroup === true || data.category === 'Groups';
+          let title = data.title || data.name || (isGroup ? 'Group Chat' : 'Chat');
           
           const participants: string[] = Array.isArray(data.participants)
             ? data.participants.map(String)
             : Array.isArray(data.memberIds)
               ? data.memberIds.map(String)
-              : [];
+              : typeof data.participants === 'object' && data.participants !== null
+                ? Object.keys(data.participants)
+                : [];
 
           if (!isGroup) {
             const otherUserId = participants.find((id: string) => id !== currentUser.uid)
-              || data.id.split('_').find((id: string) => id !== currentUser.uid);
-            if (otherUserId && data.participantDetails?.[otherUserId]?.name) {
-              title = cleanSenderName(data.participantDetails[otherUserId].name);
-            } else if (data.name && data.name !== 'Chat' && data.name !== 'Direct Chat' && data.name !== 'Direct Message') {
-              title = data.name;
-            } else if (data.title && data.title !== 'Chat' && data.title !== 'Direct Chat') {
-              title = data.title;
+              || (typeof data.id === 'string' && data.id.includes('_') ? data.id.split('_').find((id: string) => id !== currentUser.uid) : null);
+            const otherDetails = otherUserId ? data.participantDetails?.[otherUserId] : null;
+            const computedOtherName = (otherDetails?.name && otherDetails.name !== 'Member')
+              ? otherDetails.name
+              : [otherDetails?.firstName, otherDetails?.lastName].filter(Boolean).join(' ').trim()
+                || (otherDetails?.email ? otherDetails.email.split('@')[0] : '');
+
+            if (computedOtherName) {
+              title = cleanSenderName(computedOtherName);
+            } else if (data.title && data.title !== 'Chat' && data.title !== 'Direct Chat' && data.title !== 'Direct Message' && data.title !== 'Member') {
+              title = cleanSenderName(data.title);
+            } else if (data.name && data.name !== 'Chat' && data.name !== 'Direct Chat' && data.name !== 'Direct Message' && data.name !== 'Member') {
+              title = cleanSenderName(data.name);
             }
           }
 
-          // API returns lastMessage as a plain string and lastTimestamp as ISO string
+          // API returns lastMessage as a string or object, and lastTimestamp as ISO string
           const rawLastMsg = data.lastMessage;
           const lastMsgText: string = typeof rawLastMsg === 'string'
             ? rawLastMsg
             : (rawLastMsg?.text || 'No messages yet');
-          const rawTimestamp = data.lastTimestamp || data.lastMessage?.timestamp || data.createdAt;
+          const rawTimestamp = data.lastTimestamp || (typeof rawLastMsg === 'object' ? rawLastMsg?.timestamp : null) || data.createdAt;
 
-          // Last sender: stored in rawData or participantDetails lookup
-          const lastSenderId: string = data.rawData?.lastSenderId || data.lastMessage?.senderId || '';
-          const senderName = lastSenderId === currentUser.uid
-            ? 'You'
-            : cleanSenderName(data.participantDetails?.[lastSenderId]?.name || '').split(' ')[0] || '';
+          // Last sender: can be in rawLastMsg.senderId, data.lastMessageSenderId, or data.rawData
+          const lastSenderId: string = (typeof rawLastMsg === 'object' && rawLastMsg?.senderId) || data.lastMessageSenderId || data.rawData?.lastSenderId || '';
+          let senderName = '';
+          if (lastSenderId === currentUser.uid) {
+            senderName = 'You';
+          } else if (typeof rawLastMsg === 'object' && rawLastMsg?.senderName && rawLastMsg.senderName !== 'Member') {
+            senderName = cleanSenderName(rawLastMsg.senderName).split(' ')[0] || '';
+          } else if (data.lastMessageSenderName && data.lastMessageSenderName !== 'Member') {
+            senderName = cleanSenderName(data.lastMessageSenderName).split(' ')[0] || '';
+          } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.name && data.participantDetails[lastSenderId].name !== 'Member') {
+            senderName = cleanSenderName(data.participantDetails[lastSenderId].name).split(' ')[0] || '';
+          } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.email) {
+            const prefix = data.participantDetails[lastSenderId].email.split('@')[0];
+            senderName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+          }
 
           let roomAvatar: any = data.avatar ? (typeof data.avatar === 'string' ? { uri: data.avatar } : data.avatar) : null;
           if (!isGroup) {
             const otherId = participants.find((id: string) => id !== currentUser.uid)
-              || data.id.split('_').find((id: string) => id !== currentUser.uid);
+              || (typeof data.id === 'string' && data.id.includes('_') ? data.id.split('_').find((id: string) => id !== currentUser.uid) : null);
             if (otherId && data.participantDetails?.[otherId]?.avatar) {
               roomAvatar = { uri: data.participantDetails[otherId].avatar };
             }
@@ -339,8 +360,9 @@ export default function ChatListScreen({ route, navigation }: any) {
           }
 
           const previewText = isCleared ? 'No messages yet' : lastMsgText.replace('📷 Image', '📷');
-          const isArchived = data.archived?.[currentUser.uid] === true;
+          const isArchived = data.archived?.[currentUser.uid] === true || archivedIds.includes(data.id);
           const dateVal = rawTimestamp ? new Date(rawTimestamp) : (isCleared && clearedDate ? clearedDate : new Date(0));
+          const unreadCount = isCleared ? 0 : (typeof data.unreadCount === 'object' ? (data.unreadCount?.[currentUser.uid] || 0) : (data.unreadCount ?? data.unread ?? 0));
 
           return {
             id: data.id,
@@ -350,13 +372,13 @@ export default function ChatListScreen({ route, navigation }: any) {
             lastMessage: isCleared ? 'No messages yet' : previewText,
             time: isCleared ? '' : formatTime(dateVal),
             timestampObj: isCleared ? new Date(0) : dateVal,
-            unread: isCleared ? 0 : (typeof data.unreadCount === 'object' ? (data.unreadCount?.[currentUser.uid] || 0) : (data.unreadCount || 0)),
+            unread: unreadCount,
             avatar: roomAvatar,
             isGroup,
             category: (isGroup ? 'Groups' : 'Direct') as 'Groups' | 'Direct',
             participantDetails: data.participantDetails || {},
             clearedAt: data.clearedAt || {},
-            lastMessageStatus: data.lastMessage?.status || 'sent',
+            lastMessageStatus: (typeof rawLastMsg === 'object' ? rawLastMsg?.status : null) || data.lastMessage?.status || 'sent',
             isCleared,
             isArchived,
           };
@@ -395,6 +417,7 @@ export default function ChatListScreen({ route, navigation }: any) {
     if (selectedFilter === 'Unread' && room.unread === 0) return false;
     if (selectedFilter === 'Groups' && !room.isGroup) return false;
     if (selectedFilter === 'Direct' && room.isGroup) return false;
+    if (selectedFilter === 'Requests' && (room.isGroup || room.lastMessageSenderId === user?.uid || room.unread === 0)) return false;
 
     if (searchQuery.trim()) {
       return room.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -404,7 +427,12 @@ export default function ChatListScreen({ route, navigation }: any) {
     return true;
   });
 
-  const totalUnreadCount = chatRooms.reduce((acc, curr) => acc + curr.unread, 0);
+  const totalUnreadCount = chatRooms.reduce((acc, curr) => acc + (curr.isArchived ? 0 : curr.unread), 0);
+  const unreadPillCount = chatRooms.filter(r => !r.isCleared && !r.isArchived && r.unread > 0).length;
+  const groupsPillCount = chatRooms.filter(r => !r.isCleared && !r.isArchived && r.isGroup).length;
+  const directPillCount = chatRooms.filter(r => !r.isCleared && !r.isArchived && !r.isGroup).length;
+  const requestsPillCount = chatRooms.filter(r => !r.isCleared && !r.isArchived && !r.isGroup && r.lastMessageSenderId !== user?.uid && r.unread > 0).length;
+  const archivedPillCount = chatRooms.filter(r => !r.isCleared && r.isArchived).length;
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -445,7 +473,8 @@ export default function ChatListScreen({ route, navigation }: any) {
           <TouchableOpacity 
             style={styles.circleBtn} 
             onPress={() => {
-              navigation.goBack();
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('Home');
             }}
           >
             <Ionicons name="chevron-back" size={22} color={theme.gradients.headerTextColor} />
@@ -491,21 +520,29 @@ export default function ChatListScreen({ route, navigation }: any) {
         {/* Filter Pills */}
         <View style={[styles.filterPillsWrapper, { borderBottomColor: APP_THEME.border }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterPillsScroll}>
-            {(['All', 'Unread', 'Groups', 'Direct', 'Archived'] as const).map((filter) => (
+            {[
+              { key: 'All', label: 'All', count: null },
+              { key: 'Unread', label: 'Unread', count: unreadPillCount },
+              { key: 'Groups', label: 'Groups', count: groupsPillCount },
+              { key: 'Direct', label: 'Direct', count: directPillCount },
+              { key: 'Requests', label: 'Requests', count: requestsPillCount },
+              { key: 'Archived', label: 'Archived', count: archivedPillCount },
+            ].map(({ key, label, count }) => (
               <TouchableOpacity
-                key={filter}
+                key={key}
                 style={[
                   styles.filterPill,
                   { backgroundColor: APP_THEME.searchBg },
-                  selectedFilter === filter && { backgroundColor: theme.colors.cardBackgroundLight }
+                  selectedFilter === key && { backgroundColor: theme.colors.cardBackgroundLight }
                 ]}
-                onPress={() => { setSelectedFilter(filter); }}>
+                onPress={() => { setSelectedFilter(key as any); }}>
                 <Text style={[
                   styles.filterPillText,
                   { color: APP_THEME.secondaryText },
-                  selectedFilter === filter && { color: APP_THEME.purpleAccent, fontWeight: 'bold' }
+                  selectedFilter === key && { color: APP_THEME.purpleAccent, fontWeight: 'bold' }
                 ]}>
-                  {filter}
+                  {label}
+                  {count !== null && count > 0 ? ` (${count})` : ''}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -516,7 +553,7 @@ export default function ChatListScreen({ route, navigation }: any) {
         <View style={{ flex: 1 }}>
           <FlashList
             data={loading ? [] : filteredRooms}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => (item?.id ? String(item.id) : `room-${index}`)}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.chatsListContent}
             keyboardShouldPersistTaps="handled"
@@ -524,46 +561,76 @@ export default function ChatListScreen({ route, navigation }: any) {
             estimatedItemSize={76}
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            renderItem={({ item: room }) => (
-              <ChatItem
-                currentUid={user?.uid}
-                onPress={() => {
-                  const { timestampObj, onLongPress, ...safeRoom } = room as any;
-                  navigation.navigate('ChatRoom', { room: safeRoom });
-                }}
-                room={{
-                  ...room,
-                  onLongPress: () => {
-                    Alert.alert(
-                      room.isGroup ? 'Leave Group' : 'Delete Chat',
-                      room.isGroup ? `Are you sure you want to leave "${room.title}"?` : `Are you sure you want to delete this chat with ${room.title}?`,
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: room.isGroup ? 'Leave' : 'Delete',
-                          style: 'destructive',
-                          onPress: async () => {
-                            try {
-                              const { apiClient } = await import('../lib/apiClient');
-                              if (room.isGroup) {
-                                await apiClient.patch(`/chats/${room.id}/leave`, { userId: user?.uid });
-                              } else {
-                                await apiClient.patch(`/chats/${room.id}`, { clearFor: user?.uid });
-                                await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
-                                await AsyncStorage.removeItem(`cached_messages_${room.id}`);
-                              }
-                              showToast(room.isGroup ? 'Left group' : 'Chat deleted');
-                            } catch (err) {
-                              Alert.alert('Error', 'Failed to process request');
+            renderItem={({ item: room }) => {
+              if (!room) return null;
+              return (
+                <ChatItem
+                  currentUid={user?.uid}
+                  onPress={() => {
+                    const { timestampObj, onLongPress, ...safeRoom } = room as any;
+                    navigation.navigate('ChatRoom', { room: safeRoom });
+                  }}
+                  room={{
+                    ...room,
+                    onLongPress: () => {
+                      Alert.alert(
+                        room.title,
+                        'Choose an action for this conversation',
+                        [
+                          {
+                            text: room.unread > 0 ? 'Mark as Read' : 'Mark as Unread',
+                            onPress: async () => {
+                              const newUnread = room.unread > 0 ? 0 : 1;
+                              setChatRooms(prev => prev.map(r => r.id === room.id ? { ...r, unread: newUnread } : r));
+                              try {
+                                if (newUnread === 0) {
+                                  await apiClient.patch(`/chats/${room.id}/read`);
+                                }
+                              } catch {}
                             }
-                          }
-                        }
-                      ]
-                    );
-                  }
-                } as any}
-              />
-            )}
+                          },
+                          {
+                            text: room.isArchived ? 'Unarchive Chat' : 'Archive Chat',
+                            onPress: async () => {
+                              const nextArchived = !room.isArchived;
+                              setChatRooms(prev => prev.map(r => r.id === room.id ? { ...r, isArchived: nextArchived } : r));
+                              try {
+                                await apiClient.patch(`/chats/${room.id}/archive`, { archived: nextArchived });
+                                const stored = await AsyncStorage.getItem(`archived_chats_${user?.uid}`);
+                                const list = stored ? JSON.parse(stored) : [];
+                                const updatedList = nextArchived ? Array.from(new Set([...list, room.id])) : list.filter((id: string) => id !== room.id);
+                                await AsyncStorage.setItem(`archived_chats_${user?.uid}`, JSON.stringify(updatedList));
+                                showToast(nextArchived ? 'Chat archived' : 'Chat unarchived');
+                              } catch {}
+                            }
+                          },
+                          {
+                            text: room.isGroup ? 'Leave Group' : 'Delete Chat',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                if (room.isGroup) {
+                                  await apiClient.patch(`/chats/${room.id}/leave`, { userId: user?.uid });
+                                } else {
+                                  await apiClient.patch(`/chats/${room.id}`, { clearFor: user?.uid });
+                                  await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
+                                  await AsyncStorage.removeItem(`cached_messages_${room.id}`);
+                                }
+                                setChatRooms(prev => prev.filter(r => r.id !== room.id));
+                                showToast(room.isGroup ? 'Left group' : 'Chat deleted');
+                              } catch (err) {
+                                Alert.alert('Error', 'Failed to process request');
+                              }
+                            }
+                          },
+                          { text: 'Cancel', style: 'cancel' }
+                        ]
+                      );
+                    }
+                  } as any}
+                />
+              );
+            }}
             ListHeaderComponent={loading ? (
               <View>
                 {Array.from({ length: 7 }).map((_, i) => (
@@ -600,40 +667,6 @@ export default function ChatListScreen({ route, navigation }: any) {
               )}
             </View>
             <Text style={[styles.tabLabel, { color: APP_THEME.primaryAccent, fontWeight: '700' }]}>Chats</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => {
-              navigation.navigate('Status');
-            }}
-          >
-            <Ionicons name="play-circle-outline" size={24} color={theme.colors.textSecondary} />
-            <Text style={styles.tabLabel}>Reels</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.tabItem}
-            onPress={() => {
-              navigation.navigate('Status');
-            }}
-          >
-            <View style={{
-              width: 38,
-              height: 38,
-              borderRadius: 19,
-              backgroundColor: theme.colors.accent,
-              alignItems: 'center',
-              justifyContent: 'center',
-              shadowColor: theme.colors.accent,
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.35,
-              shadowRadius: 4,
-              elevation: 4,
-            }}>
-              <Ionicons name="add" size={24} color="#ffffff" />
-            </View>
-            <Text style={[styles.tabLabel, { marginTop: 2 }]}>Post</Text>
           </TouchableOpacity>
 
           <TouchableOpacity

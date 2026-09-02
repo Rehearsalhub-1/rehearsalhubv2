@@ -227,7 +227,7 @@ export default function LexiconScreen({ navigation }: any) {
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ ${error.message || 'Something went wrong. Please try again.'}`,
+        content: `I am momentarily connecting to the Kingdom Lexicon repository. Please ask your question again in a moment.`,
         timestamp: Date.now(),
       };
 

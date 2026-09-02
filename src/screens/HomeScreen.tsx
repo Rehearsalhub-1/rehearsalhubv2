@@ -64,15 +64,12 @@ const MENU_SECTIONS = [
   header: 'Audiolab & AI',
   items:[
     { id: 'studio', title: 'Studio', icon: 'mic' },
-    { id: 'karaoke', title: 'Practice Mode', icon: 'musical-notes' },
-    { id: 'lexicon', title: 'Kingdom Lexicon AI', icon: 'sparkles' },
   ]
 },
 {
   header: 'COMMUNITY',
   items: [
   { id: 'media', title: 'Media', icon: 'images' },
-  { id: 'status', title: 'Status', icon: 'radio' },
   { id: 'chat', title: 'Chat Rooms', icon: 'chatbubbles' },
   { id: 'links', title: 'Links', icon: 'link' }]
 
@@ -503,7 +500,6 @@ export default function HomeScreen({ navigation }: any) {
                 if (item.id === 'ongoing' && hf.hideOngoing) return false;
                 if (item.id === 'submit' && hf.hideSubmissions) return false;
                 if (item.id === 'studio' && hf.hideAudioLab) return false;
-                if (item.id === 'karaoke' && hf.hideAudioLab) return false;
                 if (item.id === 'media' && hf.hideAudioLab) return false;
                 if (item.id === 'subgroups' && hf.hideSubgroups) return false;
                 if (item.id === 'status') return true;
@@ -554,9 +550,6 @@ export default function HomeScreen({ navigation }: any) {
                   } else if (item.id === 'submit') {
                     toggleSidebar();
                     navigation.navigate('SubmitSong');
-                  } else if (item.id === 'karaoke') {
-                    toggleSidebar();
-                    navigation.navigate('Karaoke');
                   } else if (item.id === 'lexicon') {
                     toggleSidebar();
                     navigation.navigate('Lexicon');

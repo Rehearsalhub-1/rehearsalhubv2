@@ -91,6 +91,12 @@
       "expo-video",
       "expo-web-browser",
       "expo-secure-store",
+      [
+        "expo-updates",
+        {
+          "launchWaitMs": 0
+        }
+      ],
       "./plugins/withKotlinJvmTarget",
       [
         "@sentry/react-native/expo",

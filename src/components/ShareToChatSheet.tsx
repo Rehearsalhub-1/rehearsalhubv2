@@ -183,10 +183,12 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
       for (const chat of selectedChats) {
         if (profileShare) {
           const profileNote = note.trim();
+          const targetUserId = profileShare.id || profileShare.userId || profileShare.uid;
           const text = [
             `👤 *Contact: ${profileShare.name || profileShare.displayName || 'Singer'}*`,
             profileShare.role ? `Role: ${profileShare.role}` : '',
             profileShare.zoneName ? `Zone: ${profileShare.zoneName}` : '',
+            targetUserId ? `Link: https://rehearsalhub.com/profile/${targetUserId}` : '',
             profileNote ? `\n💬 ${profileNote}` : '',
           ].filter(Boolean).join('\n');
           await apiClient.post(`/chats/${chat.id}/messages`, {

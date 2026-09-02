@@ -1,4 +1,4 @@
-import TrackPlayer, { Event, State } from 'react-native-track-player';
+import { SafeTrackPlayer as TrackPlayer, SafeEvent as Event } from './src/lib/safeNativeModules';
 
 // Track if the user explicitly hit play. Exported so useTrackPlayer.ts can update it when UI play/pause is hit.
 export let wasPlayingIntentionally = false;
@@ -37,12 +37,12 @@ export default async function () {
     TrackPlayer.skipToPrevious();
   });
 
-  TrackPlayer.addEventListener(Event.RemoteSeek, (data) => {
+  TrackPlayer.addEventListener(Event.RemoteSeek, (data: any) => {
     TrackPlayer.seekTo(data.position);
   });
 
   // Audio focus — pause on phone call / other audio taking over, conditionally resume when released
-  TrackPlayer.addEventListener(Event.RemoteDuck, async (data) => {
+  TrackPlayer.addEventListener(Event.RemoteDuck, async (data: any) => {
     if (data.paused) {
       await TrackPlayer.pause();
       // Note: We DO NOT set wasPlayingIntentionally to false here, because this is an OS interruption, not an explicit user pause.

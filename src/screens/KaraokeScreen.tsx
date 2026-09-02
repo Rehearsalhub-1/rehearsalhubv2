@@ -1,7 +1,15 @@
 import { useTheme } from '../context/ThemeContext';
 import { apiClient } from '../lib/apiClient';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import TrackPlayer, { State, usePlaybackState, RepeatMode, Capability, Event, useTrackPlayerEvents } from 'react-native-track-player';
+import {
+  SafeTrackPlayer as TrackPlayer,
+  SafeState as State,
+  safeUsePlaybackState as usePlaybackState,
+  SafeRepeatMode as RepeatMode,
+  SafeCapability as Capability,
+  SafeEvent as Event,
+  safeUseTrackPlayerEvents as useTrackPlayerEvents,
+} from '../lib/safeNativeModules';
 import { useTrackPlayer, waitForPlayerSetup, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import {
   StyleSheet, View, Text, TouchableOpacity, Dimensions, Animated,

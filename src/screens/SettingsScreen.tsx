@@ -348,6 +348,7 @@ export default function SettingsScreen({ navigation }: any) {
         administration: updates.administration
       }));
       
+      await refreshProfile();
       setIsEditing(false);
       showToast('Profile updated ✓');
     } catch { Alert.alert('Error', 'Failed to update profile'); }
@@ -367,6 +368,7 @@ export default function SettingsScreen({ navigation }: any) {
       const url = await uploadImageToCloudinary(result.assets[0].uri);
       // Profile photo updated
       await apiClient.patch(`/profiles/${currentUser?.uid || ""}`, { profile_image_url: url });
+      await refreshProfile();
       setProfile(p => ({ ...p, avatar: url }));
       showToast('Photo updated ✓');
     } catch { Alert.alert('Error', 'Failed to update photo'); }

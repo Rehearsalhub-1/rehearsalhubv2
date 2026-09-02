@@ -1,20 +1,21 @@
 import { useEffect, useState, useCallback } from 'react';
-import TrackPlayer, {
-  Capability,
-  Event,
-  State,
-  usePlaybackState,
-  useProgress,
-  useTrackPlayerEvents,
-  Track,
-  RepeatMode } from
-'react-native-track-player';
+import {
+  SafeTrackPlayer as TrackPlayer,
+  SafeCapability as Capability,
+  SafeEvent as Event,
+  SafeState as State,
+  safeUsePlaybackState as usePlaybackState,
+  safeUseProgress as useProgress,
+  safeUseTrackPlayerEvents as useTrackPlayerEvents,
+  SafeRepeatMode as RepeatMode,
+  isExpoGo,
+} from '../lib/safeNativeModules';
+import type { Track } from 'react-native-track-player';
 import Constants from 'expo-constants';
 import { Image, Platform, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 import { setWasPlayingIntentionally } from '../../service';
 
-const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 let isPlayerSetup = (global as any).isPlayerSetup || false;
 let setupPromise: Promise<void> | null = (global as any).setupPromise || null;
@@ -41,9 +42,21 @@ const stopPollingInterval = () => {
 
 const startSimulationInterval = () => {
   if (globalSimulationInterval) return;
-  globalSimulationInterval = setInterval(() => {
+  globalSimulationInterval = setInterval(() => {
     if (globalIsPlaying) {
       globalSimulationPosition += 1000;
+      if (
+        globalABLoop.active &&
+        globalABLoop.start !== null &&
+        globalABLoop.end !== null &&
+        globalABLoop.end > globalABLoop.start
+      ) {
+        if (globalSimulationPosition >= globalABLoop.end) {
+          globalSimulationPosition = globalABLoop.start;
+          notifySubscribers();
+          return;
+        }
+      }
       if (globalSimulationPosition >= 240000) {
         globalIsPlaying = false;
         globalSimulationPosition = 0;
@@ -98,9 +111,9 @@ const syncNativeQueue = async () => {
     
     if (currentIdx === -1) return;
     const indicesToRemove = nativeQueue
-      .map((_, i) => i)
-      .filter(i => i !== currentIdx)
-      .sort((a, b) => b - a);
+      .map((_: any, i: any) => i)
+      .filter((i: any) => i !== currentIdx)
+      .sort((a: any, b: any) => b - a);
       
     if (indicesToRemove.length > 0) {
       try {
@@ -125,8 +138,14 @@ const syncNativeQueue = async () => {
   }
 };
 let globalRepeatMode: 'off' | 'track' | 'playlist' = 'off';
+let globalPlaybackRate = 1.0;
 let globalIsLoading = false;
 let globalIsFetching = false;
+let globalABLoop: { start: number | null; end: number | null; active: boolean } = {
+  start: null,
+  end: null,
+  active: false,
+};
 const subscribers = new Set<() => void>();
 
 const notifySubscribers = () => {
@@ -288,7 +307,7 @@ export const useTrackPlayer = () => {
     Event.PlaybackState, 
     Event.PlaybackTrackChanged,
     Event.PlaybackQueueEnded
-  ].filter(Boolean), async (event) => {
+  ].filter(Boolean), async (event: any) => {
     if ((global as any).isChatAudio) return;
 
     if (event.type === Event.PlaybackState) {
@@ -530,7 +549,12 @@ export const useTrackPlayer = () => {
           } catch (e) {
             console.error('Failed to re-apply native repeat mode after reset', e);
           }
-        }
+          if (globalPlaybackRate !== 1.0) {
+            try {
+              await TrackPlayer.setRate(globalPlaybackRate);
+            } catch (e) {}
+          }
+        }
       }
 
       if (autoplay) {
@@ -543,7 +567,7 @@ export const useTrackPlayer = () => {
         globalIsPlaying = false;
         globalIsLoading = false;
       }
-      globalIsFetching = false;
+      globalIsFetching = false;
       try {
         const pState = await TrackPlayer.getState();
         if (pState === State.Playing || pState === State.Ready || pState === State.Paused) {
@@ -560,7 +584,7 @@ export const useTrackPlayer = () => {
     }
   }, []);
 
-  useEffect(() => {
+  useEffect(() => {
     if (globalIsPlaying) {
       if (globalIsSimulating) {
         startSimulationInterval();
@@ -602,7 +626,7 @@ export const useTrackPlayer = () => {
       notifySubscribers();
       await play();
     }
-  }, [play, pause]);
+  }, [play, pause]);
 
   const seekTo = useCallback(async (value: number) => {
     if (isExpoGo || globalIsSimulating) {
@@ -623,10 +647,21 @@ export const useTrackPlayer = () => {
 
   const skipToNext = useCallback(async () => {
     if (globalQueue.length > 0) {
+      let nextIndex = globalQueueIndex + 1;
+      if (nextIndex >= globalQueue.length) {
+        nextIndex = globalRepeatMode === 'playlist' ? 0 : globalQueueIndex;
+      }
+      if (nextIndex >= 0 && nextIndex < globalQueue.length && nextIndex !== globalQueueIndex) {
+        const nextTrack = globalQueue[nextIndex];
+        if (nextTrack) {
+          await play(nextTrack, undefined, true);
+          return;
+        }
+      }
       if (!isExpoGo) {
         try {
           await TrackPlayer.skipToNext();
-        } catch (e) {
+        } catch (e) {
           if (globalRepeatMode === 'playlist') {
             try { await TrackPlayer.skip(0); } catch {}
           } else {
@@ -636,49 +671,62 @@ export const useTrackPlayer = () => {
             } catch {}
           }
         }
-      } else {
-        let nextIndex = globalQueueIndex + 1;
-        if (nextIndex >= globalQueue.length) nextIndex = globalRepeatMode === 'playlist' ? 0 : globalQueueIndex;
-        if (nextIndex === globalQueueIndex && globalRepeatMode === 'off' && nextIndex === globalQueue.length - 1) {
-          globalSimulationPosition = 0;
-          globalIsPlaying = false;
-          notifySubscribers();
-          return;
-        }
+      } else {
         globalSimulationPosition = 0;
         globalQueueIndex = nextIndex;
         globalCurrentTrack = globalQueue[nextIndex];
         notifySubscribers();
       }
     }
-  }, []);
+  }, [play]);
 
   const skipToPrevious = useCallback(async () => {
     if (globalQueue.length > 0) {
+      let prevIndex = globalQueueIndex - 1;
+      if (prevIndex < 0) {
+        prevIndex = globalRepeatMode === 'playlist' ? globalQueue.length - 1 : 0;
+      }
+      if (prevIndex >= 0 && prevIndex < globalQueue.length && prevIndex !== globalQueueIndex) {
+        const prevTrack = globalQueue[prevIndex];
+        if (prevTrack) {
+          await play(prevTrack, undefined, true);
+          return;
+        }
+      }
       if (!isExpoGo) {
         try {
           await TrackPlayer.skipToPrevious();
-        } catch (e) {
+        } catch (e) {
           if (globalRepeatMode === 'playlist') {
             try { await TrackPlayer.skip((await TrackPlayer.getQueue()).length - 1); } catch {}
           } else {
             try { await TrackPlayer.seekTo(0); } catch {}
           }
         }
-      } else {
-        let prevIndex = globalQueueIndex - 1;
-        if (prevIndex < 0) prevIndex = globalRepeatMode === 'playlist' ? globalQueue.length - 1 : 0;
-        if (prevIndex === globalQueueIndex && globalRepeatMode === 'off' && prevIndex === 0) {
-          globalSimulationPosition = 0;
-          notifySubscribers();
-          return;
-        }
+      } else {
         globalSimulationPosition = 0;
         globalQueueIndex = prevIndex;
         globalCurrentTrack = globalQueue[prevIndex];
         notifySubscribers();
       }
     }
+  }, [play]);
+
+  const skipToTrack = useCallback(async (track: any) => {
+    if (!track) return;
+    await play(track, undefined, true);
+  }, [play]);
+
+  const setPlaybackRate = useCallback(async (rate: number) => {
+    globalPlaybackRate = rate;
+    if (!isExpoGo) {
+      try {
+        await TrackPlayer.setRate(rate);
+      } catch (e) {
+        console.warn('Failed to set rate:', e);
+      }
+    }
+    notifySubscribers();
   }, []);
 
   const toggleShuffle = useCallback(() => {
@@ -703,7 +751,7 @@ export const useTrackPlayer = () => {
         }
       }
     }
-    notifySubscribers();
+    notifySubscribers();
     (async () => {
       await syncNativeQueue();
     })();
@@ -728,6 +776,78 @@ export const useTrackPlayer = () => {
     notifySubscribers();
   }, []);
 
+  const setLoopPointA = useCallback(async (timeMs?: number) => {
+    let point = timeMs;
+    if (point === undefined) {
+      const posSec = await TrackPlayer.getPosition().catch(() => 0);
+      point = Math.floor(posSec * 1000);
+    }
+    const newEnd = globalABLoop.end !== null && globalABLoop.end > point ? globalABLoop.end : null;
+    globalABLoop = {
+      ...globalABLoop,
+      start: point,
+      end: newEnd,
+      active: point !== null && newEnd !== null && newEnd > point,
+    };
+    notifySubscribers();
+    return point;
+  }, []);
+
+  const setLoopPointB = useCallback(async (timeMs?: number) => {
+    let point = timeMs;
+    if (point === undefined) {
+      const posSec = await TrackPlayer.getPosition().catch(() => 0);
+      point = Math.floor(posSec * 1000);
+    }
+    const newStart = globalABLoop.start !== null && globalABLoop.start < point ? globalABLoop.start : 0;
+    globalABLoop = {
+      ...globalABLoop,
+      start: newStart,
+      end: point,
+      active: newStart !== null && point !== null && point > newStart,
+    };
+    notifySubscribers();
+    return point;
+  }, []);
+
+  const toggleABLoop = useCallback(() => {
+    if (globalABLoop.start !== null && globalABLoop.end !== null && globalABLoop.end > globalABLoop.start) {
+      globalABLoop.active = !globalABLoop.active;
+      notifySubscribers();
+    }
+  }, []);
+
+  const clearABLoop = useCallback(() => {
+    globalABLoop = {
+      start: null,
+      end: null,
+      active: false,
+    };
+    notifySubscribers();
+  }, []);
+
+  const adjustLoopPointA = useCallback((deltaMs: number) => {
+    if (globalABLoop.start === null) return;
+    const newStart = Math.max(0, globalABLoop.start + deltaMs);
+    if (globalABLoop.end !== null && newStart >= globalABLoop.end) return;
+    globalABLoop = {
+      ...globalABLoop,
+      start: newStart,
+    };
+    notifySubscribers();
+  }, []);
+
+  const adjustLoopPointB = useCallback((deltaMs: number) => {
+    if (globalABLoop.end === null) return;
+    const newEnd = Math.max(0, globalABLoop.end + deltaMs);
+    if (globalABLoop.start !== null && newEnd <= globalABLoop.start) return;
+    globalABLoop = {
+      ...globalABLoop,
+      end: newEnd,
+    };
+    notifySubscribers();
+  }, []);
+
   const isActuallyPlaying = globalIsPlaying;
   
   const isLoading = globalIsLoading;
@@ -737,20 +857,32 @@ export const useTrackPlayer = () => {
     isPlaying: isActuallyPlaying,
     isLoading: isLoading,
     currentTrack: globalCurrentTrack,
+    queue: globalQueue,
+    queueIndex: globalQueueIndex,
     isShuffle: globalIsShuffle,
     repeatMode: globalRepeatMode,
+    playbackRate: globalPlaybackRate,
+    abLoop: globalABLoop,
+    setLoopPointA,
+    setLoopPointB,
+    toggleABLoop,
+    clearABLoop,
+    adjustLoopPointA,
+    adjustLoopPointB,
+    setPlaybackRate,
     play,
     pause,
     togglePlayback,
     seekTo,
     skipToNext,
     skipToPrevious,
+    skipToTrack,
     toggleShuffle,
     toggleRepeat
   };
 };
 
-export const useTrackPlayerProgress = (interval = 250) => {
+export const useTrackPlayerProgress = (interval = 200) => {
   const [progress, setProgress] = useState({ position: 0, duration: 0 });
   const [, forceUpdate] = useState({});
 
@@ -762,13 +894,34 @@ export const useTrackPlayerProgress = (interval = 250) => {
 
   useEffect(() => {
     let mounted = true;
+    let isSeekingLoop = false;
     const poll = async () => {
       try {
         if (!isPlayerSetup) return;
-        const pos = await TrackPlayer.getPosition().catch(() => 0);
-        const dur = await TrackPlayer.getDuration().catch(() => 0);
+        const posSec = await TrackPlayer.getPosition().catch(() => 0);
+        const durSec = await TrackPlayer.getDuration().catch(() => 0);
+        const posMs = posSec * 1000;
+
+        // Auto-loop back to Point A when Point B is reached
+        if (
+          globalABLoop.active &&
+          globalABLoop.start !== null &&
+          globalABLoop.end !== null &&
+          globalABLoop.end > globalABLoop.start
+        ) {
+          if (posMs >= globalABLoop.end && !isSeekingLoop) {
+            isSeekingLoop = true;
+            await TrackPlayer.seekTo(globalABLoop.start / 1000).catch(() => {});
+            setTimeout(() => { isSeekingLoop = false; }, 250);
+            if (mounted) {
+              setProgress({ position: globalABLoop.start / 1000, duration: durSec });
+            }
+            return;
+          }
+        }
+
         if (mounted) {
-          setProgress({ position: pos, duration: dur });
+          setProgress({ position: posSec, duration: durSec });
         }
       } catch (e) {}
     };

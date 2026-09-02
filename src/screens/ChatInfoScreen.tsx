@@ -388,7 +388,18 @@ export default function ChatInfoScreen({ route, navigation }: any) {
           </View>
           {isGroup && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Members · {members.length}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={styles.sectionTitle}>Members · {members.length}</Text>
+                {isAdmin && (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+                    onPress={() => navigation.navigate('NewChat', { groupTargetChatId: room?.id })}
+                  >
+                    <Ionicons name="person-add" size={14} color="#ffffff" style={{ marginRight: 4 }} />
+                    <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>Add</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
               {loading ? (
                 <ActivityIndicator size="small" color={T.accent} style={{ padding: 20 }} />
               ) : (

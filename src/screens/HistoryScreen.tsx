@@ -192,7 +192,7 @@ export default function HistoryScreen({ route, navigation }: any) {
         
         return (
           <View style={{ marginTop: 8, gap: 12 }}>
-            {Object.keys(newObj).map((key) => {
+            {Object.keys(newObj || {}).map((key) => {
               const val = newObj[key];
               const oldVal = oldObj[key];
               return (

@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import { OneSignal } from 'react-native-onesignal';
-import { Zone, isHQGroup } from '../config/zones';
+import { SafeOneSignal as OneSignal } from '../lib/safeNativeModules';
+import { Zone, isHQGroup, getZoneByInvitationCode } from '../config/zones';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { joinZoneChatRoom } from '../lib/zoneChat';
 import { clearCache, setV2TenantScope } from '../lib/apiClient';
 import { useShallow } from 'zustand/react/shallow';
 import * as SecureStore from 'expo-secure-store';
@@ -140,14 +139,19 @@ async function loadZoneMemberships(
     
     let allMemberships: any[] = [];
     if (result.success && result.data) {
-      allMemberships = [
-        ...(result.data.zoneMembers || []),
-        ...(result.data.hqMembers || [])
-      ];
+      if (Array.isArray(result.data.memberships)) {
+        allMemberships = result.data.memberships;
+      } else if (Array.isArray(result.data)) {
+        allMemberships = result.data;
+      } else {
+        allMemberships = [
+          ...(result.data.zoneMembers || []),
+          ...(result.data.hqMembers || [])
+        ];
+      }
     }
 
-
-    // Fetch all zones from DB to resolve membership zone details
+    // Fetch all zones/organizations from DB to resolve membership details
     let dbZones: Zone[] = [];
     try {
       const zonesRes = await apiClient.get('/organizations');
@@ -156,11 +160,18 @@ async function loadZoneMemberships(
 
     const zones: Zone[] = [];
     for (const mem of allMemberships) {
-      const zId = mem.zoneId || mem.hqGroupId;
+      const zId = mem.organizationId || mem.organization_id || mem.zoneId || mem.zone_id || mem.hqGroupId || mem.hq_group_id || mem.zoneCode || mem.zone_code || mem.id;
+      const orgName = mem.organization?.name || mem.organizationName || mem.zoneName || mem.hqGroupName || mem.name || zId;
+      const orgCode = mem.organization?.slug || mem.organization?.code || mem.zoneCode || mem.invitationCode || zId;
+      
       if (zId) {
-        const zoneConfig = dbZones.find((z: Zone) => z.id === zId || z.invitationCode === zId) ||
-          ({ id: zId, name: mem.zoneName || mem.hqGroupName || zId, invitationCode: zId } as Zone);
-        if (!zones.some(z => z.id === zoneConfig.id)) {
+        const zoneConfig = dbZones.find((z: Zone) => 
+          String(z.id) === String(zId) || 
+          (z.invitationCode && String(z.invitationCode).toLowerCase() === String(zId).toLowerCase()) ||
+          (z.name && String(z.name).toLowerCase() === String(orgName).toLowerCase())
+        ) || ({ id: String(zId), name: orgName, invitationCode: orgCode } as Zone);
+
+        if (!zones.some(z => String(z.id) === String(zoneConfig.id))) {
           zones.push({
             ...zoneConfig,
             membershipId: mem.id,
@@ -175,7 +186,7 @@ async function loadZoneMemberships(
       useUserStore.setState({ currentZone: zones[0] });
     }
 
-    if (resolvedCurrentZone && !zones.some(z => z.id === resolvedCurrentZone!.id)) {
+    if (resolvedCurrentZone && !zones.some(z => String(z.id) === String(resolvedCurrentZone!.id))) {
       zones.push(resolvedCurrentZone);
     }
 
@@ -183,7 +194,7 @@ async function loadZoneMemberships(
     if (resolvedCurrentZone) {
       setV2TenantScope({
         zoneId: resolvedCurrentZone.id,
-        zoneCode: resolvedCurrentZone.invitationCode,
+        zoneCode: resolvedCurrentZone.invitationCode || null,
         scope: 'zone',
       });
     }
@@ -242,23 +253,21 @@ export const useUserStore = create<UserStore>((set, get) => ({
       set({ user: { uid, email: null }, isAuthenticated: true });
 
       try {
-        OneSignal.login(uid);
+        OneSignal?.login?.(uid);
 
         setTimeout(async () => {
           try {
-            const subId = await OneSignal.User.pushSubscription.getIdAsync();
+            const subId = await OneSignal?.User?.pushSubscription?.getIdAsync?.();
             if (subId) {
               const { apiClient } = require('../lib/apiClient');
               await apiClient.patch(`/profiles/${uid}/onesignal`, { subscription_id: subId }).catch(() => {});
-            } else {
-              console.warn('[OneSignal DEBUG] Subscription ID is null/undefined â€” notifications will NOT work');
             }
           } catch (e) {
-            console.warn('[OneSignal] Could not save subscription ID:', e);
+            // Silently ignore in Expo Go
           }
         }, 3000);
       } catch (err) {
-        console.warn('OneSignal login failed', err);
+        // Silently ignore in Expo Go
       }
 
       try {
@@ -383,14 +392,9 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // ── Update scope store so all future requests carry correct X-Zone-Id headers
       setV2TenantScope({
         zoneId: zone.id,
-        zoneCode: zone.invitationCode,
+        zoneCode: zone.invitationCode || null,
         scope: 'zone',
       });
-
-      try {
-        const userName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || 'Member' : 'Member';
-        await joinZoneChatRoom(user.uid, zone.invitationCode, userName, profile?.avatar || '');
-      } catch {}
 
       persistCache();
       return true;
@@ -446,7 +450,6 @@ export const useUserStore = create<UserStore>((set, get) => ({
         user_name: userName,
       });
 
-      await joinZoneChatRoom(user.uid, zone.invitationCode, userName);
       await refreshZones();
       return { success: true, message: `Welcome to ${zone.name}!` };
     } catch (e) {

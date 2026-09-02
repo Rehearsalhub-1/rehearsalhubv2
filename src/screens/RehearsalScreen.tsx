@@ -36,7 +36,7 @@ import { canAccessArchive, canAccessPreRehearsal, getHiddenFeatures, isHQAdmin }
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import TrackOptionsModal from '../components/TrackOptionsModal';
 import { readCache, writeCache } from '../lib/screenCache';
-import { optimizeImage, optimizeAudio } from '../lib/mediaUtils';
+import { optimizeImage, optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { SongScheduleSheet } from '../components/SongScheduleSheet';
 import { apiClient, clearCache } from '../lib/apiClient';
@@ -339,10 +339,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
           }
 
           if (songDocData && active) {
-            const rawAudioUrl = songDocData.audioFile || songDocData.audioUrls?.full || '';
-            const songAudioUrl = rawAudioUrl.includes('cloudinary.com')
-              ? optimizeAudio(rawAudioUrl)
-              : rawAudioUrl;
+            const songAudioUrl = resolveSongAudioUrl(songDocData);
+            const resolvedAudioUrls = resolveSongAudioUrls(songDocData);
 
             song = {
               id: songDocData.id,
@@ -359,7 +357,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
               audioUrl: songAudioUrl,
               lyrics: songDocData.lyrics || '',
               solfa: songDocData.notation || songDocData.solfas || songDocData.solfa || '',
-              audioUrls: songDocData.audioUrls || {},
+              audioUrls: resolvedAudioUrls,
               status: songDocData.status || 'unheard',
               isActive: songDocData.isActive !== false,
               rehearsalCount: songDocData.rehearsalCount || 0,
@@ -778,26 +776,26 @@ export default function RehearsalScreen({ navigation, route }: any) {
             }
           } else {
             const effectiveZone = resolvedZoneId ? `&zoneId=${encodeURIComponent(resolvedZoneId)}` : '';
-            const [primary, alt] = await Promise.all([
-              apiClient.get<any>(
-                `/songs/praise-night?programId=${encodeURIComponent(selectedRehearsal.id)}${effectiveZone}`
-              ).catch(() => null),
-              apiClient.get<any>(
-                `/songs/zone?zoneId=${encodeURIComponent(resolvedZoneId)}`
-              ).catch(() => null),
-            ]);
-            if (primary?.success && Array.isArray(primary.data) && primary.data.length > 0) {
-              dbSongs = primary.data;
-              isSongsFetchSuccessful = true;
-            } else if (alt?.success && Array.isArray(alt.data) && alt.data.length > 0) {
-              dbSongs = alt.data;
-              isSongsFetchSuccessful = true;
-            } else if (primary?.success || alt?.success) {
-              dbSongs = primary?.data || alt?.data || [];
-              isSongsFetchSuccessful = true;
-            } else if (Array.isArray(selectedRehearsal.songs) && selectedRehearsal.songs.length > 0) {
+            if (Array.isArray(selectedRehearsal.songs) && selectedRehearsal.songs.length > 0) {
               dbSongs = selectedRehearsal.songs;
               isSongsFetchSuccessful = true;
+            } else {
+              const primary = await apiClient.get<any>(
+                `/songs/praise-night?programId=${encodeURIComponent(selectedRehearsal.id)}${effectiveZone}`
+              ).catch(() => null);
+              if (primary?.success && Array.isArray(primary.data) && primary.data.length > 0) {
+                dbSongs = primary.data;
+                isSongsFetchSuccessful = true;
+              } else if (Array.isArray(selectedRehearsal.songIds) && selectedRehearsal.songIds.length > 0) {
+                const zoneRes = await apiClient.get<any>(`/songs/zone?zoneId=${encodeURIComponent(resolvedZoneId)}`).catch(() => null);
+                if (zoneRes?.success && Array.isArray(zoneRes.data)) {
+                  dbSongs = zoneRes.data.filter((s: any) => selectedRehearsal.songIds.includes(s.id));
+                  isSongsFetchSuccessful = true;
+                }
+              } else if (primary?.success && Array.isArray(primary.data)) {
+                dbSongs = primary.data;
+                isSongsFetchSuccessful = true;
+              }
             }
           }
         } catch (songError) {
@@ -811,19 +809,14 @@ export default function RehearsalScreen({ navigation, route }: any) {
         }
 
         const mappedSongs = dbSongs.map((song: any, index: number) => {
-          let rawAudioUrl = song.audioFile || song.audioUrls?.full || '';
-          if (rawAudioUrl === 'null' || rawAudioUrl === 'undefined' || rawAudioUrl.trim() === '') {
-            rawAudioUrl = '';
-          }
-
-          const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com')
-            ? optimizeAudio(rawAudioUrl)
-            : rawAudioUrl;
+          const songAudioUrl = resolveSongAudioUrl(song);
+          const resolvedAudioUrls = resolveSongAudioUrls(song);
+          const isLiveNow = song.isActive === true || String(song.isActive) === 'true' || song.isLive === true || song.status === 'live';
           return {
             id: song.id || `song-${index}`,
             title: song.title || 'Untitled Song',
             subtitle: song.leadSinger || song.writer || 'Loveworld Singers',
-            program: selectedRehearsal.name || 'Ongoing Rehearsal',
+            program: selectedRehearsal.name || selectedRehearsal.title || 'Ongoing Rehearsal',
             leadSinger: song.leadSinger || 'Unknown',
             writer: song.writer || 'Unknown',
             conductor: song.conductor || '',
@@ -834,9 +827,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
             audioUrl: songAudioUrl,
             lyrics: song.lyrics || '',
             solfa: song.notation || song.solfas || song.solfa || '',
-            audioUrls: song.audioUrls || {},
+            audioUrls: resolvedAudioUrls,
             status: isSongHeard(song) ? 'heard' : 'unheard',
-            isActive: song.isActive !== false,
+            isActive: isLiveNow,
             rehearsalCount: getRehearsalCount(song),
             conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
             history: song.history || '',
@@ -994,8 +987,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
       if (index >= 0) {
         const next = [...prev];
         const s = next[index];
-        const rawAudioUrl = update.audioFile || update.audioUrls?.full || s.audioUrl;
-        const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl;
+        const merged = { ...s, ...update };
+        const songAudioUrl = resolveSongAudioUrl(merged);
+        const resolvedAudioUrls = resolveSongAudioUrls(merged);
         const isActiveNow = update.isActive !== undefined ? (update.isActive === true || String(update.isActive) === 'true') : s.isActive;
 
         if (isActiveNow && !notifiedActiveSongsRef.current.has(update.id)) {
@@ -1021,7 +1015,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           category: update.category || s.category,
           categories: update.categories || s.categories,
           audioUrl: songAudioUrl,
-          audioUrls: update.audioUrls || s.audioUrls,
+          audioUrls: resolvedAudioUrls,
           isActive: isActiveNow,
           rehearsalCount: update.rehearsalCount ?? s.rehearsalCount,
           status: isSongHeard(update) ? 'heard' : (update.status || s.status),
@@ -1041,8 +1035,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
          String(update.programId) === String(activeProgramId) ||
          update._action === 'added')
       ) {
-        const rawAudioUrl = update.audioFile || update.audioUrls?.full || '';
-        const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl;
+        const songAudioUrl = resolveSongAudioUrl(update);
+        const resolvedAudioUrls = resolveSongAudioUrls(update);
         const newSong = {
           id: update.id,
           title: update.title || 'Untitled Song',
@@ -1058,7 +1052,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           audioUrl: songAudioUrl,
           lyrics: update.lyrics || '',
           solfa: update.notation || update.solfas || update.solfa || '',
-          audioUrls: update.audioUrls || {},
+          audioUrls: resolvedAudioUrls,
           status: isSongHeard(update) ? 'heard' : 'unheard',
           isActive: update.isActive !== false,
           rehearsalCount: update.rehearsalCount || 0,

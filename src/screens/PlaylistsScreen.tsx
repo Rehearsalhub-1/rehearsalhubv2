@@ -126,16 +126,79 @@ export default function PlaylistsScreen({ navigation, route }: any) {
     if (match) {
       setActivePlaylistData(match);
       setActiveCollection(match.id);
-    } else if (params.openPlaylistName) {
+    } else {
+      const songIds: string[] = params.openPlaylistSongs || [];
+      const sharedSongs: any[] = params.sharedSongs || [];
+
+      // Immediately seed cache with shared song objects
+      if (Array.isArray(sharedSongs) && sharedSongs.length > 0) {
+        setResolvedTracksCache(prev => {
+          const next = { ...prev };
+          sharedSongs.forEach((s: any) => {
+            if (s && s.id) {
+              next[s.id] = {
+                ...s,
+                id: s.id,
+                title: s.title || 'Unknown Title',
+                subtitle: s.leadSinger || s.writer || 'Loveworld Singers',
+                audioUrl: s.audioUrl || s.audioFile || '',
+                audioUrls: s.audioUrls || {},
+                image: getTrackImage({ id: s.id, ...s }, 0),
+              };
+            }
+          });
+          return next;
+        });
+      }
+
+      const effectiveSongs = songIds.length > 0 ? songIds : sharedSongs.map((s: any) => s.id).filter(Boolean);
+
       setActivePlaylistData({
         id: params.openPlaylistId,
-        name: params.openPlaylistName,
-        songs: params.openPlaylistSongs || [],
+        name: params.openPlaylistName || 'Shared Playlist',
+        songs: effectiveSongs,
         songNotes: params.openPlaylistSongNotes || {},
       });
       setActiveCollection(params.openPlaylistId);
+
+      // Also attempt to fetch latest from server if it has an id
+      if (params.openPlaylistId && params.openPlaylistId !== 'favs') {
+        apiClient.get<{ success: boolean; data: any }>(`/playlists/${params.openPlaylistId}`)
+          .then(res => {
+            if (res?.data) {
+              const p = res.data;
+              const serverSongIds = p.songIds || (p.songs || []).map((s: any) => s.id || s);
+              if (Array.isArray(p.songs)) {
+                setResolvedTracksCache(prev => {
+                  const next = { ...prev };
+                  p.songs.forEach((s: any) => {
+                    if (s && s.id) {
+                      next[s.id] = {
+                        ...s,
+                        id: s.id,
+                        title: s.title || 'Unknown Title',
+                        subtitle: s.leadSinger || s.writer || 'Loveworld Singers',
+                        audioUrl: s.audioUrl || s.audioFile || '',
+                        audioUrls: s.audioUrls || {},
+                        image: getTrackImage({ id: s.id, ...s }, 0),
+                      };
+                    }
+                  });
+                  return next;
+                });
+              }
+              setActivePlaylistData({
+                id: p.id,
+                name: p.title || p.name || params.openPlaylistName || 'Shared Playlist',
+                songs: serverSongIds.length > 0 ? serverSongIds : effectiveSongs,
+                songNotes: params.openPlaylistSongNotes || {},
+              });
+            }
+          })
+          .catch(() => {});
+      }
     }
-    navigation.setParams({ openPlaylistId: undefined, openPlaylistName: undefined, openPlaylistSongs: undefined, openPlaylistSongNotes: undefined });
+    navigation.setParams({ openPlaylistId: undefined, openPlaylistName: undefined, openPlaylistSongs: undefined, sharedSongs: undefined, openPlaylistSongNotes: undefined });
   }, [route?.params?.openPlaylistId, playlists]);
 
   useEffect(() => {
@@ -205,9 +268,27 @@ export default function PlaylistsScreen({ navigation, route }: any) {
     fetchMissingTracks();
   }, [activeCollection, activePlaylistData, favoriteIds]);
 
-  const resolveTracks = (trackIds: string[]) => {
-
-    return trackIds.map(id => resolvedTracksCache[id]).filter(Boolean);
+  const resolveTracks = (trackIds: any[]) => {
+    return (trackIds || []).map((item: any) => {
+      const id = typeof item === 'string' ? item : item?.id;
+      if (!id) return null;
+      if (resolvedTracksCache[id]) return resolvedTracksCache[id];
+      if (typeof item === 'object' && item.title) {
+        return {
+          ...item,
+          id: item.id || id,
+          title: item.title || 'Unknown Title',
+          subtitle: item.leadSinger || item.writer || 'Loveworld Singers',
+          program: item.program || 'Praise Night',
+          leadSinger: item.leadSinger || 'Unknown',
+          writer: item.writer || 'Unknown',
+          audioUrl: item.audioUrl || item.audioFile || '',
+          audioUrls: item.audioUrls || {},
+          image: getTrackImage({ id, ...item }, 0),
+        };
+      }
+      return null;
+    }).filter(Boolean);
   };
 
   const getQueue = () => {

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Vibration 
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { apiClient } from '../lib/apiClient';
-import notifee from '@notifee/react-native';
+import { SafeNotifee as notifee } from '../lib/safeNativeModules';
 
 const { width, height } = Dimensions.get('window');
 

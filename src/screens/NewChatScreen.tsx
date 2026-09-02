@@ -27,6 +27,8 @@ interface UserProfile {
   lastMessage?: string;
   lastTime?: string;
   lastTimestamp?: number; // epoch ms for reliable sorting
+  zoneName?: string;
+  voicePart?: string;
 }
 
 export default function NewChatScreen({ route, navigation }: any) {
@@ -103,12 +105,24 @@ export default function NewChatScreen({ route, navigation }: any) {
           name = data.name || 'Unnamed Group';
           avatar = data.avatar || undefined;
         } else {
-          const otherId = (data.participants || []).find((id: string) => id !== currentUser.uid);
+          const otherId = (data.participants || []).find((id: string) => id !== currentUser.uid)
+            || (typeof d.id === 'string' && d.id.includes('_') ? d.id.split('_').find((id: string) => id !== currentUser.uid) : null);
           if (!otherId) return;
           rowId = otherId;
           existingChatIds.add(otherId);
           const details = data.participantDetails?.[otherId] || {};
-          name = details.name || 'Unknown';
+          if (details.name && details.name !== 'Member' && details.name !== 'Unknown') {
+            name = details.name;
+          } else if (data.title && data.title !== 'Chat' && data.title !== 'Direct Chat' && data.title !== 'Direct Message' && data.title !== 'Member') {
+            name = data.title;
+          } else if (data.name && data.name !== 'Chat' && data.name !== 'Direct Chat' && data.name !== 'Direct Message' && data.name !== 'Member') {
+            name = data.name;
+          } else if (details.email) {
+            const prefix = details.email.split('@')[0];
+            name = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+          } else {
+            name = 'Member';
+          }
           avatar = details.avatar || undefined;
         }
 
@@ -170,38 +184,38 @@ export default function NewChatScreen({ route, navigation }: any) {
       AsyncStorage.setItem(CACHE_KEY_RECENTS, JSON.stringify(
         sortedRecents.map(r => ({ ...r, existingRoom: r.existingRoom }))
       )).catch(() => {});
-      const lastSyncTimeStr = await AsyncStorage.getItem('last_profiles_sync_time');
-      const lastSyncTime = lastSyncTimeStr ? parseInt(lastSyncTimeStr, 10) : 0;
-      const cachedProfilesStr = await AsyncStorage.getItem(CACHE_KEY_PROFILES);
-      const hasCachedProfiles = cachedProfilesStr ? JSON.parse(cachedProfilesStr).length > 0 : false;
-      const isCacheFresh = Date.now() - lastSyncTime < 30 * 60 * 1000; // 30 minutes
-
-      if (hasCachedProfiles && isCacheFresh) {
-
-        const cachedProfiles = JSON.parse(cachedProfilesStr!);
-        const filtered = cachedProfiles.filter((u: UserProfile) => !existingChatIds.has(u.id));
-        setAllUsers(filtered);
-        return;
-      }
-      const profRes = await apiClient.get<{ success: boolean; data: any[] }>('/profiles').catch(() => null);
-      const profilesSnap = { docs: (profRes?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
+      const profRes = await apiClient.get<{ success: boolean; data: any[] }>('/profiles?limit=500').catch(() => null);
+      const rawList: any[] = profRes?.data && Array.isArray(profRes.data) ? profRes.data : [];
       const allProfiles: UserProfile[] = [];
-      (profilesSnap.docs || []).forEach((d: any) => {
-        if (d.id === currentUser.uid) return;
-        const p = d.data();
+
+      rawList.forEach((p: any) => {
+        if (p.id === currentUser.uid) return;
         const firstName = p.first_name || p.firstName || '';
         const lastName = p.last_name || p.lastName || '';
         const name = [firstName, lastName].filter(Boolean).join(' ') ||
-          p.displayName || p.name || p.fullName || p.email?.split('@')[0] || 'Unknown';
+          p.displayName || p.name || p.fullName || p.email?.split('@')[0] || 'Singer';
         const avatar = p.profile_image_url || p.avatar_url || p.photoURL || p.avatar || p.profileImage;
-        allProfiles.push({ id: d.id, name, avatar, email: p.email });
+        const existingChatId = recentMap[p.id]?.existingChatId;
+        const existingRoom = recentMap[p.id]?.existingRoom;
+        const voicePart = p.voicePart || p.designation || '';
+        const zoneName = p.zoneName || p.zone_name || p.zoneCode || '';
+
+        allProfiles.push({
+          id: p.id,
+          name,
+          avatar,
+          email: p.email,
+          existingChatId,
+          existingRoom,
+          voicePart,
+          zoneName,
+        });
       });
 
       const sorted = allProfiles.sort((a, b) => a.name.localeCompare(b.name));
       await AsyncStorage.setItem(CACHE_KEY_PROFILES, JSON.stringify(sorted));
       await AsyncStorage.setItem('last_profiles_sync_time', Date.now().toString());
-      const filtered = sorted.filter(u => !existingChatIds.has(u.id));
-      setAllUsers(filtered);
+      setAllUsers(sorted);
     } catch (e) {
       console.error('NewChatScreen loadData error:', e);
     } finally {
@@ -211,6 +225,17 @@ export default function NewChatScreen({ route, navigation }: any) {
 
   const openChat = async (user: UserProfile) => {
     if (!currentUser) return;
+    const groupTargetChatId = route.params?.groupTargetChatId;
+    if (groupTargetChatId) {
+      try {
+        await apiClient.post(`/chats/${groupTargetChatId}/participants`, { userIds: [user.id] });
+        navigation.goBack();
+      } catch (e) {
+        console.error('Failed to add member to group', e);
+        navigation.goBack();
+      }
+      return;
+    }
     if (user.existingRoom) {
       navigate(user.existingRoom);
       return;
@@ -298,7 +323,7 @@ export default function NewChatScreen({ route, navigation }: any) {
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{item.name}</Text>
         <Text style={styles.userSub} numberOfLines={1}>
-          {item.lastMessage || item.email || ''}
+          {item.lastMessage || [item.voicePart, item.zoneName].filter(Boolean).join(' · ') || item.email || ''}
         </Text>
       </View>
       <View style={styles.rightCol}>

@@ -18,7 +18,7 @@ import { isHQGroup } from '../config/zones';
 import { useUserStore } from '../hooks/useUser';
 import { getHiddenFeatures } from '../config/roles';
 import { useZone } from '../hooks/useZone';
-import { optimizeAudio } from '../lib/mediaUtils';
+import { optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
 import { apiClient } from '../lib/apiClient';
 import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
@@ -193,28 +193,29 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       const mappedSongs = (rawSongs || [])
         .filter((song: any) => isHQ || !song.isHQOnly)
         .map((song: any, index: number) => {
-        const songAudioUrl = optimizeAudio(song.audioFile || song.audioUrls?.full || '');
-        return {
-          id: song.id || `song-${index}`,
-          title: song.title || 'Untitled Song',
-          subtitle: song.leadSinger || song.writer || 'Loveworld Singers',
-          program: song.praiseNightId || song.program || 'Loveworld Singers',
-          leadSinger: song.leadSinger || 'Unknown',
-          writer: song.writer || 'Unknown',
-          conductor: song.conductor || 'Evang. Kathy',
-          key: song.key || 'C Major',
-          tempo: song.tempo || '70 BPM',
-          category: song.category || 'Praise Night',
-          categories: song.categories || [song.category || 'Praise Night'],
-          audioUrl: songAudioUrl,
-          lyrics: song.lyrics || '',
-          solfa: song.notation || song.solfas || song.solfa || '',
-          audioUrls: song.audioUrls || {},
-          status: song.status || 'unheard',
-          isActive: song.isActive !== false,
-          rehearsalCount: getRehearsalCount(song),
-          conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
-          history: song.history || '',
+          const songAudioUrl = resolveSongAudioUrl(song);
+          const resolvedAudioUrls = resolveSongAudioUrls(song);
+          return {
+            id: song.id || `song-${index}`,
+            title: song.title || 'Untitled Song',
+            subtitle: song.leadSinger || song.writer || 'Loveworld Singers',
+            program: song.praiseNightId || song.program || 'Loveworld Singers',
+            leadSinger: song.leadSinger || 'Unknown',
+            writer: song.writer || 'Unknown',
+            conductor: song.conductor || 'Evang. Kathy',
+            key: song.key || 'C Major',
+            tempo: song.tempo || '70 BPM',
+            category: song.category || 'Praise Night',
+            categories: song.categories || [song.category || 'Praise Night'],
+            audioUrl: songAudioUrl,
+            lyrics: song.lyrics || '',
+            solfa: song.notation || song.solfas || song.solfa || '',
+            audioUrls: resolvedAudioUrls,
+            status: song.status || 'unheard',
+            isActive: song.isActive !== false,
+            rehearsalCount: getRehearsalCount(song),
+            conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
+            history: song.history || '',
           comments: song.comments || '',
           leadKeyboardist: song.leadKeyboardist || '',
           drummer: song.drummer || '',
@@ -227,16 +228,24 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         };
       });
 
+      const distinctCategories: string[] = Array.from(
+        new Set(
+          mappedSongs
+            .flatMap((s: any) => [s.program, s.category, ...(s.categories || [])])
+            .filter((x: any): x is string => Boolean(x) && typeof x === 'string' && x.trim().length > 0)
+        )
+      ).sort() as string[];
+
       setSongs(mappedSongs);
       setSingers([...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[]);
-      setPrograms(sortedPrograms);
-      setCategories([...new Set(mappedSongs.map((s: any) => s.category as string).filter(Boolean))].sort() as string[]);
+      setPrograms(distinctCategories);
+      setCategories(distinctCategories);
       setIsLoading(false);
 
       cachedSongs = mappedSongs;
       cachedSingers = [...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[];
-      cachedPrograms = sortedPrograms;
-      cachedCategories = [...new Set(mappedSongs.map((s: any) => s.category as string).filter(Boolean))].sort() as string[];
+      cachedPrograms = distinctCategories;
+      cachedCategories = distinctCategories;
 
       Promise.all([
         AsyncStorage.setItem(`MINISTERED_SONGS_CACHE_${resolvedZoneId}`, JSON.stringify(mappedSongs)),
@@ -293,14 +302,19 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     if (!t) return false;
     if (selectedSinger && t.leadSinger !== selectedSinger) return false;
     if (selectedProgramId) {
-      const selectedProgramObj = (programs || []).find((p: any) => p?.id === selectedProgramId);
-      if (selectedProgramObj && !selectedProgramObj.songIds?.includes(t.id)) return false;
+      const songProgram = (t.program || '').toLowerCase();
+      const songCategory = (t.category || '').toLowerCase();
+      const songCats = Array.isArray(t.categories) ? t.categories.map((c: any) => String(c || '').toLowerCase()) : [];
+      const target = selectedProgramId.toLowerCase();
+      const matches = songProgram === target || songCategory === target || songCats.includes(target);
+      if (!matches) return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (t.title?.toLowerCase() || '').includes(q) || 
              (t.leadSinger?.toLowerCase() || '').includes(q) || 
-             (t.program?.toLowerCase() || '').includes(q);
+             (t.program?.toLowerCase() || '').includes(q) ||
+             (t.category?.toLowerCase() || '').includes(q);
     }
     return true;
   }).sort((a, b) => {
@@ -354,7 +368,10 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             </Text>
             <TouchableOpacity
               style={{ backgroundColor: theme.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 }}
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                if (navigation.canGoBack()) navigation.goBack();
+                else navigation.navigate('Home');
+              }}
             >
               <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Go Back</Text>
             </TouchableOpacity>
@@ -378,7 +395,13 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
       <SafeAreaView style={{ flex: 1 }}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => { navigation.goBack(); }} style={s.backBtn}>
+          <TouchableOpacity
+            onPress={() => {
+              if (navigation.canGoBack()) navigation.goBack();
+              else navigation.navigate('Home');
+            }}
+            style={s.backBtn}
+          >
             <Ionicons name="chevron-back" size={28} color={theme.colors.textPrimary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>All Ministered Songs</Text>
@@ -720,7 +743,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={[s.modalTabText, filterTab === tab && s.modalTabTextActive]}>
-                    {tab === 'singer' ? 'Lead Singer' : 'Program'}
+                    {tab === 'singer' ? 'Lead Singer' : 'Program / Category'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -743,14 +766,14 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 ) : (
                   [null, ...programs].map(item => (
                     <TouchableOpacity
-                      key={item ? item.id : 'all'}
-                      style={[s.filterOption, selectedProgramId === (item ? item.id : null) && s.filterOptionActive]}
-                      onPress={() => { setSelectedProgramId(item ? item.id : null); }}
+                      key={item || 'all'}
+                      style={[s.filterOption, selectedProgramId === item && s.filterOptionActive]}
+                      onPress={() => { setSelectedProgramId(item); }}
                     >
-                      <Text style={[s.filterOptionText, selectedProgramId === (item ? item.id : null) && s.filterOptionTextActive]}>
-                        {item ? item.name : 'All Programs'}
+                      <Text style={[s.filterOptionText, selectedProgramId === item && s.filterOptionTextActive]}>
+                        {item || 'All Programs / Categories'}
                       </Text>
-                      {selectedProgramId === (item ? item.id : null) && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
+                      {selectedProgramId === item && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
                     </TouchableOpacity>
                   ))
                 )}

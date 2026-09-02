@@ -12,6 +12,8 @@ import {
   Alert,
   Modal,
   FlatList,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -85,11 +87,35 @@ export default function LoginScreen({ route, navigation }: any) {
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotStep, setForgotStep] = useState<'email' | 'otp' | 'password'>('email');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0); // seconds remaining before can resend
+  const [dbZones, setDbZones] = useState<any[]>([]);
 
   useEffect(() => {
     checkRememberedCredentials();
     checkBiometrics();
+    loadZones();
   }, []);
+
+  // Countdown timer for OTP resend cooldown
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setOtpCooldown(prev => {
+        if (prev <= 1) { clearInterval(timer); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [otpCooldown]);
+
+  const loadZones = async () => {
+    try {
+      const res = await apiClient.get<any>('/organizations');
+      if (res?.success && Array.isArray(res.data)) {
+        setDbZones(res.data);
+      }
+    } catch {}
+  };
 
   const checkRememberedCredentials = async () => {
     try {
@@ -343,12 +369,12 @@ export default function LoginScreen({ route, navigation }: any) {
         Alert.alert('Missing Fields', 'Please complete all required fields.');
         return;
       }
-      if (!zoneCode || zoneCode.length < 4) {
+      if (!zoneCode || zoneCode.length < 2) {
         Alert.alert('Select Zone', 'Please select your Choir Zone or enter a valid invitation code.');
         return;
       }
-      if (password.length < 6) {
-        Alert.alert('Weak Password', 'Password must be at least 6 characters.');
+      if (password.length < 8) {
+        Alert.alert('Weak Password', 'Password must be at least 8 characters.');
         return;
       }
 
@@ -399,30 +425,44 @@ export default function LoginScreen({ route, navigation }: any) {
     }
   };
 
+  const allZonesList = useMemo(() => {
+    return dbZones.length > 0 ? dbZones : ZONES;
+  }, [dbZones]);
+
   // Regional zones for "Browse" tab
   const filteredRegionalZones = useMemo(() => {
-    const list = ZONES.filter((z) => z.region !== 'Headquarters' && !isHQGroup(z.id) && z.id !== 'zone-boss');
+    const list = allZonesList.filter((z: any) => !z.isHq && z.id !== 'zone-boss');
     if (!zoneSearchQuery.trim()) return list;
     const q = zoneSearchQuery.toLowerCase().trim();
     return list.filter(
-      (z) =>
-        z.name.toLowerCase().includes(q) ||
-        z.region.toLowerCase().includes(q) ||
-        z.invitationCode.toLowerCase().includes(q)
+      (z: any) =>
+        (z.name?.toLowerCase() || '').includes(q) ||
+        (z.region?.toLowerCase() || '').includes(q) ||
+        (z.code?.toLowerCase() || '').includes(q) ||
+        (z.invitationCode?.toLowerCase() || '').includes(q)
     );
-  }, [zoneSearchQuery]);
+  }, [allZonesList, zoneSearchQuery]);
 
   // Invitation code lookup for "Invitation Code" tab
   const matchedInvitationZone = useMemo(() => {
     const code = invitationCodeInput.trim().toUpperCase();
-    if (!code || code.length < 4) return null;
-    return getZoneByInvitationCode(code);
-  }, [invitationCodeInput]);
+    if (!code || code.length < 2) return null;
+    return allZonesList.find((z: any) =>
+      (z.invitationCode && z.invitationCode.toUpperCase() === code) ||
+      (z.code && z.code.toUpperCase() === code) ||
+      (z.id && z.id.toUpperCase() === code)
+    ) || getZoneByInvitationCode(code);
+  }, [allZonesList, invitationCodeInput]);
 
   const selectedZoneObj = useMemo(() => {
     if (!zoneCode) return null;
-    return getZoneByInvitationCode(zoneCode);
-  }, [zoneCode]);
+    const clean = zoneCode.trim().toUpperCase();
+    return allZonesList.find((z: any) =>
+      (z.invitationCode && z.invitationCode.toUpperCase() === clean) ||
+      (z.code && z.code.toUpperCase() === clean) ||
+      (z.id && z.id.toUpperCase() === clean)
+    ) || getZoneByInvitationCode(zoneCode);
+  }, [allZonesList, zoneCode]);
 
   // Forgot Password Actions
   const handleSendOtp = async () => {
@@ -430,18 +470,42 @@ export default function LoginScreen({ route, navigation }: any) {
       Alert.alert('Invalid Email', 'Please enter a valid email address.');
       return;
     }
+    if (otpCooldown > 0) return; // guard — button should be disabled but just in case
+
     setForgotLoading(true);
     try {
-      const res = await apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password/send-otp', {
-        email: forgotEmail.trim().toLowerCase(),
-      });
+      const res = await apiClient.post<{ success: boolean; error?: string }>(
+        '/auth/forgot-password/send-otp',
+        { email: forgotEmail.trim().toLowerCase() },
+        20000, // 20s — enough time even on cold start
+      );
+
       if (res.success) {
+        setOtpCooldown(60); // 60s cooldown after every successful send
         setForgotStep('otp');
       } else {
-        Alert.alert('Error', res.error || 'Failed to send verification code');
+        const msg = res.error || '';
+        const isRateLimited = msg.toLowerCase().includes('too many');
+        if (isRateLimited) {
+          setOtpCooldown(60);
+          Alert.alert(
+            '⏳ Slow Down',
+            'You have requested too many codes. Please wait 60 seconds before trying again.',
+          );
+        } else {
+          Alert.alert('Error', msg || 'Failed to send verification code');
+        }
       }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to send OTP');
+      const msg = err?.message || '';
+      if (msg.includes('timed out') || msg.includes('AbortError')) {
+        Alert.alert(
+          'Server Busy',
+          'The server is starting up. Please wait a moment and tap Send again.',
+        );
+      } else {
+        Alert.alert('Error', msg || 'Failed to send code. Check your connection.');
+      }
     } finally {
       setForgotLoading(false);
     }
@@ -471,6 +535,10 @@ export default function LoginScreen({ route, navigation }: any) {
   };
 
   const handleResetPassword = async () => {
+    if (!forgotEmail.trim() || !forgotEmail.includes('@')) {
+      Alert.alert('Invalid Email', 'Please enter your registered email address.');
+      return;
+    }
     if (!forgotNewPassword || forgotNewPassword.length < 6) {
       Alert.alert('Weak Password', 'Password must be at least 6 characters.');
       return;
@@ -479,18 +547,22 @@ export default function LoginScreen({ route, navigation }: any) {
     try {
       const res = await apiClient.post<{ success: boolean; error?: string }>('/auth/reset-password', {
         email: forgotEmail.trim().toLowerCase(),
-        otp: forgotOtp.trim(),
-        newPassword: forgotNewPassword,
+        newPassword: forgotNewPassword.trim(),
+        password: forgotNewPassword.trim(),
       });
       if (res.success) {
+        setEmail(forgotEmail.trim().toLowerCase());
+        setPassword(forgotNewPassword);
         setShowForgotModal(false);
-        setForgotStep('email');
         setForgotEmail('');
-        setForgotOtp('');
         setForgotNewPassword('');
-        Alert.alert('Success', 'Your password has been reset! Please sign in.');
+        Alert.alert(
+          'Password Updated',
+          'Your password has been successfully updated! We have pre-filled your credentials so you can log in immediately.',
+          [{ text: 'Sign In', onPress: () => {} }]
+        );
       } else {
-        Alert.alert('Error', res.error || 'Failed to reset password');
+        Alert.alert('Reset Failed', res.error || 'Failed to reset password');
       }
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Password reset failed');
@@ -752,12 +824,18 @@ export default function LoginScreen({ route, navigation }: any) {
       {/* ========================================================================= */}
       <Modal
         visible={showZoneModal}
-        animationType="fade"
+        animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowZoneModal(false)}
+        onRequestClose={() => { Keyboard.dismiss(); setShowZoneModal(false); }}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowZoneModal(false); }}>
+            <View style={styles.modalBackdrop}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.modalCard}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 10 }}>
@@ -839,7 +917,7 @@ export default function LoginScreen({ route, navigation }: any) {
                       <TouchableOpacity
                         style={[styles.zoneListItem, isSelected && styles.zoneListItemSelected]}
                         onPress={() => {
-                          setZoneCode(item.invitationCode);
+                          setZoneCode(item.invitationCode || '');
                           setShowZoneModal(false);
                           setZoneSearchQuery('');
                         }}
@@ -911,7 +989,7 @@ export default function LoginScreen({ route, navigation }: any) {
                     <TouchableOpacity
                       style={styles.selectCodeBtn}
                       onPress={() => {
-                        setZoneCode(matchedInvitationZone.invitationCode);
+                        setZoneCode(matchedInvitationZone.invitationCode || '');
                         setShowZoneModal(false);
                         setInvitationCodeInput('');
                       }}
@@ -935,8 +1013,11 @@ export default function LoginScreen({ route, navigation }: any) {
                 ) : null}
               </View>
             )}
-          </View>
-        </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ========================================================================= */}
@@ -944,12 +1025,19 @@ export default function LoginScreen({ route, navigation }: any) {
       {/* ========================================================================= */}
       <Modal
         visible={showForgotModal}
-        animationType="fade"
+        animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowForgotModal(false)}
+        onRequestClose={() => { Keyboard.dismiss(); setShowForgotModal(false); setForgotStep('email'); }}
       >
-        <View style={styles.forgotBackdrop}>
-          <View style={styles.forgotCard}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.forgotBackdrop}>
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.forgotCard}>
             <View
               style={{
                 flexDirection: 'row',
@@ -962,85 +1050,53 @@ export default function LoginScreen({ route, navigation }: any) {
               <TouchableOpacity
                 onPress={() => {
                   setShowForgotModal(false);
-                  setForgotStep('email');
                 }}
               >
                 <Ionicons name="close" size={20} color="rgba(255,255,255,0.6)" />
               </TouchableOpacity>
             </View>
 
-            {forgotStep === 'email' && (
-              <>
-                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 12 }}>
-                  Enter your registered account email to receive a 6-digit verification code.
-                </Text>
-                <TextInput
-                  value={forgotEmail}
-                  onChangeText={setForgotEmail}
-                  placeholder="your-email@loveworld.org"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  style={styles.forgotInput}
-                />
-                <TouchableOpacity style={styles.forgotButton} onPress={handleSendOtp} disabled={forgotLoading}>
-                  {forgotLoading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.forgotButtonText}>Send Verification Code</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 16 }}>
+              Enter your registered account email and set your new password.
+            </Text>
 
-            {forgotStep === 'otp' && (
-              <>
-                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 12 }}>
-                  Enter the 6-digit OTP code sent to {forgotEmail}.
-                </Text>
-                <TextInput
-                  value={forgotOtp}
-                  onChangeText={setForgotOtp}
-                  placeholder="123456"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  style={[styles.forgotInput, { textAlign: 'center', fontSize: 20, letterSpacing: 6 }]}
-                />
-                <TouchableOpacity style={styles.forgotButton} onPress={handleVerifyOtp} disabled={forgotLoading}>
-                  {forgotLoading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.forgotButtonText}>Verify Code</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
+            <Text style={styles.inputLabel}>REGISTERED EMAIL</Text>
+            <TextInput
+              value={forgotEmail}
+              onChangeText={setForgotEmail}
+              placeholder="e.g. your-email@loveworld.org"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={[styles.forgotInput, { marginBottom: 14 }]}
+            />
 
-            {forgotStep === 'password' && (
-              <>
-                <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 12 }}>
-                  Enter your new secure password (min. 6 characters).
-                </Text>
-                <TextInput
-                  value={forgotNewPassword}
-                  onChangeText={setForgotNewPassword}
-                  placeholder="New password"
-                  placeholderTextColor="rgba(255,255,255,0.3)"
-                  secureTextEntry
-                  style={styles.forgotInput}
-                />
-                <TouchableOpacity style={styles.forgotButton} onPress={handleResetPassword} disabled={forgotLoading}>
-                  {forgotLoading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.forgotButtonText}>Update Password</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        </View>
+            <Text style={styles.inputLabel}>NEW PASSWORD</Text>
+            <TextInput
+              value={forgotNewPassword}
+              onChangeText={setForgotNewPassword}
+              placeholder="Min. 6 characters"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              secureTextEntry
+              style={[styles.forgotInput, { marginBottom: 20 }]}
+            />
+
+            <TouchableOpacity
+              style={[styles.forgotButton, forgotLoading && { opacity: 0.6 }]}
+              onPress={handleResetPassword}
+              disabled={forgotLoading}
+            >
+              {forgotLoading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.forgotButtonText}>Set New Password</Text>
+              )}
+            </TouchableOpacity>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* KingsChat Multi-Account Chooser Modal */}
