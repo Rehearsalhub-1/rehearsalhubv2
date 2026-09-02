@@ -339,22 +339,18 @@ function App() {
         debugSessionLog('H5', 'App.tsx:prepare:start', 'App prepare started', {
           appState: AppState.currentState,
         });
-        // Session restore: JWT + GET /auth/me only (no Firebase Auth fallback)
-        try {
-          const meResult = await apiClient.get<{ success: boolean; data?: { id: string } }>('/auth/me');
-          if (meResult.success && meResult.data?.id) {
-            setInitialRoute('Home');
-            debugSessionLog('H5', 'App.tsx:prepare:authMe', 'Initial route resolved from /auth/me', {
-              hasUser: true,
-            });
-            return;
-          }
-        } catch {
-          // Invalid/expired session — clear tokens and send to Login
+        // Unified Big Tech Bootstrap: ONE call to hydrate user and route
+        const isLoggedIn = await useUserStore.getState().bootstrap();
+        if (isLoggedIn) {
+          setInitialRoute('Home');
+          debugSessionLog('H5', 'App.tsx:prepare:bootstrap', 'User successfully bootstrapped — routing to Home', {
+            hasUser: true,
+          });
+          return;
         }
-        await clearTokens();
+
         setInitialRoute('Login');
-        debugSessionLog('H5', 'App.tsx:prepare:authMe', 'No valid JWT session — routing to Login', {
+        debugSessionLog('H5', 'App.tsx:prepare:bootstrap', 'No active session — routing to Login', {
           hasUser: false,
         });
       } catch (e) {

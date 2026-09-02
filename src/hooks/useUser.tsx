@@ -77,6 +77,7 @@ interface UserStore {
   refreshZones: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
+  bootstrap: () => Promise<boolean>;
 
   _initialize: () => () => void;
 }
@@ -229,15 +230,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
   subscription: null,
   isPremium: false,
 
-  _initialize: () => {
-
-    const init = async () => {
+  bootstrap: async () => {
+    try {
+      const { apiClient } = require('../lib/apiClient');
       const jwt = await SecureStore.getItemAsync('jwt');
-      const userId = await SecureStore.getItemAsync('userId');
-
-      if (!jwt || !userId) {
-
-        try { OneSignal.logout(); } catch {}
+      if (!jwt) {
         clearCache();
         set({
           user: null, isAuthenticated: false,
@@ -246,138 +243,83 @@ export const useUserStore = create<UserStore>((set, get) => ({
           isHQ: false, zoneVersion: 0,
           subscription: null, isPremium: false,
         });
-        return;
+        return false;
       }
 
-      const uid = userId;
-      set({ user: { uid, email: null }, isAuthenticated: true });
-
-      try {
-        OneSignal?.login?.(uid);
-
-        setTimeout(async () => {
-          try {
-            const subId = await OneSignal?.User?.pushSubscription?.getIdAsync?.();
-            if (subId) {
-              const { apiClient } = require('../lib/apiClient');
-              await apiClient.patch(`/profiles/${uid}/onesignal`, { subscription_id: subId }).catch(() => {});
-            }
-          } catch (e) {
-            // Silently ignore in Expo Go
-          }
-        }, 3000);
-      } catch (err) {
-        // Silently ignore in Expo Go
-      }
-
-      try {
-        const cached = await AsyncStorage.getItem(`user_context_cache_${uid}`);
-        if (cached) {
-          const { profile: cProfile, currentZone: cZone, userZones: cZones } = JSON.parse(cached);
-          set({
-            ...(cProfile ? { profile: cProfile } : {}),
-            ...(cZone ? { currentZone: cZone, isHQ: isHQGroup(cZone.id) } : {}),
-            ...(cZones?.length ? { userZones: cZones } : {}),
-            isProfileLoading: false,
-            isZoneLoading: false,
-          });
-        }
-      } catch {}
-      if (profileUnsub) { profileUnsub(); profileUnsub = null; }
-
-      const fetchAndApplyProfile = async () => {
+      // Fast restore from local cache for instant UI rendering
+      let localUserId = await SecureStore.getItemAsync('userId');
+      if (localUserId) {
         try {
-          const { apiClient } = require('../lib/apiClient');
-          const result = await apiClient.get(`/profiles/${uid}`);
-          if (!result.success || !result.data) {
-            set({ isProfileLoading: false, isZoneLoading: false });
-            return;
+          const cached = await AsyncStorage.getItem(`user_context_cache_${localUserId}`);
+          if (cached) {
+            const { profile: cProfile, currentZone: cZone, userZones: cZones } = JSON.parse(cached);
+            set({
+              user: { uid: localUserId, email: cProfile?.email || null },
+              isAuthenticated: true,
+              ...(cProfile ? { profile: cProfile } : {}),
+              ...(cZone ? { currentZone: cZone, isHQ: isHQGroup(cZone.id) } : {}),
+              ...(cZones?.length ? { userZones: cZones } : {}),
+              isProfileLoading: false,
+              isZoneLoading: false,
+            });
           }
-
-          const data = result.data;
-          const parsed = parseProfile(uid, data);
-          const { currentZone, subscription } = get();
-          const isPrem = checkPremium(
-            parsed.hasHqAccess,
-            currentZone?.id,
-            parsed.role,
-            parsed.administration,
-            subscription
-          );
-          set({ profile: parsed, isProfileLoading: false, isPremium: isPrem });
-          set({ user: { uid, email: data.email || null } });
-
-          const zoneCode = data.zone_code || '';
-          const resolved = getZoneByInvitationCode(zoneCode);
-          if (resolved) {
-            const prev = get().currentZone;
-            if (prev?.id !== resolved.id) {
-              const nextPremium = checkPremium(
-                parsed.hasHqAccess,
-                resolved.id,
-                parsed.role,
-                parsed.administration,
-                subscription
-              );
-              set(s => ({
-                currentZone: resolved,
-                isHQ: isHQGroup(resolved.id),
-                zoneVersion: s.zoneVersion + 1,
-                isPremium: nextPremium
-              }));
-            }
-          }
-
-          if (loadedForUser !== uid) {
-            loadedForUser = uid;
-            await loadZoneMemberships(uid, data, resolved || null);
-          } else if (resolved) {
-            const { userZones } = get();
-            if (!userZones.some(z => z.id === resolved.id)) {
-              set({ userZones: [...userZones, resolved] });
-            }
-          }
-
-          persistCache();
-        } catch (err) {
-          console.warn('[useUserStore] profile fetch error:', err);
-          set({ isProfileLoading: false, isZoneLoading: false });
-        }
-      };
-
-      await fetchAndApplyProfile();
-      if (subscriptionUnsub) { subscriptionUnsub(); subscriptionUnsub = null; }
-
-      try {
-        const { apiClient } = require('../lib/apiClient');
-        const subResult = await apiClient.get(`/subscriptions/${uid}`);
-        const subData = subResult.success ? subResult.data : null;
-        const { profile, currentZone } = get();
-        const isPrem = checkPremium(
-          profile?.hasHqAccess || false,
-          currentZone?.id,
-          profile?.role,
-          profile?.administration,
-          subData
-        );
-        set({
-          subscription: subData ? {
-            status: subData.status,
-            expiresAt: subData.expiresAt || null
-          } : null,
-          isPremium: isPrem
-        });
-      } catch (err) {
-        console.warn('[useUserStore] subscription fetch error:', err);
+        } catch {}
       }
-    };
 
-    init();
+      // Live unified bootstrap from GET /auth/me
+      const meRes: any = await apiClient.get('/auth/me');
+      if (meRes?.success && meRes?.data?.id) {
+        const data = meRes.data;
+        const uid = data.id;
+        await SecureStore.setItemAsync('userId', uid);
 
-    return () => {
-      if (profileUnsub) { profileUnsub(); profileUnsub = null; }
-      if (subscriptionUnsub) { subscriptionUnsub(); subscriptionUnsub = null; }
-    };
+        const parsed = parseProfile(uid, data);
+        const zoneCode = data.zone_code || data.zoneCode || data.zoneId || '';
+        const resolved = getZoneByInvitationCode(zoneCode);
+
+        const isPrem = checkPremium(
+          parsed.hasHqAccess,
+          resolved?.id || data.zoneId,
+          parsed.role,
+          parsed.administration,
+          null
+        );
+
+        set({
+          user: { uid, email: data.email || null },
+          isAuthenticated: true,
+          profile: parsed,
+          ...(resolved ? { currentZone: resolved, isHQ: isHQGroup(resolved.id) } : {}),
+          isProfileLoading: false,
+          isZoneLoading: false,
+          isPremium: isPrem,
+        });
+
+        if (loadedForUser !== uid) {
+          loadedForUser = uid;
+          await loadZoneMemberships(uid, data, resolved || null);
+        }
+
+        persistCache();
+
+        try {
+          OneSignal?.login?.(uid);
+        } catch {}
+
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      console.warn('[useUserStore] bootstrap network error:', err);
+      const current = get().user;
+      return !!current?.uid;
+    }
+  },
+
+  _initialize: () => {
+    get().bootstrap();
+    return () => {};
   },
 
   switchZone: async (zone) => {
