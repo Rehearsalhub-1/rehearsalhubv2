@@ -25,7 +25,7 @@ import { Image } from 'expo-image';
 import { darkTheme } from '../constants/Colors';
 import { ZONES, Zone, getZoneByInvitationCode, isHQGroup } from '../config/zones';
 import { BiometricService } from '../lib/biometrics';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { reinitializeUserStore, useUserStore } from '../hooks/useUser';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -110,7 +110,7 @@ export default function LoginScreen({ route, navigation }: any) {
 
   const loadZones = async () => {
     try {
-      const res = await apiClient.get<any>('/organizations');
+      const res = await api.zones.getAll();
       if (res?.success && Array.isArray(res.data)) {
         setDbZones(res.data);
       }
@@ -162,18 +162,11 @@ export default function LoginScreen({ route, navigation }: any) {
         return;
       }
 
-      const res = await apiClient.post<{
-        success: boolean;
-        data?: { accessToken: string; refreshToken: string; user?: any };
-        error?: string;
-      }>('/auth/login', {
-        identifier: creds.email,
-        password: creds.password,
-      });
+      const res = await api.auth.login(creds.email, creds.password);
 
       if (res.success && res.data) {
         const userId = res.data.user?.id || (res.data as any)?.userId || '';
-        await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
+        await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
         await useUserStore.getState().bootstrap();
         navigation.replace('Home');
       } else {
@@ -195,11 +188,7 @@ export default function LoginScreen({ route, navigation }: any) {
     if (!savedKcToken) return;
     setAccountSelectLoading(true);
     try {
-      const res = await apiClient.post<{
-        success: boolean;
-        data?: { accessToken: string; refreshToken: string; user?: any };
-        error?: string;
-      }>('/auth/kingschat-login', {
+      const res = await api.auth.kingschatLogin({
         accessToken: savedKcToken,
         selectedEmail: targetEmail,
         email: targetEmail,
@@ -207,7 +196,7 @@ export default function LoginScreen({ route, navigation }: any) {
 
       if (res.success && res.data) {
         const userId = res.data.user?.id || (res.data as any)?.userId || '';
-        await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
+        await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
         await useUserStore.getState().bootstrap();
         setMultipleAccounts(null);
         navigation.replace('Home');
@@ -254,19 +243,11 @@ export default function LoginScreen({ route, navigation }: any) {
           return;
         }
 
-        const res = await apiClient.post<{
-          success: boolean;
-          data?: { accessToken: string; refreshToken: string; user?: any };
-          code?: string;
-          accounts?: any[];
-          profile?: any;
-          kingschatUserId?: string;
-          error?: string;
-        }>('/auth/kingschat-login', { accessToken });
+        const res = await api.auth.kingschatLogin({ accessToken });
 
         if (res.success && res.data) {
           const userId = res.data.user?.id || (res.data as any)?.userId || '';
-          await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
+          await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
           reinitializeUserStore();
           navigation.replace('Home');
           return;
@@ -315,14 +296,7 @@ export default function LoginScreen({ route, navigation }: any) {
 
       setLoading(true);
       try {
-        const res = await apiClient.post<{
-          success: boolean;
-          data?: { accessToken: string; refreshToken: string; user?: any };
-          error?: string;
-        }>('/auth/login', {
-          identifier: email.trim(),
-          password: password,
-        });
+        const res = await api.auth.login(email.trim(), password);
 
         if (!res.success || !res.data) {
           Alert.alert('Sign In Failed', sanitizeError(res.error || 'Invalid credentials'));
@@ -331,7 +305,7 @@ export default function LoginScreen({ route, navigation }: any) {
         }
 
         const userId = res.data.user?.id || (res.data as any)?.userId || '';
-        await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
+        await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
 
         if (rememberMe) {
           await SecureStore.setItemAsync('remember_me_enabled', 'true');
@@ -380,12 +354,7 @@ export default function LoginScreen({ route, navigation }: any) {
 
       setLoading(true);
       try {
-        const res = await apiClient.post<{
-          success: boolean;
-          data?: { accessToken: string; refreshToken: string; user?: any };
-          pendingApproval?: boolean;
-          error?: string;
-        }>('/auth/register', {
+        const res = await api.auth.register({
           email: email.trim().toLowerCase(),
           password: password,
           first_name: firstName.trim(),
@@ -413,7 +382,7 @@ export default function LoginScreen({ route, navigation }: any) {
 
         if (res.data) {
           const userId = res.data.user?.id || (res.data as any)?.userId || '';
-          await apiClient.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
+          await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
           reinitializeUserStore();
           navigation.replace('Home');
         }
@@ -474,11 +443,7 @@ export default function LoginScreen({ route, navigation }: any) {
 
     setForgotLoading(true);
     try {
-      const res = await apiClient.post<{ success: boolean; error?: string }>(
-        '/auth/forgot-password/send-otp',
-        { email: forgotEmail.trim().toLowerCase() },
-        20000, // 20s — enough time even on cold start
-      );
+      const res = await api.auth.sendOtp(forgotEmail.trim().toLowerCase(), 20000);
 
       if (res.success) {
         setOtpCooldown(60); // 60s cooldown after every successful send
@@ -518,10 +483,7 @@ export default function LoginScreen({ route, navigation }: any) {
     }
     setForgotLoading(true);
     try {
-      const res = await apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password/verify-otp', {
-        email: forgotEmail.trim().toLowerCase(),
-        otp: forgotOtp.trim(),
-      });
+      const res = await api.auth.verifyOtp(forgotEmail.trim().toLowerCase(), forgotOtp.trim());
       if (res.success) {
         setForgotStep('password');
       } else {
@@ -545,7 +507,7 @@ export default function LoginScreen({ route, navigation }: any) {
     }
     setForgotLoading(true);
     try {
-      const res = await apiClient.post<{ success: boolean; error?: string }>('/auth/reset-password', {
+      const res = await api.auth.resetPassword({
         email: forgotEmail.trim().toLowerCase(),
         newPassword: forgotNewPassword.trim(),
         password: forgotNewPassword.trim(),

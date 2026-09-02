@@ -39,7 +39,7 @@ import { readCache, writeCache } from '../lib/screenCache';
 import { optimizeImage, optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { SongScheduleSheet } from '../components/SongScheduleSheet';
-import { apiClient, clearCache } from '../lib/apiClient';
+import { api, clearCache } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useProgramStore } from '../stores/programStore';
 
@@ -328,7 +328,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           let songDocData: any = null;
           for (const endpoint of endpoints) {
             try {
-              const res = await apiClient.get<{ success: boolean; data: any }>(endpoint);
+              const res = await api.songs.getEndpoint(endpoint);
               if (res?.success && res.data) {
                 songDocData = res.data;
                 break;
@@ -616,8 +616,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
         } else if (isSubgroupMode) {
           try {
             const [subgroupRehearsalsRes, userSubgroupsRes] = await Promise.all([
-              apiClient.get<{ success: boolean; data: any[] }>('/subgroups/member-rehearsals').catch(() => null),
-              apiClient.get<{ success: boolean; data: any[] }>('/subgroups/mine').catch(() => null),
+              api.programs.getMemberRehearsals().catch(() => null),
+              api.subgroups.mine().catch(() => null),
             ]);
 
             const userSubgroups = userSubgroupsRes?.data || [];
@@ -651,9 +651,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
             const [zoneResult, hqResult] = await Promise.all([
               !isHQ
-                ? apiClient.get<{ success: boolean; data: any[] }>(`/programs?zoneId=${encodeURIComponent(resolvedZoneId)}`).catch(() => null)
+                ? api.programs.getAll(resolvedZoneId).catch(() => null)
                 : Promise.resolve(null),
-              isHQ ? apiClient.get<{ success: boolean; data: any[] }>('/programs').catch(() => null) : Promise.resolve(null),
+              isHQ ? api.programs.getAll().catch(() => null) : Promise.resolve(null),
             ]);
 
             const processPages = (res: any) => {
@@ -749,7 +749,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         let isSongsFetchSuccessful = false;
         try {
           if (selectedRehearsal.id === 'fallback-ongoing') {
-            const result = await apiClient.get<any>(
+            const result = await api.songs.getEndpoint(
               `/songs/praise-night?zoneId=${encodeURIComponent(resolvedZoneId)}`
             ).catch(() => null);
             if (result?.success && Array.isArray(result.data)) {
@@ -759,8 +759,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
           } else if (selectedRehearsal.scope === 'subgroup' || selectedRehearsal.subGroupId || isSubgroupMode) {
             const targetSgId = selectedRehearsal.subGroupId || selectedRehearsal.sub_group_id || route?.params?.subgroupId;
             const [primarySgRes, altSgRes] = await Promise.all([
-              targetSgId ? apiClient.get<any>(`/subgroups/${encodeURIComponent(targetSgId)}/songs`).catch(() => null) : null,
-              targetSgId ? apiClient.get<any>(`/songs/subgroup?subGroupId=${encodeURIComponent(targetSgId)}`).catch(() => null) : null,
+              targetSgId ? api.subgroups.getSongs(targetSgId).catch(() => null) : null,
+              targetSgId ? api.songs.getSubgroupSongs({ subGroupId: targetSgId }).catch(() => null) : null,
             ]);
             const sgData = (primarySgRes?.success && Array.isArray(primarySgRes.data) && primarySgRes.data.length > 0)
               ? primarySgRes.data
@@ -780,14 +780,14 @@ export default function RehearsalScreen({ navigation, route }: any) {
               dbSongs = selectedRehearsal.songs;
               isSongsFetchSuccessful = true;
             } else {
-              const primary = await apiClient.get<any>(
+              const primary = await api.songs.getEndpoint(
                 `/songs/praise-night?programId=${encodeURIComponent(selectedRehearsal.id)}${effectiveZone}`
               ).catch(() => null);
               if (primary?.success && Array.isArray(primary.data) && primary.data.length > 0) {
                 dbSongs = primary.data;
                 isSongsFetchSuccessful = true;
               } else if (Array.isArray(selectedRehearsal.songIds) && selectedRehearsal.songIds.length > 0) {
-                const zoneRes = await apiClient.get<any>(`/songs/zone?zoneId=${encodeURIComponent(resolvedZoneId)}`).catch(() => null);
+                const zoneRes = await api.songs.getZoneSongs(resolvedZoneId).catch(() => null);
                 if (zoneRes?.success && Array.isArray(zoneRes.data)) {
                   dbSongs = zoneRes.data.filter((s: any) => selectedRehearsal.songIds.includes(s.id));
                   isSongsFetchSuccessful = true;

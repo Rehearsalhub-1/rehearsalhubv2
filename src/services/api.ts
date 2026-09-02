@@ -12,11 +12,17 @@ export const api = {
   auth: {
     me: () => apiClient.get<{ success: boolean; data: any }>('/auth/me'),
     login: (identifier: string, password: string) =>
-      apiClient.post<{ success: boolean; data: any }>('/auth/login', { identifier, password }),
+      apiClient.post<{ success: boolean; data?: any; error?: string }>('/auth/login', { identifier, password }),
     logout: (refreshToken?: string) =>
       apiClient.post<{ success: boolean }>('/auth/logout', { refreshToken }),
     storeTokens: (accessToken: string, refreshToken: string, userId: string = '') =>
       apiClient.storeTokens(accessToken, refreshToken, userId),
+    register: (data: Record<string, any>) =>
+      apiClient.post<any>('/auth/register', data),
+    kingschatLogin: (data: Record<string, any>) =>
+      apiClient.post<any>('/auth/kingschat-login', data),
+    sendOtp: (email: string, timeoutMs = 20000) =>
+      apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password/send-otp', { email }, timeoutMs),
     forgotPassword: (email: string) =>
       apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password', { email }),
     verifyOtp: (email: string, otp: string) =>

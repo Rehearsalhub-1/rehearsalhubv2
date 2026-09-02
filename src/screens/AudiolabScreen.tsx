@@ -32,7 +32,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useUserStore } from '../hooks/useUser';
 import { getHiddenFeatures } from '../config/roles';
-import { getAccessToken } from '../lib/apiClient';
+import { getAccessToken } from '../services/api';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
