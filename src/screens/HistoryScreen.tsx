@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
 import { LinearGradient } from 'expo-linear-gradient';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
@@ -84,7 +84,7 @@ export default function HistoryScreen({ route, navigation }: any) {
     setIsLoading(true);
     async function loadHistory() {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any[] }>(`/songs/history?songId=${encodeURIComponent(String(activeTrack.id).trim())}`);
+        const res = await api.songs.getHistory(String(activeTrack.id).trim());
         if (res?.success && Array.isArray(res.data)) {
           let entries = res.data;
           entries.sort((a: any, b: any) => {

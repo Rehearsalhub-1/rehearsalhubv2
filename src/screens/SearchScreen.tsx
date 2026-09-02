@@ -18,7 +18,7 @@ import { isHQGroup } from '../config/zones';
 import { useZone } from '../hooks/useZone';
 import { useUserStore } from '../hooks/useUser';
 import { optimizeAudio } from '../lib/mediaUtils';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -113,9 +113,9 @@ export default function SearchScreen({ navigation }: any) {
       const isHQ = isHQGroup(resolvedZoneId);
 
       const [songsResult, zoneSongsResult, subgroupResult] = await Promise.all([
-        apiClient.get<any>('/songs/master'),
-        !isHQ ? apiClient.get<any>(`/songs/zone?zoneId=${encodeURIComponent(resolvedZoneId)}`).catch(() => null) : Promise.resolve(null),
-        apiClient.get<any>(`/songs/subgroup?zoneId=${encodeURIComponent(resolvedZoneId)}`).catch(() => null),
+        api.songs.getMaster(),
+        !isHQ ? api.songs.getZoneSongs(resolvedZoneId).catch(() => null) : Promise.resolve(null),
+        api.songs.getSubgroupSongs({ zoneId: resolvedZoneId }).catch(() => null),
       ]);
       
       if (!isMountedRef.current) return;

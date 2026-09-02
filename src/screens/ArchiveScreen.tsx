@@ -21,7 +21,7 @@ import { BlurView } from 'expo-blur';
 import { isHQGroup } from '../config/zones';
 import { readCache, writeCache } from '../lib/screenCache';
 import { optimizeImage } from '../lib/mediaUtils';
-import { apiClient, clearCache } from '../lib/apiClient';
+import { api, clearCache } from '../services/api';
 import { useZone } from '../hooks/useZone';
 import { useUserStore } from '../hooks/useUser';
 import { isHQAdmin, canAccessArchive, getHiddenFeatures } from '../config/roles';
@@ -96,17 +96,9 @@ export default function ArchiveScreen({ navigation }: any) {
         
         const isHQ = isHQGroup(resolvedZoneId);
 
-        const categoriesUrl = isHQ 
-          ? `/categories/page` 
-          : `/categories/zone-page?zoneId=${encodeURIComponent(resolvedZoneId)}`;
-
-        const programsUrl = isHQ
-          ? `/programs`
-          : `/programs?zoneId=${encodeURIComponent(resolvedZoneId)}`;
-          
         const [categoriesResult, programsResult] = await Promise.all([
-          apiClient.get<any>(categoriesUrl).catch(() => null),
-          apiClient.get<any>(programsUrl).catch(() => null),
+          api.categories.getPage(isHQ ? undefined : resolvedZoneId).catch(() => null),
+          api.programs.getAll(isHQ ? undefined : resolvedZoneId).catch(() => null),
         ]);
 
         let fetchedCategories: any[] = categoriesResult?.success && Array.isArray(categoriesResult.data) ? categoriesResult.data : [];

@@ -27,6 +27,14 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}`),
     directory: (limit = 500) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}`),
+    getBirthdays: (zoneId?: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/profiles/birthdays${zoneId ? `?zoneId=${encodeURIComponent(zoneId)}` : ''}`),
+  },
+
+  // ── Events & Calendar ────────────────────────────────────────────────────
+  events: {
+    getUpcoming: (zoneId?: string) =>
+      apiClient.get<any>(`/upcoming-events${zoneId ? `?zoneId=${encodeURIComponent(zoneId)}` : ''}`),
   },
 
   // ── Songs & Master Library ───────────────────────────────────────────────
@@ -35,14 +43,38 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>(`/songs${params ? `?${params}` : ''}`),
     getById: (songId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/songs/${songId}`),
+    getMaster: () =>
+      apiClient.get<any>('/songs/master'),
     getMasterSongs: (params?: string) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/master-songs${params ? `?${params}` : ''}`),
+    getZoneSongs: (zoneId: string) =>
+      apiClient.get<any>(`/songs/zone?zoneId=${encodeURIComponent(zoneId)}`),
+    getSubgroupSongs: (params: { subGroupId?: string; zoneId?: string }) =>
+      apiClient.get<any>(`/songs/subgroup?${params.subGroupId ? `subGroupId=${encodeURIComponent(params.subGroupId)}` : `zoneId=${encodeURIComponent(params.zoneId || '')}`}`),
+    importFromMinistered: (songIds: string[]) =>
+      apiClient.post<{ success: boolean; message?: string }>('/songs/import-from-ministered', { songIds }),
     getPraiseNights: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/praise-nights'),
     getPraiseNightSongs: (praiseNightId: string) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/praise-night-songs?praiseNightId=${praiseNightId}`),
+    getHistory: (songId: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/songs/history?songId=${encodeURIComponent(songId)}`),
     getSchedule: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/schedule'),
+  },
+
+  // ── Programs & Rehearsals ────────────────────────────────────────────────
+  programs: {
+    getAll: (zoneId?: string) =>
+      apiClient.get<any>(zoneId ? `/programs?zoneId=${encodeURIComponent(zoneId)}` : '/programs'),
+    getMemberRehearsals: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/subgroups/member-rehearsals'),
+  },
+
+  // ── Categories ───────────────────────────────────────────────────────────
+  categories: {
+    getPage: (zoneId?: string) =>
+      apiClient.get<any>(zoneId ? `/categories/zone-page?zoneId=${encodeURIComponent(zoneId)}` : '/categories/page'),
   },
 
   // ── Song Submissions ──────────────────────────────────────────────────────
@@ -216,4 +248,5 @@ export const api = {
     apiClient.get<{ ok: boolean }>('/health').catch(() => null),
 };
 
+export { clearCache } from '../lib/apiClient';
 export default api;

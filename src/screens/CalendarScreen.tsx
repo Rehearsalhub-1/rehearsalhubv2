@@ -1,4 +1,4 @@
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect } from 'react';
 import {
@@ -231,7 +231,7 @@ export default function CalendarScreen({ route, navigation }: any) {
 
     const fetchEvents = async () => {
       try {
-        const res = await apiClient.get<any>(`/upcoming-events?zoneId=${encodeURIComponent(userZoneId)}`).catch(() => null);
+        const res = await api.events.getUpcoming(userZoneId).catch(() => null);
         if (!isMounted) return;
 
         let rawEvents: any[] = [];
@@ -314,7 +314,7 @@ export default function CalendarScreen({ route, navigation }: any) {
           }
         }
 
-        const profRes = await apiClient.get<{ success: boolean; data: any[] }>(`/profiles/birthdays?zoneId=${encodeURIComponent(userZoneId)}`).catch(() => null);
+        const profRes = await api.profiles.getBirthdays(userZoneId).catch(() => null);
         const rawBirthdays = profRes?.data || [];
         const now = new Date();
         const results: BirthdayUser[] = rawBirthdays.map((b: any) => {

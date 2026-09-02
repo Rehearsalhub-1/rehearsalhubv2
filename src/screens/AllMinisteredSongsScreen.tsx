@@ -19,7 +19,7 @@ import { useUserStore } from '../hooks/useUser';
 import { getHiddenFeatures } from '../config/roles';
 import { useZone } from '../hooks/useZone';
 import { optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 
@@ -153,8 +153,8 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       const isHQ = isHQGroup(resolvedZoneId);
 
       const [songsResult, programsResult] = await Promise.all([
-        apiClient.get<any>('/songs/master'),
-        apiClient.get<any>('/programs')
+        api.songs.getMaster(),
+        api.programs.getAll()
       ]);
       
       if (!isMountedRef.current) return;
@@ -272,7 +272,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     if (selectedTracks.size === 0) return;
     const songIds = Array.from(selectedTracks);
     try {
-      const res = await apiClient.post<{ success: boolean; message?: string }>('/songs/import-from-ministered', { songIds });
+      const res = await api.songs.importFromMinistered(songIds);
       if (res?.success) {
         Alert.alert('Imported', res.message || `${songIds.length} song(s) imported to repertoire.`);
         setIsSelectionMode(false);
