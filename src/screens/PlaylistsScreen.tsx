@@ -1,6 +1,6 @@
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { DoodleBackground } from '../components/DoodleBackground';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -88,7 +88,7 @@ export default function PlaylistsScreen({ navigation, route }: any) {
 
     const syncUserData = () => {
       // playlists sync
-      apiClient.get<{ success: boolean; data: any[] }>('/playlists/me').then(res => {
+      api.playlists.getAll().then(res => {
         if (res?.success && Array.isArray(res.data)) {
           setPlaylists(res.data);
           setIsLoadingTracks(false);
@@ -96,9 +96,10 @@ export default function PlaylistsScreen({ navigation, route }: any) {
       }).catch(() => setIsLoadingTracks(false));
 
       // favorites sync
-      apiClient.get<{ success: boolean; data: any }>('/favorites/me').then(res => {
+      api.favorites.getAll().then(res => {
         if (res && res.data) {
-          const songIds = Array.isArray(res.data.songs) ? res.data.songs : Array.isArray(res.data) ? res.data : [];
+          const raw = res.data as any;
+          const songIds = Array.isArray(raw) ? raw : Array.isArray(raw?.songs) ? raw.songs : [];
           setFavoriteIds(songIds);
         }
       }).catch(() => {});
@@ -163,7 +164,7 @@ export default function PlaylistsScreen({ navigation, route }: any) {
 
       // Also attempt to fetch latest from server if it has an id
       if (params.openPlaylistId && params.openPlaylistId !== 'favs') {
-        apiClient.get<{ success: boolean; data: any }>(`/playlists/${params.openPlaylistId}`)
+        api.playlists.getById(params.openPlaylistId)
           .then(res => {
             if (res?.data) {
               const p = res.data;
@@ -219,22 +220,13 @@ export default function PlaylistsScreen({ navigation, route }: any) {
       try {
         await Promise.all(missingIds.map(async (id) => {
           try {
-            const endpoints = [
-              `/songs/master/${encodeURIComponent(id)}`,
-              `/songs/praise-night/${encodeURIComponent(id)}`,
-              `/songs/zone/${encodeURIComponent(id)}`,
-              `/songs/${encodeURIComponent(id)}`,
-            ];
             let songData: any = null;
-            for (const ep of endpoints) {
-              try {
-                const res = await apiClient.get<{ success: boolean; data: any }>(ep);
-                if (res?.data) {
-                  songData = res.data;
-                  break;
-                }
-              } catch {}
-            }
+            try {
+              const res = await api.songs.getById(encodeURIComponent(id));
+              if (res?.data) {
+                songData = res.data;
+              }
+            } catch {}
 
             if (songData) {
               const data = songData;

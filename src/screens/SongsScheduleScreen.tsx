@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useZone } from '../hooks/useZone';
 import { isHQGroup } from '../config/zones';
 import { DoodleBackground } from '../components/DoodleBackground';
@@ -413,7 +413,7 @@ export default function SongsScheduleScreen({ navigation }: any) {
     loadCache();
     const fetchSchedules = async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any[] }>('/schedule');
+        const res = await api.songs.getSchedule();
         if (res?.success && Array.isArray(res.data) && isMounted) {
           const fetched = res.data;
           fetched.sort((a, b) => {

@@ -1,6 +1,6 @@
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
@@ -72,7 +72,7 @@ export default function SubmitSongScreen({ navigation }: any) {
     if (!user) return;
     setLoadingSubmissions(true);
     try {
-      const res = await apiClient.get<any>('/submissions/mine');
+      const res: any = await api.submissions.mine();
       const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.items) ? res.items : [];
       setMySubmissions(items);
     } catch (e) {
@@ -161,10 +161,10 @@ export default function SubmitSongScreen({ navigation }: any) {
       };
 
       if (editingSubmission) {
-        await apiClient.patch(`/submissions/${editingSubmission.id}`, submissionData);
+        await api.submissions.update(editingSubmission.id, submissionData);
         Alert.alert('Success', 'Submission updated successfully!');
       } else {
-        await apiClient.post('/submissions', submissionData);
+        await api.submissions.create(submissionData);
         Alert.alert('Success', 'Song submitted successfully!');
       }
 
@@ -187,7 +187,7 @@ export default function SubmitSongScreen({ navigation }: any) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await apiClient.delete(`/submissions/${id}`);
+            await api.submissions.delete(id);
             setMySubmissions(prev => prev.filter(s => s.id !== id));
           } catch (e) {
             Alert.alert('Error', 'Failed to delete submission');
@@ -213,7 +213,7 @@ export default function SubmitSongScreen({ navigation }: any) {
       };
 
       const existingConversation = replyingTo.conversation || [];
-      await apiClient.patch(`/submissions/${replyingTo.id}`, {
+      await api.submissions.update(replyingTo.id, {
         conversation: [...existingConversation, newMessage]
       });
 

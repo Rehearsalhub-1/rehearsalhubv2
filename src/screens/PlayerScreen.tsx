@@ -43,7 +43,7 @@ import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { useAnnotationsAndNotes } from '../hooks/useAnnotationsAndNotes';
 import { SongScheduleSheet } from '../components/SongScheduleSheet';
 import { useUserStore } from '../hooks/useUser';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -637,8 +637,8 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (!newPlaylistName.trim()) return;
     setIsCreatingPlaylist(true);
     try {
-      await apiClient.post('/playlists', { name: newPlaylistName.trim() });
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/playlists/me');
+      await api.playlists.create({ name: newPlaylistName.trim() });
+      const res = await api.playlists.getAll();
       if (res?.data) setPlaylists(res.data);
       setNewPlaylistName('');
     } catch {}
@@ -648,7 +648,7 @@ export default function PlayerScreen({ route, navigation }: any) {
   const handleAddToPlaylist = async (playlistId: string) => {
     if (!activeTrack?.id) return;
     try {
-      await apiClient.post(`/playlists/${playlistId}/songs`, { songId: activeTrack.id });
+      await api.playlists.addSong(playlistId, activeTrack.id);
       Alert.alert('Success', 'Added to playlist');
       setShowPlaylistModal(false);
     } catch {}
@@ -656,7 +656,7 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (!user) return;
-    apiClient.get<{ success: boolean; data: any[] }>('/playlists/me').then(res => {
+    api.playlists.getAll().then(res => {
       if (res?.success && Array.isArray(res.data)) setPlaylists(res.data);
     }).catch(() => {});
   }, [user]);
@@ -666,9 +666,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     try {
       setIsFavorite(prev => !prev);
       if (isFavorite) {
-        await apiClient.delete(`/favorites/${activeTrack.id}`).catch(() => {});
+        await api.favorites.remove(activeTrack.id).catch(() => {});
       } else {
-        await apiClient.post('/favorites', { songId: activeTrack.id }).catch(() => {});
+        await api.favorites.add(activeTrack.id).catch(() => {});
       }
     } catch (err) {
       console.error('Error toggling favorite:', err);
