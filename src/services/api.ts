@@ -39,6 +39,20 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>('/praise-nights'),
     getPraiseNightSongs: (praiseNightId: string) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/praise-night-songs?praiseNightId=${praiseNightId}`),
+    getSchedule: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/schedule'),
+  },
+
+  // ── Song Submissions ──────────────────────────────────────────────────────
+  submissions: {
+    mine: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/submissions/mine'),
+    create: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data: any }>('/submissions', data),
+    update: (id: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean; data: any }>(`/submissions/${id}`, data),
+    delete: (id: string) =>
+      apiClient.delete<{ success: boolean }>(`/submissions/${id}`),
   },
 
   // ── Favorites (Liked Songs) ───────────────────────────────────────────────
@@ -75,6 +89,8 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>('/chats'),
     getById: (chatId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/chats/${chatId}`),
+    create: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data: any }>('/chats', data),
     getMessages: (chatId: string, limit = 50) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/chats/${chatId}/messages?limit=${limit}`),
     sendMessage: (chatId: string, message: Record<string, any>) =>
@@ -85,14 +101,54 @@ export const api = {
       apiClient.delete<{ success: boolean }>(`/chats/${chatId}/messages`),
   },
 
+  // ── Statuses (Stories) ───────────────────────────────────────────────────
+  statuses: {
+    getAll: () =>
+      apiClient.get<{ success: boolean; data?: any[] }>('/statuses'),
+    create: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data?: any }>('/statuses', data),
+    view: (statusId: string) =>
+      apiClient.post<{ success: boolean }>(`/statuses/${encodeURIComponent(statusId)}/view`).catch(() => {}),
+    like: (statusId: string) =>
+      apiClient.post<{ success: boolean; data: any }>(`/statuses/${encodeURIComponent(statusId)}/like`).catch(() => {}),
+    delete: (statusId: string) =>
+      apiClient.delete<{ success: boolean }>(`/statuses/${encodeURIComponent(statusId)}`).catch(() => {}),
+  },
+
+  // ── Subgroups & Churches ─────────────────────────────────────────────────
+  subgroups: {
+    getAll: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/subgroups'),
+    mine: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/subgroups/mine'),
+    coordinated: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/subgroups/coordinated'),
+    getSongs: (subgroupId: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/subgroups/${subgroupId}/songs`),
+    getMembers: (subgroupId: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/subgroups/${subgroupId}/members`),
+    addMember: (data: { subGroupId: string; userId: string; role?: string; addedBy?: string }) =>
+      apiClient.post<{ success: boolean }>('/subgroups/members', data),
+    removeMember: (subgroupId: string, userId: string) =>
+      apiClient.delete<{ success: boolean }>(`/subgroups/members?subGroupId=${subgroupId}&userId=${userId}`),
+    createSong: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data?: any }>('/subgroups/songs', data),
+    updateSong: (songId: string, data: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/subgroups/songs/${songId}`, data),
+    deleteSong: (songId: string) =>
+      apiClient.delete<{ success: boolean }>(`/subgroups/songs/${songId}`),
+    requestJoin: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean }>('/subgroups/requests', data),
+  },
+
   // ── Organizations & Zones ────────────────────────────────────────────────
   zones: {
     getAll: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/organizations'),
     join: (invitationCode: string) =>
       apiClient.post<{ success: boolean; message?: string }>('/members/zone-join', { invitationCode }),
-    getMySubgroups: () =>
-      apiClient.get<{ success: boolean; data: any[] }>('/subgroups/mine'),
+    leave: (membershipId: string) =>
+      apiClient.delete<{ success: boolean }>(`/members/zone/${membershipId}`),
   },
 
   // ── Attendance ───────────────────────────────────────────────────────────
@@ -101,6 +157,22 @@ export const api = {
       apiClient.post<{ success: boolean; data: any }>('/attendance/check-in', data),
     getMyRecords: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/attendance/my-records'),
+    clockIn: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; data?: any }>('/attendance', data),
+  },
+
+  // ── Notifications ────────────────────────────────────────────────────────
+  notifications: {
+    getAll: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/notifications'),
+    send: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean }>('/notifications', data),
+  },
+
+  // ── Settings (KV Store) ──────────────────────────────────────────────────
+  settings: {
+    get: (docId: string) =>
+      apiClient.get<{ success: boolean; data: any }>(`/settings/${docId}`),
   },
 };
 
