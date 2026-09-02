@@ -1,5 +1,5 @@
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
@@ -134,7 +134,7 @@ export default function SettingsScreen({ navigation }: any) {
   }, [contextProfile, songsCount]);
   useEffect(() => {
     if (!currentUser?.uid) return;
-    apiClient.get<{ success: boolean; data: any[] }>('/favorites/me').then(res => {
+    api.favorites.getAll().then(res => {
         if (res?.success && Array.isArray(res.data)) {
           setFavoritesCount(res.data.length);
         }
@@ -175,7 +175,7 @@ export default function SettingsScreen({ navigation }: any) {
     if (!currentUser) return;
     setLoadingSubgroups(true);
     try {
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/subgroups/mine').catch(() => null);
+      const res = await api.subgroups.mine().catch(() => null);
       setUserSubgroups(res?.data || []);
     } catch (e) {
       console.error('Failed to load subgroups:', e);
@@ -196,7 +196,7 @@ export default function SettingsScreen({ navigation }: any) {
     if (!currentUser) return;
     setLoadingAttendance(true);
     try {
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/attendance/mine').catch(() => null);
+      const res = await api.attendance.getMyRecords().catch(() => null);
       const rawRecords = res?.data || [];
       const records = rawRecords.map((r: any) => {
         const rawDate = r.checkInTime || r.check_in_time || r.timestamp || r.createdAt || r.created_at || r.dateString || r.date_string;
@@ -226,7 +226,7 @@ export default function SettingsScreen({ navigation }: any) {
       const docId = currentZone?.id
         ? isHQGroup(currentZone.id) ? 'geofence_hq' : `geofence_${currentZone.id}`
         : 'geofence';
-      const res = await apiClient.get<{ success: boolean; data: any }>(`/settings/${docId}`).catch(() => null);
+      const res = await api.settings.get(docId).catch(() => null);
 
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -267,7 +267,7 @@ export default function SettingsScreen({ navigation }: any) {
         }
       }
 
-      await apiClient.post('/attendance', {
+      await api.attendance.clockIn({
         userId: currentUser?.uid || "",
         userName: [profile.firstName, profile.lastName].filter(Boolean).join(' '),
         status: 'present',
@@ -331,7 +331,7 @@ export default function SettingsScreen({ navigation }: any) {
         administration: editForm.administration.trim(),
       };
       
-      await apiClient.patch(`/profiles/${currentUser?.uid || ""}`, updates);
+      await api.profiles.update(currentUser?.uid || "", updates);
       
       setProfile(p => ({
         ...p,
@@ -367,7 +367,7 @@ export default function SettingsScreen({ navigation }: any) {
       setUploadingAvatar(true);
       const url = await uploadImageToCloudinary(result.assets[0].uri);
       // Profile photo updated
-      await apiClient.patch(`/profiles/${currentUser?.uid || ""}`, { profile_image_url: url });
+      await api.profiles.update(currentUser?.uid || "", { profile_image_url: url });
       await refreshProfile();
       setProfile(p => ({ ...p, avatar: url }));
       showToast('Photo updated ✓');
@@ -379,7 +379,7 @@ export default function SettingsScreen({ navigation }: any) {
     if (!subgroupRequest.trim() || !currentUser) return;
     setSubmittingSubgroup(true);
     try {
-      await apiClient.post('/subgroups/requests', {
+      await api.subgroups.requestJoin({
         userId: currentUser?.uid || "",
         userName: [profile.firstName, profile.lastName].filter(Boolean).join(' '),
         createdAt: new Date().toISOString(),
@@ -399,7 +399,7 @@ export default function SettingsScreen({ navigation }: any) {
       { text: 'Leave Zone', style: 'destructive', onPress: async () => {
           try {
             if (zone.membershipId) {
-              await apiClient.delete(`/members/zone/${zone.membershipId}`);
+              await api.zones.leave(zone.membershipId);
               showToast(`Left ${zone.name || 'zone'}`);
               await refreshZones(); // Refresh global zone context
             }

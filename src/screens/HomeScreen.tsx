@@ -1,5 +1,5 @@
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { DoodleBackground } from '../components/DoodleBackground';
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import {
@@ -197,7 +197,7 @@ export default function HomeScreen({ navigation }: any) {
           setIsSubGroupCoordinator(true);
           return;
         }
-        const res = await apiClient.get<{ success: boolean; data: any[] }>('/subgroups/coordinated').catch(() => null);
+        const res = await api.subgroups.coordinated().catch(() => null);
         const isCoord = Array.isArray(res?.data) && res.data.length > 0;
         setIsSubGroupCoordinator(isCoord);
       } catch (e: any) {
@@ -216,7 +216,7 @@ export default function HomeScreen({ navigation }: any) {
     const uid = user?.uid;
     if (!uid || !isFocused) return;
 
-    apiClient.get<{ success: boolean; data: any[] }>('/notifications').then(res => {
+    api.notifications.getAll().then(res => {
       if (res?.data && Array.isArray(res.data)) {
         const unread = res.data.filter((n: any) => !n.is_read).length;
         setUnreadCount(unread);

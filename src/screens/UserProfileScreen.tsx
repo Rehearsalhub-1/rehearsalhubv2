@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useUser, useUserStore } from '../hooks/useUser';
@@ -18,6 +18,7 @@ export default function UserProfileScreen() {
   const navigation = useNavigation<any>();
   const { theme } = useTheme();
   const currentUser = useUserStore(s => s.user);
+  const currentProfile = useUserStore(s => s.profile);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,9 +26,16 @@ export default function UserProfileScreen() {
   const T = theme.colors;
 
   useEffect(() => {
+    // Fast path: if viewing own profile, load immediately from store with 0 network calls!
+    if (currentUser?.uid && userId === currentUser.uid && currentProfile) {
+      setProfile(currentProfile);
+      setLoading(false);
+      return;
+    }
+
     const fetchProfile = async () => {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any }>(`/profiles/${userId}`);
+        const res = await api.profiles.get(userId);
         if (res?.success && res.data) {
           const data = res.data;
           const fullName = `${data.first_name || data.firstName || ''} ${data.last_name || data.lastName || ''}`.trim() || data.displayName || data.name || 'Unknown User';
