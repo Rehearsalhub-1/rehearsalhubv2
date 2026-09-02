@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { apiClient } from '../lib/apiClient';
 
 interface AnnotationStore {
   strokes: any[];
