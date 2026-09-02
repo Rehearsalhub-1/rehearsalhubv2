@@ -110,7 +110,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
   const handleMuteToggle = async (value: boolean) => {
     setMuted(value);
     try {
-      await api.chats.clearMessages(room.id).catch(() => {});
+      await api.chats.updateChat(room.id, { muted: value }).catch(() => {});
     } catch (e) {
       console.error('Failed to update mute state:', e);
       setMuted(!value); // revert on error
@@ -123,10 +123,8 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     try {
       const snap = { docs: [] };
       const allMsg: any[] = [];
-      allMsg.sort((a: any, b: any) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
-
       setMediaMessages(allMsg.filter(d => ['image', 'video'].includes(d.type)));
-      setDocMessages(allMsg.filter(d => ['document', 'audio', 'song_share', 'playlist_share'].includes(d.type)));
+      setDocMessages(allMsg.filter(d => ['document', 'file', 'pdf'].includes(d.type)));
       setLinkMessages(allMsg.filter(d => d.type === 'text' && (d.text?.includes('http://') || d.text?.includes('https://'))));
     } catch (e) {
       console.error('Failed to load media:', e);
@@ -165,21 +163,12 @@ export default function ChatInfoScreen({ route, navigation }: any) {
       {
         text: 'Leave', style: 'destructive', onPress: async () => {
           try {
-            const cRes = await api.chats.getById(room.id).catch(() => null);
-            const chatDoc = { exists: () => !!cRes?.data, data: () => cRes?.data || {} };
-            if (!chatDoc.exists()) return;
-            const data = chatDoc.data();
-            const newParticipants = (data.participants || []).filter((id: string) => id !== currentUser.uid);
-            const newDetails = { ...data.participantDetails };
-            delete newDetails[currentUser.uid];
+            await api.chats.removeParticipant(room.id, currentUser.uid).catch(() => {});
+            await api.chats.leave(room.id, currentUser.uid).catch(() => {});
 
             const profile = useUserStore.getState().profile;
-            const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || (currentUser as any)?.displayName || (currentUser as any)?.name || "Someone" || 'Someone' : (currentUser as any)?.displayName || (currentUser as any)?.name || "Someone" || 'Someone';
-            const leaveText = `${myName} left the group`;
-
-            await api.chats.updateChat(room.id, { participants: newParticipants }).catch(() => {});
-
-            await api.chats.sendMessage(room.id, { content: 'Updated members', type: 'system' }).catch(() => {});
+            const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || (currentUser as any)?.displayName || (currentUser as any)?.name || 'Someone' : 'Someone';
+            await api.chats.sendMessage(room.id, { content: `${myName} left the group`, type: 'system' }).catch(() => {});
 
             navigation.navigate('ChatRooms');
           } catch { Alert.alert('Error', 'Failed to leave group'); }
@@ -196,14 +185,15 @@ export default function ChatInfoScreen({ route, navigation }: any) {
 
   const toggleAdmin = async (member: { id: string; name: string; role?: string }) => {
     try {
+      const newRole = member.role === 'Admin' ? 'member' : 'admin';
+      await api.chats.setParticipantRole(room.id, member.id, newRole).catch(() => {});
       const cRes = await api.chats.getById(room.id).catch(() => null);
-      const chatDoc = { exists: () => !!cRes?.data, data: () => cRes?.data || {} };
-      if (!chatDoc.exists()) return;
-      const admins = chatDoc.data().admins || [];
+      const admins = cRes?.data?.admins || [];
       const newAdmins = member.role === 'Admin' ? admins.filter((a: string) => a !== member.id) : [...admins, member.id];
       await api.chats.updateChat(room.id, { admins: newAdmins }).catch(() => {});
-      
-      await api.chats.sendMessage(room.id, { content: 'Updated members', type: 'system' }).catch(() => {});
+      setMembers(prev => prev.map(m => m.id === member.id ? { ...m, role: newRole === 'admin' ? 'Admin' : 'Member' } : m));
+      setSelectedMember(null);
+      await api.chats.sendMessage(room.id, { content: `${newRole === 'admin' ? 'Promoted' : 'Dismissed'} ${member.name} as admin`, type: 'system' }).catch(() => {});
     } catch (e) {
       Alert.alert('Error', 'Failed to update admin status');
     }
@@ -214,16 +204,15 @@ export default function ChatInfoScreen({ route, navigation }: any) {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
         try {
+          await api.chats.removeParticipant(room.id, member.id);
           const cRes = await api.chats.getById(room.id).catch(() => null);
-          const chatDoc = { exists: () => !!cRes?.data, data: () => cRes?.data || {} };
-          if (!chatDoc.exists()) return;
-          const data = chatDoc.data();
-          const newParticipants = (data.participants || []).filter((id: string) => id !== member.id);
-          const newDetails = { ...data.participantDetails };
-          delete newDetails[member.id];
-          await api.chats.updateChat(room.id, { participants: newParticipants }).catch(() => {});
-
-          await api.chats.sendMessage(room.id, { content: 'Updated members', type: 'system' }).catch(() => {});
+          const currentAdmins = cRes?.data?.admins || [];
+          if (currentAdmins.includes(member.id)) {
+            await api.chats.updateChat(room.id, { admins: currentAdmins.filter((a: string) => a !== member.id) }).catch(() => {});
+          }
+          setMembers(prev => prev.filter(m => m.id !== member.id));
+          setSelectedMember(null);
+          await api.chats.sendMessage(room.id, { content: `Removed ${member.name} from the group`, type: 'system' }).catch(() => {});
         } catch (e) {
           Alert.alert('Error', 'Failed to remove member');
         }

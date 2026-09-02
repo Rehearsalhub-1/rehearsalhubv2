@@ -380,14 +380,17 @@ export default function SettingsScreen({ navigation }: any) {
     setSubmittingSubgroup(true);
     try {
       await api.subgroups.requestJoin({
+        name: subgroupRequest.trim(),
+        churchName: subgroupRequest.trim(),
         userId: currentUser?.uid || "",
         userName: [profile.firstName, profile.lastName].filter(Boolean).join(' '),
         createdAt: new Date().toISOString(),
       });
       setSubgroupRequest('');
-      Alert.alert('Request Submitted', 'Your subgroup request has been sent to the coordinators for approval.');
+      Alert.alert('Request Submitted', 'Your church request has been sent to the coordinators for approval.');
+      await loadSubgroups();
     } catch (e) {
-      Alert.alert('Error', 'Failed to submit request.');
+      Alert.alert('Error', 'Failed to submit church request.');
     } finally {
       setSubmittingSubgroup(false);
     }
@@ -761,15 +764,15 @@ export default function SettingsScreen({ navigation }: any) {
                       <View style={s.subgroupEmptyIcon}>
                         <Ionicons name="information" size={24} color={T.textSecondary} />
                       </View>
-                      <Text style={s.subgroupEmptyTxt}>You haven't joined any subgroups yet.</Text>
+                      <Text style={s.subgroupEmptyTxt}>You haven't joined any churches yet.</Text>
                     </View>
                   )}
                   <View style={s.requestSubgroupWrap}>
-                    <Text style={s.requestSubgroupTitle}>Request to join a subgroup</Text>
+                    <Text style={s.requestSubgroupTitle}>Request to join a church</Text>
                     <View style={s.requestInputRow}>
                       <TextInput
                         style={s.requestInput}
-                        placeholder="e.g. Protocol, Sound, Media"
+                        placeholder="e.g. Christ Embassy Airport City, CE Cape Town..."
                         placeholderTextColor={T.inputPlaceholder}
                         value={subgroupRequest}
                         onChangeText={setSubgroupRequest}
