@@ -15,6 +15,14 @@ export const api = {
       apiClient.post<{ success: boolean; data: any }>('/auth/login', { identifier, password }),
     logout: (refreshToken?: string) =>
       apiClient.post<{ success: boolean }>('/auth/logout', { refreshToken }),
+    storeTokens: (accessToken: string, refreshToken: string, userId: string = '') =>
+      apiClient.storeTokens(accessToken, refreshToken, userId),
+    forgotPassword: (email: string) =>
+      apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password', { email }),
+    verifyOtp: (email: string, otp: string) =>
+      apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password/verify-otp', { email, otp }),
+    resetPassword: (data: Record<string, any>) =>
+      apiClient.post<{ success: boolean; error?: string }>('/auth/reset-password', data),
   },
 
   // ── Profiles ─────────────────────────────────────────────────────────────
@@ -61,6 +69,8 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>(`/songs/history?songId=${encodeURIComponent(songId)}`),
     getSchedule: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/schedule'),
+    getEndpoint: (endpoint: string) =>
+      apiClient.get<any>(endpoint),
   },
 
   // ── Programs & Rehearsals ────────────────────────────────────────────────
@@ -215,12 +225,38 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>('/notifications'),
     send: (data: Record<string, any>) =>
       apiClient.post<{ success: boolean }>('/notifications', data),
+    markRead: (id: string, is_read = true) =>
+      apiClient.patch<{ success: boolean }>(`/notifications/${id}`, { is_read }),
+    delete: (id: string) =>
+      apiClient.delete<{ success: boolean }>(`/notifications/${id}`),
+    markAllRead: () =>
+      apiClient.patch<{ success: boolean }>('/notifications/read-all', {}),
   },
 
   // ── Settings (KV Store) ──────────────────────────────────────────────────
   settings: {
     get: (docId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/settings/${docId}`),
+  },
+
+  // ── Media Library ────────────────────────────────────────────────────────
+  media: {
+    getAll: (zoneId?: string, limit = 50) =>
+      apiClient.get<any>(`/media?limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`),
+    getCategories: () =>
+      apiClient.get<any>('/media/categories'),
+  },
+
+  // ── Lexicon & AI ─────────────────────────────────────────────────────────
+  lexicon: {
+    chat: (messages: any[]) =>
+      apiClient.post<any>('/lexicon/chat', { messages }),
+  },
+
+  // ── Links ────────────────────────────────────────────────────────────────
+  links: {
+    getAll: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/links'),
   },
 
   // ── Calls ───────────────────────────────────────────────────────────────
@@ -248,5 +284,5 @@ export const api = {
     apiClient.get<{ ok: boolean }>('/health').catch(() => null),
 };
 
-export { clearCache } from '../lib/apiClient';
+export { clearCache, getAccessToken } from '../lib/apiClient';
 export default api;

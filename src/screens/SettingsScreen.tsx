@@ -992,21 +992,33 @@ export default function SettingsScreen({ navigation }: any) {
               <View style={s.sectionContent}>
                 <View style={s.row}>
                   <View style={{ flex: 1, paddingLeft: 12 }}>
-                    <Text style={s.rowLabel}>Current Status</Text>
-                    <Text style={{ color: isPremium ? T.success : T.textSecondary, fontSize: 13, marginTop: 4, fontWeight: '600' }}>
+                    <Text style={s.rowLabel}>Payment & Subscription Status</Text>
+                    <Text style={{ color: isPremium ? T.success : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? '#EF4444' : T.textSecondary), fontSize: 13, marginTop: 4, fontWeight: '600' }}>
                       {isPremium ? (
-                        subscription?.expiresAt ? `Premium (Expires ${new Date(subscription.expiresAt).toLocaleDateString()})` : 'Premium (Complimentary Access)'
-                      ) : 'Free Tier'}
+                        subscription?.expiresAt ? `Paid / Active (Expires ${new Date(subscription.expiresAt).toLocaleDateString()})` : 'Paid / Active (Full Access)'
+                      ) : (
+                        subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? `Expired on ${new Date(subscription.expiresAt).toLocaleDateString()}` : 'Unpaid / Standard'
+                      )}
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    style={{ backgroundColor: T.accent, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 }}
-                    onPress={() => navigation.navigate('Payment')}
+                  <View
+                    style={{
+                      backgroundColor: isPremium ? 'rgba(34,197,94,0.15)' : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? 'rgba(239,68,68,0.15)' : 'rgba(124,58,237,0.12)'),
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 10,
+                    }}
                   >
-                    <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>
-                      {isPremium ? 'Manage' : 'Upgrade'}
+                    <Text
+                      style={{
+                        color: isPremium ? T.success : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? '#EF4444' : T.accent),
+                        fontWeight: '700',
+                        fontSize: 12,
+                      }}
+                    >
+                      {isPremium ? 'ACTIVE' : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? 'EXPIRED' : 'STANDARD')}
                     </Text>
-                  </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             )}

@@ -1,5 +1,5 @@
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
@@ -154,7 +154,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
     else setLoading(true);
 
     try {
-      const res = await apiClient.get<{ success: boolean; data?: any[] }>('/notifications');
+      const res = await api.notifications.getAll();
       if (res?.success && Array.isArray(res.data)) {
         const list: NotificationItem[] = res.data.map((d: any) => ({
           id: d.id,
@@ -192,7 +192,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
   const handleMarkAsRead = async (id: string) => {
     try {
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-      await apiClient.patch(`/notifications/${id}`, { is_read: true }).catch(() => {});
+      await api.notifications.markRead(id, true).catch(() => {});
     } catch (e) {
       console.error('Error marking as read:', e);
     }
@@ -205,7 +205,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
       if (selectedNotif && selectedNotif.id === id) {
         setSelectedNotif(prev => prev ? { ...prev, is_read: nextState } : null);
       }
-      await apiClient.patch(`/notifications/${id}`, { is_read: nextState }).catch(() => {});
+      await api.notifications.markRead(id, nextState).catch(() => {});
     } catch (e) {
       console.error('Error toggling read:', e);
     }
@@ -215,7 +215,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
     try {
       setNotifications(prev => prev.filter(n => n.id !== id));
       setSelectedNotif(null);
-      await apiClient.delete(`/notifications/${id}`).catch(() => {});
+      await api.notifications.delete(id).catch(() => {});
     } catch (e) {
       console.error('Error dismissing notification:', e);
     }
@@ -227,7 +227,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
 
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     try {
-      await apiClient.patch('/notifications/read-all', {}).catch(() => {});
+      await api.notifications.markAllRead().catch(() => {});
       Alert.alert('Done', 'All notifications marked as read.');
     } catch (e) {
       console.error('Error marking all as read:', e);

@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../context/ThemeContext';
 import { StatusBar } from 'expo-status-bar';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 
 export default function LinksScreen({ navigation }: any) {
   const { theme } = useTheme();
@@ -17,7 +17,7 @@ export default function LinksScreen({ navigation }: any) {
   useEffect(() => {
     async function loadLinks() {
       try {
-        const res = await apiClient.get<{ success: boolean; data: any[] }>('/links');
+        const res = await api.links.getAll();
         const loadedLinks = res?.success ? res.data : [];
         loadedLinks.sort((a: any, b: any) => (a.orderIndex || 0) - (b.orderIndex || 0));
         setLinks(loadedLinks);

@@ -37,7 +37,6 @@ import SettingsScreen from '../screens/SettingsScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import LinksScreen from '../screens/LinksScreen';
 import SongsScheduleScreen from '../screens/SongsScheduleScreen';
-import PaymentScreen from '../screens/PaymentScreen';
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
 import MediaScreen from '@/screens/MediaScreen';
@@ -212,7 +211,6 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
       />
       <Stack.Screen name="Links" component={withErrorBoundary(LinksScreen, 'Links')} options={{ animation: 'slide_from_bottom' }} />
       <Stack.Screen name="SongsSchedule" component={withErrorBoundary(SongsScheduleScreen, 'SongsSchedule')} options={{ animation: 'slide_from_bottom' }} />
-      <Stack.Screen name="Payment" component={withErrorBoundary(PaymentScreen, 'Payment')} options={{ animation: 'slide_from_bottom' }} />
     </Stack.Navigator>
   );
 }

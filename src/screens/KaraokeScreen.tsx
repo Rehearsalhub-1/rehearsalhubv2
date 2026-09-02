@@ -1,5 +1,5 @@
 import { useTheme } from '../context/ThemeContext';
-import { apiClient } from '../lib/apiClient';
+import { api, getAccessToken } from '../services/api';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   SafeTrackPlayer as TrackPlayer,
@@ -24,7 +24,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getAccessToken } from '../lib/apiClient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 20; // songs per page
@@ -226,7 +225,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
     const timeout = setTimeout(async () => {
       setIsRemoteSearching(true);
       try {
-        const res = await apiClient.get<{ success: boolean; data: any[] }>('/songs?limit=300').catch(() => null);
+        const res = await api.songs.getAll('limit=300').catch(() => null);
       const snap = { docs: (res?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
         const q2 = searchQuery.toLowerCase();
         const results = snap.docs
@@ -256,7 +255,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
     setLoadingLibrary(true);
     try {
       // songs query
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/songs').catch(() => null);
+      const res = await api.songs.getAll().catch(() => null);
       const snap = { docs: (res?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
       const songs = snap.docs.map((doc, idx) => ({ id: doc.id, _idx: idx, ...doc.data() }));
 
@@ -294,7 +293,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
     setLoadingMore(true);
     try {
       // songs query
-      const res = await apiClient.get<{ success: boolean; data: any[] }>('/songs').catch(() => null);
+      const res = await api.songs.getAll().catch(() => null);
       const snap = { docs: (res?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
 
       const startIdx = cachedLibrary.length;

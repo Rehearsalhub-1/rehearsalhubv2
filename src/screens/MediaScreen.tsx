@@ -10,7 +10,7 @@ const FeatherIcon: any = Icon;
 import { SyncAvatar } from '@/components/SyncAvatar';
 import { useUserStore } from '@/hooks/useUser';
 import { useZone } from '@/hooks/useZone';
-import { apiClient } from '@/lib/apiClient';
+import { api } from '@/services/api';
 import { optimizeImage, optimizeAudio } from '@/lib/mediaUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -48,11 +48,10 @@ export default function MediaScreen({ navigation }: any) {
 
     try {
       const resolvedZoneId = currentZone?.id || '';
-      const zoneParam = resolvedZoneId ? `&zoneId=${encodeURIComponent(resolvedZoneId)}` : '';
 
       const [mediaRes, catRes] = await Promise.all([
-        apiClient.get<any>(`/media?limit=50${zoneParam}`).catch(() => null),
-        apiClient.get<any>('/media/categories').catch(() => null),
+        api.media.getAll(resolvedZoneId, 50).catch(() => null),
+        api.media.getCategories().catch(() => null),
       ]);
 
       if (catRes?.success && Array.isArray(catRes.data) && catRes.data.length > 0) {

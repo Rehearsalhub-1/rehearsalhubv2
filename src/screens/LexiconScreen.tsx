@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useUserStore } from '../hooks/useUser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiClient } from '../lib/apiClient';
+import { api } from '../services/api';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -201,7 +201,7 @@ export default function LexiconScreen({ navigation }: any) {
         { role: 'user', content: text.trim() }
       ];
 
-      const response = (await apiClient.post('/lexicon/chat', { messages: apiMessages })) as any;
+      const response = (await api.lexicon.chat(apiMessages)) as any;
 
       if (!response.success || !response.reply) {
         throw new Error(response.error || 'Failed to get AI response');
