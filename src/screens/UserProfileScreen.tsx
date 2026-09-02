@@ -173,6 +173,18 @@ export default function UserProfileScreen() {
                 </View>
               ) : null}
 
+              {(profile.zoneName || profile.zone_name || profile.zone || profile.zoneCode) ? (
+                <View style={[styles.infoRow, { borderBottomColor: T.border }]}>
+                  <View style={[styles.iconWrap, { backgroundColor: 'rgba(168,85,247,0.15)' }]}>
+                    <Ionicons name="location" size={18} color="#A855F7" />
+                  </View>
+                  <View style={styles.infoTexts}>
+                    <Text style={[styles.infoLabel, { color: T.textSecondary }]}>Zone</Text>
+                    <Text style={[styles.infoValue, { color: T.textPrimary }]}>{profile.zoneName || profile.zone_name || profile.zone || profile.zoneCode}</Text>
+                  </View>
+                </View>
+              ) : null}
+
               <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
                 <View style={[styles.iconWrap, { backgroundColor: 'rgba(52,211,153,0.15)' }]}>
                   <Ionicons name="calendar" size={18} color="#34D399" />

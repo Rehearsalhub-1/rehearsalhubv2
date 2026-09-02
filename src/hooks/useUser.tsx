@@ -275,7 +275,20 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
         const parsed = parseProfile(uid, data);
         const zoneCode = data.zone_code || data.zoneCode || data.zoneId || '';
-        const resolved = getZoneByInvitationCode(zoneCode);
+        const initialZone: Zone | null = (data.memberships?.[0]?.organization ? {
+          id: data.memberships[0].organization.id,
+          name: data.memberships[0].organization.name,
+          invitationCode: data.memberships[0].organization.invitationCode || data.memberships[0].organization.code,
+          isHq: !!data.memberships[0].organization.isHq,
+          region: data.memberships[0].organization.region,
+        } : null) || (data.zoneId ? {
+          id: data.zoneId,
+          name: data.zoneName || data.zone_name || 'Your Loveworld Singers',
+          invitationCode: data.zoneCode || data.zone_code,
+          isHq: isHQGroup(data.zoneId),
+          region: data.region || 'Headquarters',
+        } : null);
+        const resolved = getZoneByInvitationCode(zoneCode) || initialZone;
 
         const isPrem = checkPremium(
           parsed.hasHqAccess,
@@ -289,16 +302,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
           user: { uid, email: data.email || null },
           isAuthenticated: true,
           profile: parsed,
-          ...(resolved ? { currentZone: resolved, isHQ: isHQGroup(resolved.id) } : {}),
+          ...(resolved ? { currentZone: resolved, isHQ: isHQGroup(resolved.id, resolved.isHq) } : {}),
           isProfileLoading: false,
           isZoneLoading: false,
           isPremium: isPrem,
         });
 
-        if (loadedForUser !== uid) {
-          loadedForUser = uid;
-          await loadZoneMemberships(uid, data, resolved || null);
-        }
+        await loadZoneMemberships(uid, data, resolved || null);
 
         persistCache();
 
@@ -366,6 +376,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
   },
 
   refreshProfile: async () => {
+    await get().bootstrap();
     await get().refreshZones();
   },
 

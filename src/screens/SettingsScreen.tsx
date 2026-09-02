@@ -121,17 +121,17 @@ export default function SettingsScreen({ navigation }: any) {
         gender: contextProfile.gender,
         birthday: contextProfile.birthday,
         region: contextProfile.region,
-        zone: contextProfile.zoneCode,
+        zone: contextProfile.zoneName || currentZone?.name || contextProfile.zoneCode || 'Your Loveworld Singers',
         church: contextProfile.church,
         kingschatId: contextProfile.kingschatId,
         designation: contextProfile.designation,
         administration: contextProfile.administration,
         avatar: contextProfile.avatar,
         songsCount,
-        rehearsalsCount: contextProfile.rehearsalCount,
+        rehearsalsCount: attendanceHistory.length || contextProfile.rehearsalCount || 0,
       });
     }
-  }, [contextProfile, songsCount]);
+  }, [contextProfile, songsCount, currentZone, attendanceHistory.length]);
   useEffect(() => {
     if (!currentUser?.uid) return;
     api.favorites.getAll().then(res => {
@@ -571,11 +571,11 @@ export default function SettingsScreen({ navigation }: any) {
               </Text>
             ) : null}
             {profile.designation ? <Text style={s.heroDesignation}>{profile.designation}</Text> : null}
-            {currentZone ? (
+            {(currentZone || profile.zone) ? (
               <View style={s.heroBadge}>
                 <Ionicons name="location-outline" size={12} color={T.accent} />
                 <Text style={s.heroBadgeText}>
-                  {currentZone.name}
+                  {currentZone?.name || profile.zone}
                 </Text>
               </View>
             ) : null}
@@ -583,7 +583,7 @@ export default function SettingsScreen({ navigation }: any) {
           {!isEditing && (
             <View style={s.statsRow}>
               <View style={s.statItem}>
-                <Text style={s.statNum}>{profile.rehearsalsCount || 0}</Text>
+                <Text style={s.statNum}>{attendanceHistory.length || profile.rehearsalsCount || 0}</Text>
                 <Text style={s.statLbl}>Check-ins</Text>
               </View>
               <View style={s.statDivider} />
@@ -636,14 +636,14 @@ export default function SettingsScreen({ navigation }: any) {
                         <Text style={{ color: T.accent, fontWeight: '700', fontSize: 11 }}>HQ</Text>
                       </View>
                     </View>
-                    {currentZone && (
+                    {(currentZone || profile.zone) && (
                       <View style={s.zoneCard}>
                         <View style={s.zoneInfo}>
                           <View style={s.zoneIconWrap}>
                             <Ionicons name="location" size={20} color={T.accent} />
                           </View>
                           <View style={{ flex: 1 }}>
-                            <Text style={s.zoneName}>{currentZone.name}</Text>
+                            <Text style={s.zoneName}>{currentZone?.name || profile.zone}</Text>
                             <Text style={s.zoneActiveBadge}>ACTIVE ZONE</Text>
                           </View>
                         </View>

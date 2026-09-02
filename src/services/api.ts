@@ -220,7 +220,7 @@ export const api = {
     checkIn: (data: { location?: any; note?: string }) =>
       apiClient.post<{ success: boolean; data: any }>('/attendance/check-in', data),
     getMyRecords: () =>
-      apiClient.get<{ success: boolean; data: any[] }>('/attendance/my-records'),
+      apiClient.get<{ success: boolean; data: any[] }>('/attendance/mine'),
     clockIn: (data: Record<string, any>) =>
       apiClient.post<{ success: boolean; data?: any }>('/attendance', data),
   },
