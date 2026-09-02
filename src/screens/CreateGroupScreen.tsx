@@ -145,6 +145,7 @@ export default function CreateGroupScreen({ navigation }: any) {
         id: chatId,
         name: groupName.trim(),
         avatar: groupAvatar || null,
+        type: 'group',
         isGroup: true,
         participants: allParticipants,
         participantDetails,

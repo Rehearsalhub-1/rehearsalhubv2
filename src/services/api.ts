@@ -167,6 +167,18 @@ export const api = {
       apiClient.post<{ success: boolean }>(`/chats/requests/${chatId}/decline`, {}),
     addParticipants: (chatId: string, userIds: string[]) =>
       apiClient.post<{ success: boolean }>(`/chats/${chatId}/participants`, { userIds }),
+    removeParticipant: (chatId: string, targetUserId: string) =>
+      apiClient.delete<{ success: boolean }>(`/chats/${chatId}/participants/${targetUserId}`),
+    setParticipantRole: (chatId: string, targetUserId: string, role: 'admin' | 'member') =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}/participants/${targetUserId}/role`, { role }),
+    updateSettings: (chatId: string, settings: Record<string, any>) =>
+      apiClient.patch<{ success: boolean }>(`/chats/${chatId}/settings`, settings),
+    getBlockedUsers: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/chats/users/blocked'),
+    blockUser: (targetUserId: string) =>
+      apiClient.post<{ success: boolean }>('/chats/users/block', { targetUserId }),
+    unblockUser: (targetUserId: string) =>
+      apiClient.delete<{ success: boolean }>(`/chats/users/block/${targetUserId}`),
   },
 
   // ── Subgroups & Churches ─────────────────────────────────────────────────
