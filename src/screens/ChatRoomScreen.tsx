@@ -216,7 +216,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [isUploading, setIsUploading] = useState(false);
   const [actionVisible, setActionVisible] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState<any>(null);
-  const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
   const [imgViewerVisible, setImgViewerVisible] = useState(false);
   const [imgViewerUri, setImgViewerUri] = useState<string | null>(null);
   const [viewOnceVisible, setViewOnceVisible] = useState(false);
@@ -478,14 +477,27 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const memoizedMessages = useMemo(() => messages, [messages]);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
+
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const memoizedMessages = useMemo(() => {
+    if (!isSearching || !searchQuery.trim()) return messages;
+    const q = searchQuery.toLowerCase().trim();
+    return messages.filter(m => {
+      const textMatch = m.text && m.text.toLowerCase().includes(q);
+      const senderMatch = m.sender && m.sender.toLowerCase().includes(q);
+      const docMatch = m.documentName && m.documentName.toLowerCase().includes(q);
+      const songMatch = m.songData && (m.songData.title?.toLowerCase().includes(q) || m.songData.leadSinger?.toLowerCase().includes(q));
+      return textMatch || senderMatch || docMatch || songMatch;
+    });
+  }, [messages, isSearching, searchQuery]);
+
   const [inputText, setInputText] = useState('');
   const [toastMsg, setToastMsg] = useState<string|null>(null);
   const [typingUsers, setTypingUsers] = useState<{userId:string; userName:string}[]>([]);
   const [highlightedMsgId, setHighlightedMsgId] = useState<string|null>(null);
-
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const initialClearedAt: Date | null = (() => {
     const rawCleared = room?.clearedAt?.[currentUser?.uid || ''];
@@ -1176,6 +1188,67 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     }
   };
 
+  const toggleSelectMessage = (msgId: string) => {
+    setSelectedMessageIds(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) next.delete(msgId);
+      else next.add(msgId);
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedMessageIds.size === 0 || !currentUser) return;
+    const count = selectedMessageIds.size;
+    const selectedList = messages.filter(m => selectedMessageIds.has(m.id));
+    const allMine = selectedList.every(m => m.senderId === currentUser.uid || m.isMe || isGroupAdmin);
+
+    const executeDelete = async (forEveryone: boolean) => {
+      const targetRoomId = room?.id || incomingRoom?.id || deepLinkRoomId;
+      const idsToDelete = Array.from(selectedMessageIds);
+      setSelectedMessageIds(new Set());
+
+      // Optimistic update
+      setMessages(prev => prev.map(m => {
+        if (idsToDelete.includes(m.id)) {
+          return forEveryone ? { ...m, isDeleted: true, text: 'This message was deleted' } : m;
+        }
+        return m;
+      }).filter(m => forEveryone || !idsToDelete.includes(m.id)));
+
+      showToast(count === 1 ? 'Message deleted' : `${count} messages deleted`);
+
+      for (const msgId of idsToDelete) {
+        try {
+          if (forEveryone) {
+            await api.chats.deleteMessage(targetRoomId, msgId).catch(() => {});
+          }
+        } catch {}
+      }
+    };
+
+    if (allMine) {
+      Alert.alert(
+        count === 1 ? 'Delete message?' : `Delete ${count} messages?`,
+        'Would you like to delete for everyone or just for yourself?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete for me', onPress: () => executeDelete(false) },
+          { text: 'Delete for everyone', style: 'destructive', onPress: () => executeDelete(true) },
+        ]
+      );
+    } else {
+      Alert.alert(
+        count === 1 ? 'Delete message?' : `Delete ${count} messages?`,
+        'Delete these messages from your chat?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete for me', style: 'destructive', onPress: () => executeDelete(false) },
+        ]
+      );
+    }
+  };
+
   const handleLoadMore = () => {
     if (isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
@@ -1563,29 +1636,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (msg.isDeleted || msg.isSystem) return;
     setReplyingTo(msg);
   };
-  const toggleMessageSelection = (msgId: string) => {
-    setSelectedMessages(prev =>
-      prev.includes(msgId) ? prev.filter(id => id !== msgId) : [...prev, msgId]
-    );
-  };
-
-  const handleDeleteSelected = async () => {
-    if (selectedMessages.length === 0 || !currentUser) return;
-    const myMessages = selectedMessages.filter(id => {
-      const msg = messages.find(m => m.id === id);
-      return msg && msg.senderId === currentUser.uid;
-    });
-    if (myMessages.length === 0) { showToast('You can only delete your own messages'); setSelectedMessages([]); return; }
-    Alert.alert('Delete Messages', `Delete ${myMessages.length} message(s)?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        try {
-          setMessages(prev => prev.map(m => myMessages.some(delId => delId === m.id) ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
-          setSelectedMessages([]);
-        } catch { showToast('Failed to delete'); }
-      }}
-    ]);
-  };
 
   const startCall = async (type: 'voice' | 'video') => {
     const cu = currentUser;
@@ -1629,6 +1679,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       const callRes = await api.calls.create({
         receiverId: targetReceiverId,
         receiver_id: targetReceiverId,
+        participantIds: targetUids,
         type,
         chatId: room.id,
         chat_id: room.id,
@@ -1638,6 +1689,23 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         caller_avatar: myDetails.avatar || '',
       });
       const callData = callRes?.data || { id: 'call_' + Date.now() };
+
+      // Alert all group participants via push notification
+      sendPushNotification(
+        targetUids,
+        isGroup ? `${roomTitle}: Group ${type} call` : `Incoming ${type} call`,
+        isGroup ? `${displayNameToUse} started a group ${type} call` : `${callerNameToUse} is calling...`,
+        {
+          screen: 'Call',
+          callId: callData.id,
+          callType: type,
+          isGroupCall: isGroup,
+          roomId: room.id,
+          contactName: isGroup ? roomTitle : callerNameToUse,
+          contactAvatar: isGroup ? callAvatar : (myDetails.avatar || ''),
+          contactId: isGroup ? room.id : cu.uid,
+        }
+      ).catch(() => {});
 
       await api.chats.sendMessage(room.id, {
         content: isGroup ? `${displayNameToUse} started a group ${type} call` : `📞 ${type} call started`,
@@ -1655,6 +1723,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         roomId: room.id,
         isIncoming: false,
         isGroupCall: isGroup,
+        participants: targetUids,
+        participantDetails: room.participantDetails || {},
       });
     } catch (error) {
       console.error('Error starting call:', error);
@@ -1940,7 +2010,23 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               </View>
             )}
 
-            <View style={[styles.msgRow, msg.isMe ? styles.msgRowMe : styles.msgRowThem]}>
+            <View style={[
+              styles.msgRow, 
+              msg.isMe ? styles.msgRowMe : styles.msgRowThem,
+              selectedMessageIds.has(msg.id) && { backgroundColor: 'rgba(99, 102, 241, 0.18)', borderRadius: 8, paddingVertical: 2 }
+            ]}>
+              {selectedMessageIds.size > 0 && (
+                <TouchableOpacity 
+                  onPress={() => toggleSelectMessage(msg.id)}
+                  style={{ paddingHorizontal: 6, alignSelf: 'center' }}
+                >
+                  <Ionicons 
+                    name={selectedMessageIds.has(msg.id) ? "checkmark-circle" : "ellipse-outline"} 
+                    size={22} 
+                    color={selectedMessageIds.has(msg.id) ? "#25D366" : "rgba(255,255,255,0.4)"} 
+                  />
+                </TouchableOpacity>
+              )}
               {!msg.isMe && isGroup && (
                 <View style={{ marginRight:6, alignSelf:'flex-end', marginBottom:4 }}>
                   <SyncAvatar userId={msg.senderId} fallbackName={msg.sender} size={28} isGroup={false} />
@@ -1949,13 +2035,25 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
               <TouchableOpacity
                 activeOpacity={0.92}
-                onLongPress={() => { setSelectedMsg(msg); setActionVisible(true); }}
+                onPress={() => {
+                  if (selectedMessageIds.size > 0) {
+                    toggleSelectMessage(msg.id);
+                  }
+                }}
+                onLongPress={() => {
+                  if (selectedMessageIds.size > 0) {
+                    toggleSelectMessage(msg.id);
+                  } else {
+                    setSelectedMsg(msg); 
+                    setActionVisible(true);
+                  }
+                }}
                 style={[
                   styles.bubble,
                   msg.isMe ? { backgroundColor: isOnlyEmojis(msg.text) ? 'transparent' : APP_THEME.outgoingBubble, alignSelf:'flex-end' }
                            : { backgroundColor: isOnlyEmojis(msg.text) ? 'transparent' : APP_THEME.incomingBubble, alignSelf:'flex-start' },
                   msg.type === 'image' && (!msg.text && !msg.viewOnce ? { backgroundColor: 'transparent', padding: 0 } : { padding: 3, borderRadius: 12 }),
-                  (msg.type === 'song_share' || msg.type === 'playlist_share' || msg.type === 'profile_share' || msg.type === 'contact_share' || msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) && { backgroundColor: 'transparent', padding: 0, paddingHorizontal: 0, paddingVertical: 0 },
+                  (msg.type === 'song_share' || msg.type === 'playlist_share' || msg.type === 'profile_share' || msg.type === 'contact_share' || msg.type === 'group_call' || msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) && { backgroundColor: 'transparent', padding: 0, paddingHorizontal: 0, paddingVertical: 0 },
                   isOnlyEmojis(msg.text) && { paddingHorizontal:2, paddingVertical:2 },
                   highlightedMsgId === msg.id && {
                     backgroundColor: theme.colors.accent + '55',
@@ -2216,7 +2314,32 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
       <SafeAreaView style={{ flex:1 }}>
         <ThemedHeader style={styles.header}>
-          {isSearching ? (
+          {selectedMessageIds.size > 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <TouchableOpacity onPress={() => setSelectedMessageIds(new Set())} style={{ padding: 6 }}>
+                  <Ionicons name="close" size={24} color={theme.gradients.headerTextColor} />
+                </TouchableOpacity>
+                <Text style={{ fontSize: 18, fontWeight: '700', color: theme.gradients.headerTextColor }}>
+                  {selectedMessageIds.size}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <TouchableOpacity 
+                  onPress={() => {
+                    const allIds = new Set(messages.map(m => m.id));
+                    setSelectedMessageIds(allIds);
+                  }} 
+                  style={{ padding: 6 }}
+                >
+                  <Ionicons name="checkmark-done" size={22} color={theme.gradients.headerTextColor} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleDeleteSelected} style={{ padding: 6 }}>
+                  <Ionicons name="trash-outline" size={22} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : isSearching ? (
             <View style={styles.searchBar}>
               <TouchableOpacity onPress={() => { setIsSearching(false); setSearchQuery(''); }} style={{ padding:6 }}>
                 <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
@@ -2256,6 +2379,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               <View style={styles.headerRight}>
                 <TouchableOpacity style={styles.headerBtn} onPress={() => { setIsSearching(true); }}>
                   <Ionicons name="search-outline" size={22} color={theme.gradients.headerTextColor} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.headerBtn} onPress={() => startCall('video')}>
+                  <Ionicons name="videocam-outline" size={23} color={theme.gradients.headerTextColor} />
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.headerBtn} onPress={() => startCall('voice')}>
                   <Ionicons name="call-outline" size={22} color={theme.gradients.headerTextColor} />
@@ -2600,6 +2726,21 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                 <Ionicons name="arrow-redo-outline" size={20} color={APP_THEME.primaryText} />
               </View>
               <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Forward</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.actionItem} 
+              onPress={() => { 
+                setActionVisible(false); 
+                if (selectedMsg?.id) {
+                  setSelectedMessageIds(new Set([selectedMsg.id]));
+                }
+              }}
+            >
+              <View style={styles.actionIconWrap}>
+                <Ionicons name="checkbox-outline" size={20} color={APP_THEME.primaryText} />
+              </View>
+              <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Select</Text>
             </TouchableOpacity>
 
             {selectedMsg?.type === 'text' && !selectedMsg.isDeleted && (

@@ -253,36 +253,66 @@ interface GroupCallCardProps extends CardBaseProps {
 export const GroupCallCard = React.memo(({
   msg, navigation, room, theme, APP_THEME, styles
 }: GroupCallCardProps) => {
+  const isVideo = msg.callType === 'video';
+
+  const handleJoin = () => {
+    navigation.navigate('Call', {
+      callId: msg.callId || room?.id,
+      callType: isVideo ? 'video' : 'voice',
+      isIncoming: false,
+      contactName: room?.title || room?.name || 'Group Call',
+      contactAvatar: room?.avatar || '',
+      roomId: room?.id,
+      isGroupCall: true,
+    });
+  };
+
   return (
-    <View style={styles.songShareCard}>
-      <View style={styles.songShareHeader}>
-        <Ionicons name={msg.callType === 'video' ? 'videocam' : 'call'} size={13} color={APP_THEME.primaryAccent} />
-        <Text style={styles.songShareLabel}>Group {msg.callType} call</Text>
-      </View>
-      <View style={styles.songShareBody}>
-        <View style={[styles.songShareIconWrap, { backgroundColor: 'rgba(16,185,129,0.1)' }]}>
-          <Ionicons name={msg.callType === 'video' ? 'videocam' : 'call'} size={22} color={theme.colors.success} />
+    <View style={[
+      waCardStyles.cardContainer,
+      {
+        backgroundColor: msg.isMe 
+          ? (APP_THEME.outgoingBubble || '#1e3a8a')
+          : (APP_THEME.incomingBubble || '#1f2937'),
+        borderColor: msg.isMe ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.08)',
+      }
+    ]}>
+      {/* Upper Call Header */}
+      <View style={waCardStyles.cardBody}>
+        <View style={[waCardStyles.avatarWrapper, { backgroundColor: 'rgba(37, 211, 102, 0.15)', justifyContent: 'center', alignItems: 'center' }]}>
+          <Ionicons name={isVideo ? 'videocam' : 'call'} size={24} color="#25D366" />
         </View>
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <Text style={styles.songShareTitle} numberOfLines={1}>{msg.text}</Text>
-          <Text style={styles.songShareSub}>{msg.time}</Text>
+        <View style={waCardStyles.infoWrapper}>
+          <Text style={[waCardStyles.contactName, { color: APP_THEME.primaryText }]} numberOfLines={1}>
+            {isVideo ? 'Group video call' : 'Group voice call'}
+          </Text>
+          <Text style={[waCardStyles.contactSubtitle, { color: APP_THEME.secondaryText }]} numberOfLines={1}>
+            {msg.text || (msg.isMe ? 'You started a call' : 'Tap to join call')}
+          </Text>
         </View>
       </View>
+
+      {/* Hairline Separator */}
+      <View style={[
+        waCardStyles.divider,
+        { backgroundColor: msg.isMe ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)' }
+      ]} />
+
+      {/* WhatsApp-Style Join Button */}
       <TouchableOpacity
-        style={[styles.songSharePlayRow, { justifyContent: 'center' }]}
-        onPress={() => {
-          navigation.navigate('Call', {
-            callId: msg.callId || room.id,
-            callType: msg.callType || 'voice',
-            isIncoming: false,
-            contactName: room?.title || room?.name || 'Group',
-            roomId: room.id,
-            isGroupCall: true,
-          });
-        }}
+        style={[waCardStyles.actionBtn, { height: 44 }]}
+        onPress={handleJoin}
+        activeOpacity={0.65}
       >
-        <Text style={[styles.songSharePlayText, { color: theme.colors.success, textAlign: 'center', fontWeight: '700' }]}>Join Call</Text>
+        <Ionicons name="enter-outline" size={18} color="#25D366" style={{ marginRight: 6 }} />
+        <Text style={[waCardStyles.actionTextGreen, { fontSize: 15 }]}>Join call</Text>
       </TouchableOpacity>
+
+      {/* Bottom Timestamp & Tick */}
+      <View style={waCardStyles.tsRow}>
+        <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
+        {msg.isMe && <TickIcon status={msg.status} APP_THEME={APP_THEME} />}
+      </View>
     </View>
   );
 });
