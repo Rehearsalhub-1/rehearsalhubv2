@@ -3,8 +3,9 @@ import { api } from '../services/api';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Alert, TextInput, ActivityIndicator, Animated, Dimensions, LayoutAnimation, Platform, UIManager, Modal, RefreshControl
+  Switch, Alert, TextInput, ActivityIndicator, Animated, Dimensions, LayoutAnimation, Platform, UIManager, Modal, RefreshControl, Linking
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,7 +93,8 @@ export default function SettingsScreen({ navigation }: any) {
     zones: false,
     subgroups: false,
     account: false,
-    app: false
+    app: false,
+    help: false
   });
 
   const { currentZone, userZones, switchZone, refreshZones, joinZone } = useZone();
@@ -996,6 +998,66 @@ export default function SettingsScreen({ navigation }: any) {
                     </TouchableOpacity>
                   </View>
                 )}
+              </View>
+            )}
+          </View>
+          {/* Help, Legal & Support */}
+          <View style={[s.section, expanded.help && s.sectionExpanded]}>
+            <TouchableOpacity style={s.sectionHeader} onPress={() => toggleSection('help')} activeOpacity={0.7}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[s.rowIcon, { backgroundColor: 'rgba(59,130,246,0.15)' }]}>
+                  <Ionicons name="help-buoy-outline" size={18} color="#3B82F6" />
+                </View>
+                <Text style={s.sectionTitle}>Help & Legal</Text>
+              </View>
+              <Ionicons name={expanded.help ? "chevron-up" : "chevron-down"} size={20} color={T.textMuted} />
+            </TouchableOpacity>
+
+            {expanded.help && (
+              <View style={s.sectionContent}>
+                <TouchableOpacity
+                  style={[s.row, { paddingVertical: 14 }]}
+                  onPress={() => WebBrowser.openBrowserAsync('https://rehearsalhub.net/privacy')}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <Ionicons name="shield-checkmark-outline" size={18} color={T.accent} />
+                    <Text style={s.rowLabel}>Privacy Policy</Text>
+                  </View>
+                  <Ionicons name="open-outline" size={16} color={T.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[s.row, { paddingVertical: 14 }]}
+                  onPress={() => WebBrowser.openBrowserAsync('https://rehearsalhub.net/terms')}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <Ionicons name="document-text-outline" size={18} color={T.accent} />
+                    <Text style={s.rowLabel}>Terms of Service</Text>
+                  </View>
+                  <Ionicons name="open-outline" size={16} color={T.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[s.row, { paddingVertical: 14 }]}
+                  onPress={() => Linking.openURL('mailto:support@loveworldsingersrehearsalhubportal.org?subject=RehearsalHub Support Request')}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <Ionicons name="mail-outline" size={18} color={T.accent} />
+                    <Text style={s.rowLabel}>Contact Support</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={T.textMuted} />
+                </TouchableOpacity>
+
+                <View style={[s.row, { paddingVertical: 14, borderBottomWidth: 0 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <Ionicons name="information-circle-outline" size={18} color={T.textSecondary} />
+                    <Text style={s.rowLabel}>App Version</Text>
+                  </View>
+                  <Text style={{ color: T.textMuted, fontSize: 13, fontWeight: '600' }}>v2.1.1 (Build 1)</Text>
+                </View>
               </View>
             )}
           </View>
