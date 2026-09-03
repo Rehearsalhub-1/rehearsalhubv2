@@ -1,6 +1,7 @@
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Switch, Alert, ActivityIndicator, Modal, FlatList, Share,
@@ -88,49 +89,52 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     }).catch(() => {});
   }, [otherUserId, isGroup]);
 
-  useEffect(() => {
+  const fetchRoomDetails = useCallback(async () => {
     if (!room?.id) return;
-    const fetchRoomDetails = async () => {
-      try {
-        const res = await api.chats.getById(room.id);
-        if (res?.success && res.data) {
-          const data = res.data;
-          setRoom(data);
-          const groupAdmins: string[] = Array.isArray(data.admins) ? [...data.admins] : [];
-          if (data.createdById && !groupAdmins.includes(data.createdById)) groupAdmins.push(data.createdById);
-          if (data.createdBy && !groupAdmins.includes(data.createdBy)) groupAdmins.push(data.createdBy);
+    try {
+      const res = await api.chats.getById(room.id);
+      if (res?.success && res.data) {
+        const data = res.data;
+        setRoom(data);
+        const groupAdmins: string[] = Array.isArray(data.admins) ? [...data.admins] : [];
+        if (data.createdById && !groupAdmins.includes(data.createdById)) groupAdmins.push(data.createdById);
+        if (data.createdBy && !groupAdmins.includes(data.createdBy)) groupAdmins.push(data.createdBy);
 
-          const pIds: string[] = Array.isArray(data.participants) ? data.participants : [];
-          const list = await Promise.all(pIds.map(async (uid: string) => {
-            const detail = data.participantDetails?.[uid];
-            let name = detail?.name;
-            let avatar = detail?.avatar;
-            if (!name) {
-              const pRes = await api.profiles.get(uid).catch(() => null);
-              if (pRes?.data) {
-                name = [pRes.data.firstName, pRes.data.lastName].filter(Boolean).join(' ');
-                avatar = pRes.data.profile_image_url || pRes.data.avatar;
-              }
+        const pIds: string[] = Array.isArray(data.participants) ? data.participants : [];
+        const list = await Promise.all(pIds.map(async (uid: string) => {
+          const detail = data.participantDetails?.[uid];
+          let name = detail?.name;
+          let avatar = detail?.avatar;
+          if (!name) {
+            const pRes = await api.profiles.get(uid).catch(() => null);
+            if (pRes?.data) {
+              name = [pRes.data.firstName, pRes.data.lastName].filter(Boolean).join(' ');
+              avatar = pRes.data.profile_image_url || pRes.data.avatar;
             }
-            return {
-              id: uid,
-              name: cleanSenderName(name || 'Unknown'),
-              avatar,
-              role: groupAdmins.includes(uid) ? 'Admin' : 'Member',
-            };
-          }));
-          setMembers(list);
-          setIsAdmin(groupAdmins.includes(currentUser?.uid || '') || false);
-          setLoading(false);
-          const mutedBy: string[] = data.mutedBy || [];
-          if (currentUser) setMuted(mutedBy.includes(currentUser.uid));
-        }
-      } catch (e) {
+          }
+          return {
+            id: uid,
+            name: cleanSenderName(name || 'Unknown'),
+            avatar,
+            role: groupAdmins.includes(uid) ? 'Admin' : 'Member',
+          };
+        }));
+        setMembers(list);
+        setIsAdmin(groupAdmins.includes(currentUser?.uid || '') || false);
         setLoading(false);
+        const mutedBy: string[] = data.mutedBy || [];
+        if (currentUser) setMuted(mutedBy.includes(currentUser.uid));
       }
-    };
-    fetchRoomDetails();
+    } catch (e) {
+      setLoading(false);
+    }
   }, [room?.id, currentUser?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRoomDetails();
+    }, [fetchRoomDetails])
+  );
 
   const handleMuteToggle = async (value: boolean) => {
     setMuted(value);
@@ -545,7 +549,11 @@ export default function ChatInfoScreen({ route, navigation }: any) {
                 {isAdmin && (
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
-                    onPress={() => navigation.navigate('NewChat', { groupTargetChatId: room?.id })}
+                    onPress={() => navigation.navigate('NewChat', {
+                      groupTargetChatId: room?.id,
+                      groupTitle: room?.title || 'Group',
+                      existingParticipants: (room?.participants || members.map(m => m.id)).map(String),
+                    })}
                   >
                     <Ionicons name="person-add" size={14} color="#ffffff" style={{ marginRight: 4 }} />
                     <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>Add</Text>

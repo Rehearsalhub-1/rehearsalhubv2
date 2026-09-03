@@ -2,7 +2,7 @@ import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  TextInput, ActivityIndicator, SectionList, Animated,
+  TextInput, ActivityIndicator, SectionList, Animated, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -39,10 +39,17 @@ export default function NewChatScreen({ route, navigation }: any) {
 
   const forwardMessage: string | undefined = route.params?.forwardMessage;
   const forwardType: string = route.params?.forwardType || 'text';
+  const groupTargetChatId: string | undefined = route.params?.groupTargetChatId;
+  const groupTitle: string = route.params?.groupTitle || 'Group';
+  const existingParticipants: string[] = Array.isArray(route.params?.existingParticipants)
+    ? route.params.existingParticipants.map(String)
+    : [];
 
   const [search, setSearch] = useState('');
   const [recentContacts, setRecentContacts] = useState<UserProfile[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<UserProfile[]>([]);
+  const [addingMembers, setAddingMembers] = useState(false);
   const [loading, setLoading] = useState(true);
   const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
 
@@ -256,19 +263,34 @@ export default function NewChatScreen({ route, navigation }: any) {
     }
   };
 
+  const toggleSelectUser = (user: UserProfile) => {
+    setSelectedUsers(prev => {
+      const exists = prev.some(u => u.id === user.id);
+      if (exists) return prev.filter(u => u.id !== user.id);
+      return [...prev, user];
+    });
+  };
+
+  const handleAddSelectedMembers = async () => {
+    if (!groupTargetChatId || selectedUsers.length === 0 || addingMembers) return;
+    setAddingMembers(true);
+    try {
+      const ids = selectedUsers.map(u => u.id);
+      await api.chats.addParticipants(groupTargetChatId, ids);
+      navigation.goBack();
+    } catch (e) {
+      console.error('Failed to add members to group', e);
+      Alert.alert('Error', 'Failed to add members to group');
+      setAddingMembers(false);
+    }
+  };
+
   const openChat = async (user: UserProfile) => {
-    if (!currentUser) return;
-    const groupTargetChatId = route.params?.groupTargetChatId;
     if (groupTargetChatId) {
-      try {
-        await api.chats.addParticipants(groupTargetChatId, [user.id]);
-        navigation.goBack();
-      } catch (e) {
-        console.error('Failed to add member to group', e);
-        navigation.goBack();
-      }
+      toggleSelectUser(user);
       return;
     }
+    if (!currentUser) return;
     if (user.existingRoom) {
       navigate(user.existingRoom);
       return;
@@ -319,15 +341,22 @@ export default function NewChatScreen({ route, navigation }: any) {
       navigation.replace('ChatRoom', { room: safeRoom });
     }
   };
+
   const searchLower = search.toLowerCase();
-  const filteredRecent = recentContacts.filter(u =>
-    u.name.toLowerCase().includes(searchLower) ||
-    (u.lastMessage || '').toLowerCase().includes(searchLower)
-  );
-  const filteredAll = allUsers.filter(u =>
-    u.name.toLowerCase().includes(searchLower) ||
-    (u.email || '').toLowerCase().includes(searchLower)
-  );
+  const isAlreadyMember = (id: string) => existingParticipants.includes(id);
+
+  const filteredRecent = recentContacts
+    .filter(u => !groupTargetChatId || !isAlreadyMember(u.id))
+    .filter(u =>
+      u.name.toLowerCase().includes(searchLower) ||
+      (u.lastMessage || '').toLowerCase().includes(searchLower)
+    );
+  const filteredAll = allUsers
+    .filter(u => !groupTargetChatId || !isAlreadyMember(u.id))
+    .filter(u =>
+      u.name.toLowerCase().includes(searchLower) ||
+      (u.email || '').toLowerCase().includes(searchLower)
+    );
   const isSearching = search.trim().length > 0;
   const displayAll = isSearching ? filteredAll : filteredAll.slice(0, visibleCount);
   const hasMore = !isSearching && visibleCount < filteredAll.length;
@@ -343,34 +372,51 @@ export default function NewChatScreen({ route, navigation }: any) {
     }
   };
 
-  const renderItem = ({ item }: { item: UserProfile }) => (
-    <TouchableOpacity style={styles.userRow} onPress={() => openChat(item)} activeOpacity={0.7}>
-      <SyncAvatar
-        userId={item.id}
-        initialAvatar={item.avatar}
-        fallbackName={item.name}
-        size={50}
-        bgColor={T.accent}
-        isGroup={item.existingRoom?.isGroup}
-      />
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.name}</Text>
-        <Text style={styles.userSub} numberOfLines={1}>
-          {item.lastMessage || [item.voicePart, item.zoneName].filter(Boolean).join(' · ') || item.email || ''}
-        </Text>
-      </View>
-      <View style={styles.rightCol}>
-        {item.lastTime ? (
-          <Text style={styles.timeText}>{item.lastTime}</Text>
-        ) : null}
-        {item.existingChatId ? (
-          <Ionicons name="chatbubble" size={16} color={T.accent} style={{ marginTop: 4 }} />
-        ) : (
-          <Ionicons name="add-circle-outline" size={20} color={T.accent} />
-        )}
-      </View>
-    </TouchableOpacity>
-  );
+  const renderItem = ({ item }: { item: UserProfile }) => {
+    const isSelected = selectedUsers.some(u => u.id === item.id);
+    return (
+      <TouchableOpacity
+        style={[styles.userRow, isSelected && { backgroundColor: 'rgba(124,58,237,0.12)' }]}
+        onPress={() => openChat(item)}
+        activeOpacity={0.7}
+      >
+        <SyncAvatar
+          userId={item.id}
+          initialAvatar={item.avatar}
+          fallbackName={item.name}
+          size={50}
+          bgColor={T.accent}
+          isGroup={item.existingRoom?.isGroup}
+        />
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.name}</Text>
+          <Text style={styles.userSub} numberOfLines={1}>
+            {item.lastMessage || [item.voicePart, item.zoneName].filter(Boolean).join(' · ') || item.email || ''}
+          </Text>
+        </View>
+        <View style={styles.rightCol}>
+          {groupTargetChatId ? (
+            isSelected ? (
+              <Ionicons name="checkmark-circle" size={24} color={T.accent} />
+            ) : (
+              <Ionicons name="ellipse-outline" size={24} color={T.textMuted} />
+            )
+          ) : (
+            <>
+              {item.lastTime ? (
+                <Text style={styles.timeText}>{item.lastTime}</Text>
+              ) : null}
+              {item.existingChatId ? (
+                <Ionicons name="chatbubble" size={16} color={T.accent} style={{ marginTop: 4 }} />
+              ) : (
+                <Ionicons name="add-circle-outline" size={20} color={T.accent} />
+              )}
+            </>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -397,10 +443,31 @@ export default function NewChatScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={26} color={T.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {forwardMessage ? 'Forward to…' : 'New Chat'}
-          </Text>
-          <View style={{ width: 40 }} />
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={styles.headerTitle}>
+              {groupTargetChatId ? 'Add Members' : forwardMessage ? 'Forward to…' : 'New Chat'}
+            </Text>
+            {groupTargetChatId ? (
+              <Text style={{ fontSize: 12, color: T.textSecondary, marginTop: 1 }}>
+                {selectedUsers.length > 0 ? `${selectedUsers.length} selected` : `Add to ${groupTitle}`}
+              </Text>
+            ) : null}
+          </View>
+          {groupTargetChatId && selectedUsers.length > 0 ? (
+            <TouchableOpacity
+              onPress={handleAddSelectedMembers}
+              disabled={addingMembers}
+              style={{ backgroundColor: T.accent, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}
+            >
+              {addingMembers ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '700' }}>Add ({selectedUsers.length})</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 40 }} />
+          )}
         </View>
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={16} color={T.textSecondary} style={{ marginRight: 8 }} />
@@ -424,7 +491,9 @@ export default function NewChatScreen({ route, navigation }: any) {
         ) : sections.length === 0 ? (
           <View style={{ alignItems: 'center', paddingTop: 60 }}>
             <Ionicons name="people-outline" size={48} color={T.textMuted} />
-            <Text style={{ color: T.textMuted, marginTop: 12, fontSize: 15 }}>No contacts found</Text>
+            <Text style={{ color: T.textMuted, marginTop: 12, fontSize: 15 }}>
+              {groupTargetChatId ? 'No other contacts to add' : 'No contacts found'}
+            </Text>
           </View>
         ) : (
           <SectionList
@@ -437,7 +506,7 @@ export default function NewChatScreen({ route, navigation }: any) {
               </View>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
-            contentContainerStyle={{ paddingBottom: 40 }}
+            contentContainerStyle={{ paddingBottom: groupTargetChatId && selectedUsers.length > 0 ? 100 : 40 }}
             showsVerticalScrollIndicator={false}
             stickySectionHeadersEnabled={false}
             onEndReached={handleLoadMore}
@@ -449,6 +518,40 @@ export default function NewChatScreen({ route, navigation }: any) {
               </TouchableOpacity>
             ) : null}
           />
+        )}
+
+        {groupTargetChatId && selectedUsers.length > 0 && (
+          <View style={{ padding: 16, backgroundColor: 'transparent' }}>
+            <TouchableOpacity
+              style={{
+                backgroundColor: T.accent,
+                borderRadius: 16,
+                paddingVertical: 14,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: T.accent,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+                elevation: 6,
+              }}
+              onPress={handleAddSelectedMembers}
+              disabled={addingMembers}
+              activeOpacity={0.8}
+            >
+              {addingMembers ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Ionicons name="person-add" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700' }}>
+                    Add {selectedUsers.length} Member{selectedUsers.length > 1 ? 's' : ''} to Group
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
       </SafeAreaView>
     </View>

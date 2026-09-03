@@ -303,6 +303,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   );
   const isGroup: boolean = room?.isGroup || room?.type === 'group' || room?.category === 'Groups';
 
+  const isGroupAdmin = useMemo(() => {
+    if (!isGroup || !currentUser?.uid) return false;
+    const myId = currentUser.uid;
+    const adminList: string[] = Array.isArray(room?.admins) ? room.admins : [];
+    return adminList.includes(myId) || room?.createdById === myId || room?.createdBy === myId || (currentUser as any)?.role === 'hq_admin';
+  }, [isGroup, currentUser?.uid, (currentUser as any)?.role, room?.admins, room?.createdById, room?.createdBy]);
+
   let resolvedRoomTitle = room?.title || (isGroup ? 'Group Chat' : 'Chat');
   let resolvedRoomAvatarUri = room?.avatar?.uri || (typeof room?.avatar === 'string' ? room.avatar : null);
 
@@ -1156,13 +1163,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
   const handleDelete = async () => {
     if (!selectedMsg || !currentUser) return;
-    if (selectedMsg.senderId !== currentUser.uid) { showToast('You can only delete your own messages'); setActionVisible(false); return; }
+    if (selectedMsg.senderId !== currentUser.uid && !isGroupAdmin) {
+      showToast('You can only delete your own messages');
+      setActionVisible(false);
+      return;
+    }
     const targetMsgId = selectedMsg.id;
     setActionVisible(false);
     try {
       await api.chats.deleteMessage(room.id, targetMsgId);
       setMessages(prev => prev.map(m => m.id === targetMsgId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
       notifyParticipants('This message was deleted', 'delete');
+      showToast('Message deleted');
     } catch { showToast('Failed to delete'); }
   };
 
@@ -2701,12 +2713,14 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               </TouchableOpacity>
             )}
 
-            {selectedMsg?.isMe && !selectedMsg.isDeleted && (
+            {(selectedMsg?.isMe || isGroupAdmin) && !selectedMsg?.isDeleted && (
               <TouchableOpacity style={styles.actionItem} onPress={handleDelete}>
                 <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
                   <Ionicons name="trash-outline" size={20} color="#ef4444" />
                 </View>
-                <Text style={[styles.actionText, { color: '#ef4444' }]}>Delete</Text>
+                <Text style={[styles.actionText, { color: '#ef4444' }]}>
+                  {selectedMsg?.isMe ? 'Delete' : 'Delete as Admin'}
+                </Text>
               </TouchableOpacity>
             )}
 
