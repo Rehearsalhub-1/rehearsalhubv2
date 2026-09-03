@@ -410,8 +410,12 @@ export default function ChatListScreen({ route, navigation }: any) {
       AsyncStorage.setItem('cached_chat_rooms', JSON.stringify(rooms)).catch(() => {});
       setLoading(false);
       setRefreshing(false);
-    } catch (error) {
-      console.error('Error fetching chats:', error);
+    } catch (error: any) {
+      if (error?.name === 'SessionExpiredError' || error?.message?.includes('Session expired')) {
+        console.log('[ChatListScreen] Session expired; re-authenticating...');
+      } else {
+        console.error('Error fetching chats:', error);
+      }
       setLoading(false);
       setRefreshing(false);
     }

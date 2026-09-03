@@ -57,42 +57,62 @@ export async function clearTokens(): Promise<void> {
   ]);
 }
 
+let _refreshPromise: Promise<string> | null = null;
+
 async function refreshSession(): Promise<string> {
-  const [refreshToken, userId] = await Promise.all([getRefreshToken(), getUserId()]);
-
-  if (!refreshToken || !userId) {
-    throw new SessionExpiredError();
+  if (_refreshPromise) {
+    return _refreshPromise;
   }
 
-  try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-      },
-      body: JSON.stringify({ refreshToken, userId }),
-    });
+  _refreshPromise = (async () => {
+    try {
+      const [refreshToken, userId] = await Promise.all([getRefreshToken(), getUserId()]);
 
-    if (res.status === 401 || res.status === 403) {
-      await clearTokens();
-      throw new SessionExpiredError();
-    }
+      if (!refreshToken || !userId) {
+        try {
+          const { useUserStore } = require('../hooks/useUser');
+          useUserStore.getState().signOut().catch(() => {});
+        } catch {}
+        throw new SessionExpiredError();
+      }
 
-    if (!res.ok) {
-      throw new Error(`Server temporarily unavailable (${res.status})`);
-    }
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': API_KEY,
+        },
+        body: JSON.stringify({ refreshToken, userId }),
+      });
 
-    const body = await res.json();
-    if (body?.data?.accessToken) {
-      await storeTokens(body.data.accessToken, body.data.refreshToken || refreshToken, userId);
-      return body.data.accessToken;
+      if (res.status === 401 || res.status === 403) {
+        await clearTokens();
+        try {
+          const { useUserStore } = require('../hooks/useUser');
+          useUserStore.getState().signOut().catch(() => {});
+        } catch {}
+        throw new SessionExpiredError();
+      }
+
+      if (!res.ok) {
+        throw new Error(`Server temporarily unavailable (${res.status})`);
+      }
+
+      const body = await res.json();
+      if (body?.data?.accessToken) {
+        await storeTokens(body.data.accessToken, body.data.refreshToken || refreshToken, userId);
+        return body.data.accessToken;
+      }
+      throw new Error('Invalid refresh response');
+    } catch (err) {
+      if (err instanceof SessionExpiredError) throw err;
+      throw err;
+    } finally {
+      _refreshPromise = null;
     }
-    throw new Error('Invalid refresh response');
-  } catch (err) {
-    if (err instanceof SessionExpiredError) throw err;
-    throw err;
-  }
+  })();
+
+  return _refreshPromise;
 }
 
 // ── TENANT SCOPE STORE ───────────────────────────────────────────────────────
@@ -205,6 +225,10 @@ async function request<T>(
         }
       } catch (err) {
         if (err instanceof SessionExpiredError) {
+          try {
+            const { useUserStore } = require('../hooks/useUser');
+            useUserStore.getState().signOut().catch(() => {});
+          } catch {}
           throw err;
         }
         console.warn(`[apiClient] Refresh attempt failed:`, err);

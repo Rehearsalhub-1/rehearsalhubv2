@@ -1596,10 +1596,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     let callAvatar = '';
 
     if (isGroup) {
-      targetUids = Object.keys(room.participantDetails || {}).filter(id => id !== cu.uid);
+      const allGroupUids = Array.from(new Set([
+        ...(Array.isArray(room.participants) ? room.participants : []),
+        ...Object.keys(room.participantDetails || {}),
+        ...((room as any).participantIds || []),
+      ])).filter((id: string) => id && id !== cu.uid && id !== 'system');
+
+      targetUids = allGroupUids;
       callAvatar = room.avatar || '';
     } else {
-      const otherUid = Object.keys(room.participantDetails || {}).find((id: string) => id !== cu.uid) || room.id.split('_').find((id: string) => id !== cu.uid) || '';
+      const otherUid = Object.keys(room.participantDetails || {}).find((id: string) => id !== cu.uid)
+        || (Array.isArray(room.participants) ? room.participants.find((id: string) => id !== cu.uid) : null)
+        || room.id.split('_').find((id: string) => id !== cu.uid) || '';
       if (otherUid) targetUids = [otherUid];
       const otherDetails = room.participantDetails?.[targetUids[0]] || {};
       roomTitle = otherDetails.name || roomTitle;
@@ -1616,7 +1624,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const callerNameToUse = myName || myDetails.name || 'Me';
 
     try {
-      const targetReceiverId = isGroup ? room.id : targetUids[0];
+      // For backend calls table, receiverId must be a valid User ID
+      const targetReceiverId = targetUids[0] || cu.uid;
       const callRes = await api.calls.create({
         receiverId: targetReceiverId,
         receiver_id: targetReceiverId,
