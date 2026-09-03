@@ -22,6 +22,8 @@
         ],
         "NSMicrophoneUsageDescription": "RehearsalHub needs microphone access for voice and video calls",
         "NSCameraUsageDescription": "RehearsalHub needs camera access for video calls",
+        "NSPhotoLibraryUsageDescription": "RehearsalHub needs access to your photo library to select and upload photos and profile images",
+        "NSPhotoLibraryAddUsageDescription": "RehearsalHub needs access to save photos to your photo library",
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.karaoke.rehearsalhubv2",

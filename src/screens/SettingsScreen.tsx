@@ -92,8 +92,7 @@ export default function SettingsScreen({ navigation }: any) {
     zones: false,
     subgroups: false,
     account: false,
-    app: false,
-    subscription: false
+    app: false
   });
 
   const { currentZone, userZones, switchZone, refreshZones, joinZone } = useZone();
@@ -972,56 +971,6 @@ export default function SettingsScreen({ navigation }: any) {
                     trackColor={{ false: theme.colors.cardBackgroundLight, true: T.accent }}
                     thumbColor="#fff"
                   />
-                </View>
-              </View>
-            )}
-          </View>
-          <View style={[s.section, expanded.subscription && s.sectionExpanded]}>
-            <TouchableOpacity style={s.sectionHeader} onPress={() => toggleSection('subscription')} activeOpacity={0.7}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={[s.rowIcon, { backgroundColor: 'rgba(234,179,8,0.15)' }]}><Ionicons name="star" size={18} color="#EAB308" /></View>
-                <Text style={s.sectionTitle}>Subscription</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {isPremium && (
-                  <View style={{ backgroundColor: 'rgba(234,179,8,0.2)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 }}>
-                    <Text style={{ color: '#EAB308', fontSize: 11, fontWeight: '700' }}>PREMIUM</Text>
-                  </View>
-                )}
-                <Ionicons name={expanded.subscription ? "chevron-up" : "chevron-down"} size={20} color={T.textMuted} />
-              </View>
-            </TouchableOpacity>
-            {expanded.subscription && (
-              <View style={s.sectionContent}>
-                <View style={s.row}>
-                  <View style={{ flex: 1, paddingLeft: 12 }}>
-                    <Text style={s.rowLabel}>Payment & Subscription Status</Text>
-                    <Text style={{ color: isPremium ? T.success : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? '#EF4444' : T.textSecondary), fontSize: 13, marginTop: 4, fontWeight: '600' }}>
-                      {isPremium ? (
-                        subscription?.expiresAt ? `Paid / Active (Expires ${new Date(subscription.expiresAt).toLocaleDateString()})` : 'Paid / Active (Full Access)'
-                      ) : (
-                        subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? `Expired on ${new Date(subscription.expiresAt).toLocaleDateString()}` : 'Unpaid / Standard'
-                      )}
-                    </Text>
-                  </View>
-                  <View
-                    style={{
-                      backgroundColor: isPremium ? 'rgba(34,197,94,0.15)' : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? 'rgba(239,68,68,0.15)' : 'rgba(124,58,237,0.12)'),
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 10,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: isPremium ? T.success : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? '#EF4444' : T.accent),
-                        fontWeight: '700',
-                        fontSize: 12,
-                      }}
-                    >
-                      {isPremium ? 'ACTIVE' : (subscription?.expiresAt && new Date(subscription.expiresAt).getTime() < Date.now() ? 'EXPIRED' : 'STANDARD')}
-                    </Text>
-                  </View>
                 </View>
               </View>
             )}
