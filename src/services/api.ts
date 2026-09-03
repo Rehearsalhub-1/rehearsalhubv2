@@ -37,10 +37,10 @@ export const api = {
       apiClient.get<{ success: boolean; data: any }>(`/profiles/${userId}`),
     update: (userId: string, data: Record<string, any>) =>
       apiClient.patch<{ success: boolean; data: any }>(`/profiles/${userId}`, data),
-    getDirectory: (limit = 200) =>
-      apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}`),
-    directory: (limit = 500) =>
-      apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}`),
+    getDirectory: (limit = 500, search = '') =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+    directory: (limit = 500, search = '') =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
     getBirthdays: (zoneId?: string) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/profiles/birthdays${zoneId ? `?zoneId=${encodeURIComponent(zoneId)}` : ''}`),
   },

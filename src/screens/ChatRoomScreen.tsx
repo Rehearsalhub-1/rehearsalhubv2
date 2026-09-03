@@ -1358,6 +1358,27 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       navigation.goBack();
     } catch { showToast('Failed'); }
   };
+
+  const handleClearChat = () => {
+    Alert.alert('Clear Chat', 'Are you sure you want to clear all messages in this chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await api.chats.clearMessages(room.id).catch(() => {});
+            setMessages([]);
+            await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
+            await AsyncStorage.removeItem(`cached_messages_${room.id}`);
+            showToast('Chat cleared');
+          } catch {
+            Alert.alert('Error', 'Failed to clear chat');
+          }
+        },
+      },
+    ]);
+  };
   const handleSetDisappearing = async (seconds: number | null) => {
     if (!room?.id) return;
     try {
@@ -2270,23 +2291,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         <Modal visible={chatMenuVisible} transparent animationType="fade" onRequestClose={() => setChatMenuVisible(false)}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setChatMenuVisible(false)}>
             <View style={{ position: 'absolute', top: 50, right: 10, backgroundColor: theme.colors.cardBackground, borderRadius: 8, padding: 8, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, minWidth: 180 }}>
+              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); navigation.navigate('ChatInfo', { room }); }}>
+                <Text style={{ color: theme.colors.textPrimary }}>{isGroup ? 'Group Info' : 'Contact Info'}</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleArchiveChat(); }}>
                 <Text style={{ color: theme.colors.textPrimary }}>{isArchived ? 'Unarchive Chat' : 'Archive Chat'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleMarkUnread(); }}>
                 <Text style={{ color: theme.colors.textPrimary }}>Mark as Unread</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); setShowWallpaperModal(true); }}>
-                <Text style={{ color: theme.colors.textPrimary }}>Chat Wallpaper</Text>
+              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleClearChat(); }}>
+                <Text style={{ color: '#ef4444' }}>Clear Messages</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); setShowDisappearingModal(true); }}>
-                <Text style={{ color: theme.colors.textPrimary }}>Disappearing Messages</Text>
-              </TouchableOpacity>
-              {isGroup && (
-                <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleGenerateJoinLink(); }}>
-                  <Text style={{ color: theme.colors.textPrimary }}>Group Join Link</Text>
-                </TouchableOpacity>
-              )}
               {!isGroup && (
                 <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleBlockUser(); }}>
                   <Text style={{ color: isBlocked ? APP_THEME.primaryAccent : '#ef4444' }}>{isBlocked ? 'Unblock User' : 'Block User'}</Text>
@@ -2834,7 +2850,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   { icon:'camera', color:'#ff2e74', label:'Camera', onPress:()=>pickImage(true) },
                   { icon:'image', color:'#00a884', label:'Gallery', onPress:()=>pickImage(false) },
                   { icon:'videocam', color:'#f59e0b', label:'Video', onPress: pickVideo },
-                  { icon:'bar-chart', color:'#0ea5e9', label:'Poll', onPress:()=>{ setAttachMenuVisible(false); setShowPollModal(true); } },
                 ].map(item => (
                   <TouchableOpacity key={item.label} style={styles.attachBtn} onPress={item.onPress}>
                     <View style={[styles.attachIcon, { backgroundColor:item.color }]}>

@@ -63,30 +63,26 @@ export default function CreateGroupScreen({ navigation }: any) {
 
   const loadUsers = async () => {
     try {
-      const lastSyncTimeStr = await AsyncStorage.getItem('last_profiles_sync_time');
-      const lastSyncTime = lastSyncTimeStr ? parseInt(lastSyncTimeStr, 10) : 0;
       const cachedProfilesStr = await AsyncStorage.getItem(CACHE_KEY_MEMBERS);
-      const hasCached = cachedProfilesStr ? JSON.parse(cachedProfilesStr).length > 0 : false;
-      const isCacheFresh = Date.now() - lastSyncTime < 30 * 60 * 1000; // 30 minutes
-
-      if (hasCached && isCacheFresh) {
-
-        const parsed = JSON.parse(cachedProfilesStr!);
-        setAllUsers(parsed.filter((u: any) => u.id !== currentUser?.uid));
-        return;
+      if (cachedProfilesStr) {
+        const parsed = JSON.parse(cachedProfilesStr);
+        if (parsed.length > 0) {
+          setAllUsers(parsed.filter((u: any) => u.id !== currentUser?.uid));
+          setLoading(false);
+        }
       }
 
-      const res = await api.profiles.directory();
-      const snap = { docs: (res?.data || []).map((d: any) => ({ id: d.id, data: () => d })) };
+      const res = await api.profiles.directory(500);
+      const raw = res?.data && Array.isArray(res.data) ? res.data : [];
       const list: Member[] = [];
-      (snap.docs || []).forEach((d: any) => {
-        if (d.id === currentUser?.uid) return;
-        const p = d.data();
+      raw.forEach((p: any) => {
+        if (p.id === currentUser?.uid) return;
         const fn = p.first_name || p.firstName || '';
         const ln = p.last_name || p.lastName || '';
-        const name = [fn, ln].filter(Boolean).join(' ') || p.displayName || p.name || p.email?.split('@')[0] || 'Unknown';
+        const name = [fn, ln].filter(Boolean).join(' ') || p.displayName || p.name || p.email?.split('@')[0] || 'Singer';
         list.push({
-          id: d.id, name,
+          id: p.id,
+          name,
           avatar: p.profile_image_url || p.avatar_url || p.photoURL || p.avatar,
         });
       });
@@ -94,9 +90,43 @@ export default function CreateGroupScreen({ navigation }: any) {
       setAllUsers(sorted);
       await AsyncStorage.setItem(CACHE_KEY_MEMBERS, JSON.stringify(sorted));
       await AsyncStorage.setItem('last_profiles_sync_time', Date.now().toString());
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error('CreateGroup loadUsers error:', e);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Live server search across entire database
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed.length < 2) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.profiles.directory(50, trimmed);
+        const raw = res?.data && Array.isArray(res.data) ? res.data : [];
+        if (raw.length > 0) {
+          setAllUsers(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newOnes: Member[] = [];
+            raw.forEach((p: any) => {
+              if (p.id === currentUser?.uid || existingIds.has(p.id)) return;
+              const fn = p.first_name || p.firstName || '';
+              const ln = p.last_name || p.lastName || '';
+              const name = [fn, ln].filter(Boolean).join(' ') || p.displayName || p.name || p.email?.split('@')[0] || 'Singer';
+              newOnes.push({
+                id: p.id,
+                name,
+                avatar: p.profile_image_url || p.avatar_url || p.photoURL || p.avatar,
+              });
+            });
+            return [...prev, ...newOnes];
+          });
+        }
+      } catch (e) {}
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search, currentUser?.uid]);
 
   const toggleMember = (user: Member) => {
     setSelected(prev =>

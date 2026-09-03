@@ -77,13 +77,46 @@ export default function NewChatScreen({ route, navigation }: any) {
       if (cachedProfiles) {
         const parsed = JSON.parse(cachedProfiles);
         if (parsed.length > 0) {
-          const filtered = parsed.filter((u: UserProfile) => !existingChatIds.has(u.id));
-          setAllUsers(filtered);
+          setAllUsers(parsed);
         }
       }
       if (cachedProfiles || cachedRecents) setLoading(false);
     } catch {}
   };
+
+  // Live server search across the whole DB when user types
+  useEffect(() => {
+    const trimmed = search.trim();
+    if (trimmed.length < 2) return;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.profiles.directory(50, trimmed);
+        const rawList = res?.data && Array.isArray(res.data) ? res.data : [];
+        if (rawList.length > 0) {
+          setAllUsers(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newOnes: UserProfile[] = [];
+            rawList.forEach((p: any) => {
+              if (p.id === currentUser?.uid || existingIds.has(p.id)) return;
+              const firstName = p.first_name || p.firstName || '';
+              const lastName = p.last_name || p.lastName || '';
+              const name = [firstName, lastName].filter(Boolean).join(' ') || p.displayName || p.name || p.email?.split('@')[0] || 'Singer';
+              newOnes.push({
+                id: p.id,
+                name,
+                avatar: p.profile_image_url || p.avatar_url || p.photoURL || p.avatar,
+                email: p.email,
+                voicePart: p.voicePart || p.designation || '',
+                zoneName: p.zoneName || p.zone_name || p.zoneCode || '',
+              });
+            });
+            return [...prev, ...newOnes];
+          });
+        }
+      } catch (err) {}
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search, currentUser?.uid]);
 
   const loadData = async () => {
     if (!currentUser) { setLoading(false); return; }
