@@ -1214,18 +1214,38 @@ export default function AudiolabScreen({ navigation }: any) {
             {activeTab === 'projects' && 'Saved Projects'}
             {activeTab === 'settings' && 'Settings'}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <TouchableOpacity onPress={() => { setActiveModal('export'); }} style={styles.headerIconBtn}>
-              <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.textPrimary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              onPress={() => setActiveTab(activeTab === 'feather' ? 'waveform' : 'feather')}
+              style={[styles.headerIconBtn, activeTab === 'feather' && { backgroundColor: 'rgba(124, 58, 237, 0.2)' }]}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={19}
+                color={activeTab === 'feather' ? theme.colors.accent : theme.colors.textPrimary}
+              />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setActiveTab(activeTab === 'projects' ? 'waveform' : 'projects')}
+              style={[styles.headerIconBtn, activeTab === 'projects' && { backgroundColor: 'rgba(124, 58, 237, 0.2)' }]}
+            >
+              <Ionicons
+                name="folder-open-outline"
+                size={19}
+                color={activeTab === 'projects' ? theme.colors.accent : theme.colors.textPrimary}
+              />
+            </TouchableOpacity>
+
             <TouchableOpacity
               onPress={() => {
                 setActiveTab(activeTab === 'settings' ? 'waveform' : 'settings');
               }}
-              style={[styles.headerIconBtn, activeTab === 'settings' && { backgroundColor: 'rgba(124, 58, 237, 0.2)' }]}>
+              style={[styles.headerIconBtn, activeTab === 'settings' && { backgroundColor: 'rgba(124, 58, 237, 0.2)' }]}
+            >
               <Ionicons
                 name="settings-outline"
-                size={20}
+                size={19}
                 color={activeTab === 'settings' ? theme.colors.accent : theme.colors.textPrimary}
               />
             </TouchableOpacity>
@@ -1373,25 +1393,54 @@ export default function AudiolabScreen({ navigation }: any) {
                     <View style={styles.trackHeadersColumn}>
                       <View style={styles.trackHeaderRulerSpacer} />
                       {tracks.map((track) => (
-                        <TouchableOpacity
+                        <View
                           key={track.id}
                           style={styles.trackHeaderCard}
-                          onPress={() => {
-                            setSelectedTrackId(track.id);
-                            setRenameText(track.name);
-                            setActiveModal('trackSettings');
-                          }}
-                          activeOpacity={0.85}
                         >
                           <View style={[styles.trackAccentStripe, { backgroundColor: track.color || theme.colors.accent, width: 4 }]} />
                           
-                          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, gap: 4 }}>
-                            <Text style={{ flex: 1, color: theme.colors.textPrimary, fontSize: 12, fontWeight: '600', lineHeight: 16 }} numberOfLines={2}>
-                              {track.name}
-                            </Text>
-                            <Ionicons name="ellipsis-vertical" size={14} color={theme.colors.textMuted} />
+                          <View style={styles.trackHeaderInner}>
+                            <TouchableOpacity
+                              style={styles.trackHeaderTop}
+                              onPress={() => {
+                                setSelectedTrackId(track.id);
+                                setRenameText(track.name);
+                                setActiveModal('trackSettings');
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <View style={[styles.trackIconBox, { backgroundColor: (track.color || theme.colors.accent) + '22' }]}>
+                                <Ionicons
+                                  name={track.type === 'voice' ? 'mic' : 'musical-note'}
+                                  size={13}
+                                  color={track.color || theme.colors.accent}
+                                />
+                              </View>
+                              <Text style={styles.trackTitleText} numberOfLines={1}>
+                                {track.name}
+                              </Text>
+                              <Ionicons name="ellipsis-vertical" size={12} color={theme.colors.textMuted} />
+                            </TouchableOpacity>
+
+                            <View style={styles.trackHeaderControls}>
+                              <TouchableOpacity
+                                style={[styles.trackHeaderControlBtn, track.mute && styles.trackHeaderControlBtnActive]}
+                                onPress={() => toggleTrackMute(track.id)}
+                              >
+                                <Text style={[styles.trackHeaderControlBtnText, track.mute && { color: '#fff' }]}>M</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[styles.trackHeaderControlBtn, track.solo && styles.trackHeaderControlBtnActiveSolo]}
+                                onPress={() => toggleTrackSolo(track.id)}
+                              >
+                                <Text style={[styles.trackHeaderControlBtnText, track.solo && { color: '#fff' }]}>S</Text>
+                              </TouchableOpacity>
+                              <Text style={{ fontSize: 9, color: theme.colors.textMuted, marginLeft: 'auto' }}>
+                                {Math.round(track.volume * 100)}%
+                              </Text>
+                            </View>
                           </View>
-                        </TouchableOpacity>
+                        </View>
                       ))}
                       <TouchableOpacity style={styles.addTrackHeaderCard} onPress={() => { setActiveModal('addTrack'); }}>
                         <Ionicons name="add" size={20} color={theme.colors.accent} />
@@ -1705,32 +1754,34 @@ export default function AudiolabScreen({ navigation }: any) {
             </ScrollView>
           }
         </View>
-        <View style={styles.bottomNav}>
-          <TouchableOpacity
-            style={styles.bottomNavItem}
-            onPress={() => { stopPlayback(); navigation.goBack(); }}>
-            <Ionicons name="home" size={18} color={theme.colors.textMuted} />
-            <Text style={[styles.bottomNavLabel, { color: theme.colors.textMuted, marginTop: 4, display: 'flex' }]}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.bottomNavItem, activeTab === 'projects' && styles.bottomNavItemActive]}
-            onPress={() => { setActiveTab('projects'); }}>
-            <Ionicons name="folder-open-outline" size={18} color={activeTab === 'projects' ? theme.colors.textPrimary : theme.colors.textMuted} />
-            {activeTab === 'projects' && <Text style={styles.bottomNavLabel}>Projects</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.bottomNavItem, activeTab === 'waveform' && styles.bottomNavItemActive]}
-            onPress={() => { setActiveTab('waveform'); }}>
-            <Ionicons name="stats-chart-outline" size={18} color={activeTab === 'waveform' ? theme.colors.textPrimary : theme.colors.textMuted} />
-            {activeTab === 'waveform' && <Text style={styles.bottomNavLabel}>Studio</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.bottomNavItem, activeTab === 'feather' && styles.bottomNavItemActive]}
-            onPress={() => { setActiveTab('feather'); }}>
-            <Ionicons name="musical-notes-outline" size={18} color={activeTab === 'feather' ? theme.colors.textPrimary : theme.colors.textMuted} />
-            {activeTab === 'feather' && <Text style={styles.bottomNavLabel}>My Songs</Text>}
-          </TouchableOpacity>
-        </View>
+        {activeTab !== 'waveform' && (
+          <View style={styles.bottomNav}>
+            <TouchableOpacity
+              style={styles.bottomNavItem}
+              onPress={() => { stopPlayback(); navigation.goBack(); }}>
+              <Ionicons name="home" size={18} color={theme.colors.textMuted} />
+              <Text style={[styles.bottomNavLabel, { color: theme.colors.textMuted, marginTop: 4, display: 'flex' }]}>Home</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bottomNavItem, activeTab === 'projects' && styles.bottomNavItemActive]}
+              onPress={() => { setActiveTab('projects'); }}>
+              <Ionicons name="folder-open-outline" size={18} color={activeTab === 'projects' ? theme.colors.textPrimary : theme.colors.textMuted} />
+              {activeTab === 'projects' && <Text style={styles.bottomNavLabel}>Projects</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.bottomNavItem}
+              onPress={() => { setActiveTab('waveform'); }}>
+              <Ionicons name="stats-chart-outline" size={18} color={theme.colors.textMuted} />
+              <Text style={styles.bottomNavLabel}>Studio</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.bottomNavItem, activeTab === 'feather' && styles.bottomNavItemActive]}
+              onPress={() => { setActiveTab('feather'); }}>
+              <Ionicons name="musical-notes-outline" size={18} color={activeTab === 'feather' ? theme.colors.textPrimary : theme.colors.textMuted} />
+              {activeTab === 'feather' && <Text style={styles.bottomNavLabel}>My Songs</Text>}
+            </TouchableOpacity>
+          </View>
+        )}
       </SafeAreaView>
 
       <Modal

@@ -743,6 +743,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
     }
   };
 
+  const prevLyric = currentLineIndex > 0 ? (lyrics[currentLineIndex - 1]?.text || '') : '';
   const currentLyric = lyrics[currentLineIndex]?.text || ' ';
   const nextLyric = lyrics[currentLineIndex + 1]?.text || '';
   const progress = duration > 0 ? (position / duration) : 0;
@@ -800,6 +801,14 @@ export default function KaraokeScreen({ route, navigation }: any) {
               <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }}>REC</Text>
             </View>
           )}
+          {activeSong && (
+            <View style={{ position: 'absolute', top: 16, left: 20, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+              <Ionicons name="mic-outline" size={12} color={T.accent} />
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
+                Part: {activePart}
+              </Text>
+            </View>
+          )}
           {!activeSong ? (
             <View style={styles.emptyStage}>
               <Ionicons name="musical-notes-outline" size={64} color="rgba(255,255,255,0.3)" />
@@ -810,7 +819,17 @@ export default function KaraokeScreen({ route, navigation }: any) {
             </View>
           ) : (
             <View style={styles.lyricsContainer}>
+              {prevLyric ? (
+                <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginBottom: 10, fontWeight: '500' }} numberOfLines={1}>
+                  {prevLyric}
+                </Text>
+              ) : null}
               <Text style={styles.currentLyricText}>{currentLyric}</Text>
+              {nextLyric ? (
+                <Text style={{ fontSize: 17, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12, fontWeight: '600' }} numberOfLines={2}>
+                  {nextLyric}
+                </Text>
+              ) : null}
             </View>
           )}
         </View>
@@ -859,7 +878,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={skipForward} style={[styles.skipBtn, { marginBottom: 14 }]}>
-                  <Ionicons name="play-skip-forward" size={24} color={theme.colors.textPrimary} />
+                  <Ionicons name="play-skip-forward" size={24} color="#ffffff" />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={{ alignItems: 'center' }} onPress={isRecording ? stopRecording : startRecording}>
