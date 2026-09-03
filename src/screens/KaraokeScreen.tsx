@@ -37,7 +37,7 @@ interface LyricLine {
 }
 
 const parseLRCLyrics = (lrc: string): LyricLine[] => {
-  if (!lrc) return [{ time: 0, text: 'No synced lyrics available' }];
+  if (!lrc || !lrc.trim()) return [{ time: 0, text: 'No synced lyrics available' }];
   const lines = lrc.split('\n');
   const parsed: LyricLine[] = [];
   const timeRegex = /\[(\d+):(\d{2})(?:\.(\d+))?\]/g;
@@ -63,19 +63,20 @@ const parseLRCLyrics = (lrc: string): LyricLine[] => {
           parsed.push({ time: timeInSeconds, text });
         });
       }
-    } else {
-      const text = line.trim();
-      if (text && !text.startsWith('[') && parsed.length > 0) {
-        parsed[parsed.length - 1].text += ' ' + text;
-      }
     }
   });
 
-  if (parsed.length === 0) {
-    parsed.push({ time: 0, text: 'No synced lyrics found' });
+  if (parsed.length > 0) {
+    return parsed.sort((a, b) => a.time - b.time);
   }
 
-  return parsed.sort((a, b) => a.time - b.time);
+  // Fallback: If no timestamp tags [mm:ss] exist, convert plain lyric lines so singers can still read and practice
+  const cleanLines = lines.map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('['));
+  if (cleanLines.length > 0) {
+    return cleanLines.map((text, idx) => ({ time: idx * 4, text }));
+  }
+
+  return [{ time: 0, text: 'No synced lyrics available' }];
 };
 
 export default function KaraokeScreen({ route, navigation }: any) {
@@ -337,10 +338,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
     const initialPart = song.audioUrls?.full ? 'full' : (song.audioUrl ? 'full' : 'none');
     setActivePart(initialPart);
     let parsedLyrics: LyricLine[];
+    const rawLrc = song.karaokeLrcText || song.lrcText || song.syncedLyricsText || song.lyrics;
     if (Array.isArray(song.syncedLyrics) && song.syncedLyrics.length > 0) {
       parsedLyrics = [...song.syncedLyrics].sort((a: LyricLine, b: LyricLine) => a.time - b.time);
-    } else if (song.karaokeLrcText) {
-      parsedLyrics = parseLRCLyrics(song.karaokeLrcText);
+    } else if (rawLrc) {
+      parsedLyrics = parseLRCLyrics(rawLrc);
     } else {
       parsedLyrics = parseLRCLyrics('');
     }

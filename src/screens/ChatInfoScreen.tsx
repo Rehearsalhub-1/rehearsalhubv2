@@ -1,6 +1,6 @@
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Switch, Alert, ActivityIndicator, Modal, FlatList, Share,
@@ -21,32 +21,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const profileCache = new Map<string, { name: string, avatar: string | undefined }>();
 
 export default function ChatInfoScreen({ route, navigation }: any) {
-
-  
-
-
-
-  
-
   const { theme } = useTheme();
-  const T = theme.colors;
   const styles = getStyles(theme);
+  const T = theme.colors;
 
-  const { room: incomingRoom, userId: deepLinkUserId } = route.params || {};
-  const [room, setRoom] = useState<any>(incomingRoom);
-  const [isLoadingDeepLink, setIsLoadingDeepLink] = useState(!incomingRoom && !!deepLinkUserId);
-  const isGroup: boolean = room?.isGroup || room?.type === 'group' || room?.category === 'Groups';
+  const [room, setRoom] = useState<any>(route.params?.room || {});
+  const isGroup = room.isGroup || room.type === 'group';
+  const [muted, setMuted] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [muted, setMuted] = useState(false);
-  const [mediaLoading, setMediaLoading] = useState(false);
   const [mediaModalVisible, setMediaModalVisible] = useState(false);
+  const [mediaTab, setMediaTab] = useState('Media');
+  const [activeMediaTab, setActiveMediaTab] = useState<'media' | 'docs' | 'links'>('media');
   const [mediaMessages, setMediaMessages] = useState<any[]>([]);
   const [docMessages, setDocMessages] = useState<any[]>([]);
   const [linkMessages, setLinkMessages] = useState<any[]>([]);
-  const [mediaTab, setMediaTab] = useState('Media');
-  const [addMemberModalVisible, setAddMemberModalVisible] = useState(false);
+  const [mediaLoading, setMediaLoading] = useState(false);
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [isAddingMembers, setIsAddingMembers] = useState(false);
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
@@ -63,9 +54,33 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     }
   });
 
-  const otherUserId = (room?.participants || []).find((id: string) => id !== currentUser?.uid);
-
   const currentUser = useUserStore(s => s.user);
+  const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
+
+  const otherUserId = useMemo(() => {
+    if (isGroup) return null;
+    const myId = currentUser?.uid;
+    const fromParticipants = (room?.participants || []).find((id: string) => id && id !== myId);
+    if (fromParticipants) return fromParticipants;
+    if (typeof room?.id === 'string' && room.id.includes('_')) {
+      const fromId = room.id.split('_').find((id: string) => id && id !== myId);
+      if (fromId) return fromId;
+    }
+    if (room?.participantDetails) {
+      const otherKey = Object.keys(room.participantDetails).find(k => k && k !== myId);
+      if (otherKey) return otherKey;
+    }
+    return null;
+  }, [room?.participants, room?.id, room?.participantDetails, currentUser?.uid, isGroup]);
+
+  useEffect(() => {
+    if (isGroup || !otherUserId) return;
+    api.profiles.get(otherUserId).then(res => {
+      if (res?.success && res.data) {
+        setOtherUserProfile(res.data);
+      }
+    }).catch(() => {});
+  }, [otherUserId, isGroup]);
 
   useEffect(() => {
     if (!room?.id) return;
@@ -307,7 +322,19 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     }
   };
 
-  const avatarUri = room?.avatar?.uri || `https://ui-avatars.com/api/?name=${encodeURIComponent(room?.title || 'Chat')}&background=2a0c4f&color=ffffff&size=200`;
+  const displayName = isGroup
+    ? (room?.title || room?.name || 'Group Chat')
+    : (otherUserProfile?.displayName || otherUserProfile?.name || ([otherUserProfile?.first_name || otherUserProfile?.firstName, otherUserProfile?.last_name || otherUserProfile?.lastName].filter(Boolean).join(' ')) || room?.title || 'Contact');
+
+  const displayAvatar = isGroup
+    ? (room?.avatar?.uri || room?.avatar)
+    : (otherUserProfile?.profile_image_url || otherUserProfile?.avatarUrl || otherUserProfile?.avatar || (room?.avatar?.uri || room?.avatar));
+
+  const displayVoicePart = otherUserProfile?.voicePart || otherUserProfile?.designation || '';
+  const displayEmail = otherUserProfile?.email || '';
+  const displayPhone = otherUserProfile?.phone || otherUserProfile?.phone_number || otherUserProfile?.phoneNumber || '';
+  const displayZone = otherUserProfile?.zoneName || otherUserProfile?.zone_name || otherUserProfile?.zoneCode || '';
+  const displayChurch = otherUserProfile?.church || '';
 
   return (
     <View style={styles.container}>
@@ -321,7 +348,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={26} color={T.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Contact Info</Text>
+          <Text style={styles.headerTitle}>{isGroup ? 'Group Info' : 'Contact Info'}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -329,20 +356,24 @@ export default function ChatInfoScreen({ route, navigation }: any) {
           <View style={styles.profileSection}>
             <View style={styles.avatarWrap}>
               <SyncAvatar
-                userId={otherUserId}
-                initialAvatar={avatarUri}
-                fallbackName={room?.title}
+                userId={isGroup ? undefined : (otherUserId || undefined)}
+                initialAvatar={displayAvatar}
+                fallbackName={displayName}
                 isGroup={isGroup}
                 size={100}
                 bgColor={isGroup ? '#00a884' : T.accent}
               />
             </View>
-            <Text style={styles.profileName}>{room?.title || 'Chat'}</Text>
-            {isGroup && (
+            <Text style={styles.profileName}>{displayName}</Text>
+            {isGroup ? (
               <Text style={styles.profileSub}>
                 {`${members.length} members`}
               </Text>
-            )}
+            ) : displayVoicePart ? (
+              <Text style={styles.profileSub}>
+                {displayVoicePart} {displayZone ? `· ${displayZone}` : ''}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.quickRow}>
             {[
@@ -359,6 +390,57 @@ export default function ChatInfoScreen({ route, navigation }: any) {
               </TouchableOpacity>
             ))}
           </View>
+
+          {!isGroup && (displayEmail || displayPhone || displayVoicePart || displayZone || displayChurch) && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Profile Details</Text>
+              {displayVoicePart ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="mic-outline" size={18} color={T.accent} style={styles.infoIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoLabel}>Voice / Role</Text>
+                    <Text style={styles.infoValue}>{displayVoicePart}</Text>
+                  </View>
+                </View>
+              ) : null}
+              {displayEmail ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="mail-outline" size={18} color={T.accent} style={styles.infoIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoLabel}>Email</Text>
+                    <Text style={styles.infoValue}>{displayEmail}</Text>
+                  </View>
+                </View>
+              ) : null}
+              {displayPhone ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="call-outline" size={18} color={T.accent} style={styles.infoIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoLabel}>Phone</Text>
+                    <Text style={styles.infoValue}>{displayPhone}</Text>
+                  </View>
+                </View>
+              ) : null}
+              {displayZone ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="globe-outline" size={18} color={T.accent} style={styles.infoIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoLabel}>Zone</Text>
+                    <Text style={styles.infoValue}>{displayZone}</Text>
+                  </View>
+                </View>
+              ) : null}
+              {displayChurch ? (
+                <View style={styles.infoRow}>
+                  <Ionicons name="business-outline" size={18} color={T.accent} style={styles.infoIcon} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.infoLabel}>Church</Text>
+                    <Text style={styles.infoValue}>{displayChurch}</Text>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          )}
           <View style={styles.section}>
             <View style={styles.settingRow}>
               <Ionicons name="notifications-off-outline" size={20} color={T.textSecondary} style={styles.settingIcon} />
@@ -721,6 +803,10 @@ const getStyles = (theme: any) => {
   settingIcon: { marginRight: 14 },
   settingLabel: { flex: 1, fontSize: 15, color: T.textPrimary },
   settingValue: { fontSize: 13 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.bottomTabBorder },
+  infoIcon: { marginRight: 14, width: 22, textAlign: 'center' },
+  infoLabel: { fontSize: 11, color: T.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  infoValue: { fontSize: 15, color: T.textPrimary, fontWeight: '500' },
   memberRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.bottomTabBorder },
   memberName: { fontSize: 15, fontWeight: '600', color: T.textPrimary },
   memberRole: { fontSize: 12, color: T.textSecondary, marginTop: 2 },
