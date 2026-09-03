@@ -316,7 +316,7 @@ export default function CallsScreen({ navigation }: any) {
             keyExtractor={item => item.id}
             renderItem={renderItem}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
-            contentContainerStyle={{ paddingBottom: 80 }}
+            contentContainerStyle={{ paddingBottom: 24 }}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
