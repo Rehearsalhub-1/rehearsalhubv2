@@ -64,6 +64,18 @@ export interface ChatMessage {
     role?: string;
     zone?: string;
   };
+  contactData?: {
+    id?: string;
+    uid?: string;
+    name?: string;
+    avatar?: string;
+    role?: string;
+    zone?: string;
+    zoneName?: string;
+    displayName?: string;
+    email?: string;
+    phone?: string;
+  };
   pollOptions?: any[];
 }
 

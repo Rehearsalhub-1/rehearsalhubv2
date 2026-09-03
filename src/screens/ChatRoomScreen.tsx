@@ -715,7 +715,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               callType: m.callType || undefined,
               callId: m.callId || undefined,
               pollOptions: m.pollOptions || undefined,
-              profileData: m.profileData || undefined,
+              profileData: m.profileData || m.contactData || m.contact_data || undefined,
+              contactData: m.contactData || m.contact_data || m.profileData || undefined,
             };
           });
           msgs.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
@@ -1945,7 +1946,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   msg.isMe ? { backgroundColor: isOnlyEmojis(msg.text) ? 'transparent' : APP_THEME.outgoingBubble, alignSelf:'flex-end' }
                            : { backgroundColor: isOnlyEmojis(msg.text) ? 'transparent' : APP_THEME.incomingBubble, alignSelf:'flex-start' },
                   msg.type === 'image' && (!msg.text && !msg.viewOnce ? { backgroundColor: 'transparent', padding: 0 } : { padding: 3, borderRadius: 12 }),
-                  (msg.type === 'song_share' || msg.type === 'playlist_share' || msg.type === 'profile_share' || msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) && { backgroundColor: 'transparent', padding: 0, paddingHorizontal: 0, paddingVertical: 0 },
+                  (msg.type === 'song_share' || msg.type === 'playlist_share' || msg.type === 'profile_share' || msg.type === 'contact_share' || msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) && { backgroundColor: 'transparent', padding: 0, paddingHorizontal: 0, paddingVertical: 0 },
                   isOnlyEmojis(msg.text) && { paddingHorizontal:2, paddingVertical:2 },
                   highlightedMsgId === msg.id && {
                     backgroundColor: theme.colors.accent + '55',
@@ -2074,17 +2075,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                     APP_THEME={APP_THEME}
                     styles={styles}
                   />
-                ) : (msg.type === 'profile_share' || (msg.type as any) === 'contact_share') ? (
+                ) : (msg.type === 'profile_share' || msg.type === 'contact_share') ? (
                   <ProfileShareCard
-                    msg={{
-                      ...msg,
-                      profileData: msg.profileData || (msg as any).contactData || (msg as any).data?.profileData || {
-                        id: (msg as any).contactId || 'user',
-                        name: (msg.text?.match(/👤\s*\*Contact:\s*([^*]+)\*/i)?.[1]?.trim()) || 'Singer',
-                        role: (msg.text?.match(/Role:\s*([^\n\r]+)/i)?.[1]?.trim()) || 'Member',
-                        zone: (msg.text?.match(/Zone:\s*([^\n\r]+)/i)?.[1]?.trim()) || '',
-                      }
-                    }}
+                    msg={msg}
                     navigation={navigation}
                     theme={theme}
                     APP_THEME={APP_THEME}
@@ -2151,18 +2144,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                       {msg.isMe && <TickIcon status={msg.status} />}
                     </View>
                   </View>
-                ) : msg.type === 'contact_share' ? (
-                  <View style={{ padding: 8, flexDirection: 'row', alignItems: 'center', minWidth: 200 }}>
-                    <Ionicons name="person-circle" size={40} color={APP_THEME.primaryAccent} />
-                    <View style={{ marginLeft: 8, flex: 1 }}>
-                      <Text style={{ color: APP_THEME.primaryText, fontWeight: 'bold' }} numberOfLines={1}>{(msg as any).contactData?.name || 'Contact'}</Text>
-                      <Text style={{ color: APP_THEME.secondaryText, fontSize: 12 }}>Contact</Text>
-                    </View>
-                    <View style={styles.tsOverlay}>
-                      <Text style={[styles.tsText, { color: theme.colors.textPrimary }]}>{msg.time}</Text>
-                      {msg.isMe && <TickIcon status={msg.status} />}
-                    </View>
-                  </View>
+
                 ) : msg.type === 'video' && msg.videoUrl ? (
                   <View style={{ position: 'relative' }}>
                     <View style={{ width: SCREEN_WIDTH * 0.65, height: SCREEN_WIDTH * 0.4, borderRadius: 10, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }}>

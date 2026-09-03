@@ -1,9 +1,13 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ChatMessage } from './ChatTypes';
+import { ChatMessage, cleanSenderName } from './ChatTypes';
 import { LocalAudioSlider, VoiceWaveformVisualizer } from './VoiceWaveformVisualizer';
 import { SyncAvatar } from '../SyncAvatar';
+import { useUserStore } from '../../hooks/useUser';
+import { api } from '../../services/api';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface CardBaseProps {
   msg: ChatMessage;
@@ -329,49 +333,252 @@ interface ProfileShareCardProps extends CardBaseProps {
 export const ProfileShareCard = React.memo(({
   msg, navigation, theme, APP_THEME, styles
 }: ProfileShareCardProps) => {
-  if (!msg.profileData) return null;
+  const profileData = msg.profileData || (msg as any).contactData || (msg as any).data?.profileData;
+  const contactData = (msg as any).contactData || msg.profileData;
+
+  const extractedName = msg.text?.match(/👤\s*\*Contact:\s*([^*]+)\*/i)?.[1]?.trim()
+    || msg.text?.match(/📇\s*([^\n\r]+)/)?.[1]?.trim()
+    || '';
+  const extractedRole = msg.text?.match(/Role:\s*([^\n\r]+)/i)?.[1]?.trim() || '';
+  const extractedZone = msg.text?.match(/Zone:\s*([^\n\r]+)/i)?.[1]?.trim() || '';
+  const extractedId = msg.text?.match(/https?:\/\/[^\s]+\/profile\/([a-zA-Z0-9_-]+)/i)?.[1] || '';
+
+  const resolvedId = profileData?.id || profileData?.uid || contactData?.id || contactData?.uid || extractedId || '';
+  const rawName = profileData?.name || profileData?.displayName || contactData?.name || contactData?.displayName || extractedName || 'Contact';
+  const resolvedName = cleanSenderName(rawName);
+  const resolvedAvatar = profileData?.avatar || contactData?.avatar || '';
+  const resolvedRole = profileData?.role || contactData?.role || extractedRole || '';
+  const resolvedZone = profileData?.zone || profileData?.zoneName || contactData?.zone || contactData?.zoneName || extractedZone || '';
+  const resolvedNote = msg.note || (msg.text?.match(/💬\s*([^\n\r]+)/i)?.[1]?.trim()) || '';
+
+  const subtitle = resolvedRole
+    ? (resolvedZone ? `${resolvedRole} • ${resolvedZone}` : resolvedRole)
+    : (resolvedZone ? resolvedZone : 'Contact');
+
+  const openUserProfile = () => {
+    if (resolvedId && resolvedId !== 'user') {
+      navigation.navigate('UserProfile', { userId: resolvedId });
+    }
+  };
+
+  const openDirectChat = async () => {
+    if (!resolvedId || resolvedId === 'user') {
+      openUserProfile();
+      return;
+    }
+    const currentUser = useUserStore.getState().user;
+    if (!currentUser) return;
+    if (resolvedId === currentUser.uid) {
+      openUserProfile();
+      return;
+    }
+
+    const chatId = [currentUser.uid, resolvedId].sort().join('_');
+    const myProfile = useUserStore.getState().profile;
+    const myName = myProfile 
+      ? [myProfile.firstName, myProfile.lastName].filter(Boolean).join(' ').trim() || (currentUser as any)?.displayName || 'Me' 
+      : ((currentUser as any)?.displayName || 'Me');
+    const myAvatar = myProfile?.avatar || '';
+
+    try {
+      api.chats.create({
+        id: chatId,
+        name: resolvedName,
+        type: 'direct',
+        participants: [currentUser.uid, resolvedId],
+      }).catch(() => {});
+    } catch {}
+
+    const directRoom = {
+      id: chatId,
+      title: resolvedName,
+      avatar: resolvedAvatar ? { uri: resolvedAvatar } : null,
+      isGroup: false,
+      type: 'direct',
+      participants: [currentUser.uid, resolvedId],
+      participantDetails: {
+        [currentUser.uid]: { name: myName, avatar: myAvatar },
+        [resolvedId]: { name: resolvedName, avatar: resolvedAvatar || '' },
+      },
+    };
+    navigation.navigate('ChatRoom', { room: directRoom });
+  };
+
   return (
-    <View style={styles.songShareCard}>
-      <View style={styles.songShareHeader}>
-        <Ionicons name="person" size={13} color={APP_THEME.primaryAccent} />
-        <Text style={styles.songShareLabel}>Contact shared</Text>
-      </View>
+    <View style={[
+      waCardStyles.cardContainer,
+      {
+        backgroundColor: msg.isMe 
+          ? (APP_THEME.outgoingBubble || '#1e3a8a')
+          : (APP_THEME.incomingBubble || '#1f2937'),
+        borderColor: msg.isMe ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.08)',
+      }
+    ]}>
+      {/* Upper Contact Body (Tappable to view contact info) */}
       <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => {
-          navigation.navigate('UserProfile', {
-            userId: msg.profileData!.id
-          });
-        }}
-        style={styles.songShareBody}
+        activeOpacity={0.75}
+        onPress={openUserProfile}
+        style={waCardStyles.cardBody}
       >
-        <SyncAvatar userId={msg.profileData.id} initialAvatar={msg.profileData.avatar} fallbackName={msg.profileData.name} size={44} />
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.songShareTitle} numberOfLines={1}>{msg.profileData.name}</Text>
-          <Text style={styles.songShareSub}>{msg.profileData.role || 'Member'}</Text>
-          {msg.profileData.zone ? <Text style={styles.songShareProg} numberOfLines={1}>{msg.profileData.zone}</Text> : null}
+        <View style={waCardStyles.avatarWrapper}>
+          <SyncAvatar
+            userId={resolvedId}
+            initialAvatar={resolvedAvatar}
+            fallbackName={resolvedName}
+            size={48}
+          />
         </View>
+        <View style={waCardStyles.infoWrapper}>
+          <Text style={[waCardStyles.contactName, { color: APP_THEME.primaryText }]} numberOfLines={1}>
+            {resolvedName}
+          </Text>
+          <Text style={[waCardStyles.contactSubtitle, { color: APP_THEME.secondaryText }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={APP_THEME.secondaryText} style={{ opacity: 0.6 }} />
       </TouchableOpacity>
-      {msg.note ? (
-        <View style={styles.songShareNote}>
-          <Text style={styles.songShareNoteText}>"{msg.note}"</Text>
+
+      {/* Optional Attached Note */}
+      {resolvedNote ? (
+        <View style={waCardStyles.noteContainer}>
+          <Text style={[waCardStyles.noteText, { color: APP_THEME.primaryText }]}>
+            "{resolvedNote}"
+          </Text>
         </View>
       ) : null}
-      <TouchableOpacity
-        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: APP_THEME.border }}
-        onPress={() => {
-          navigation.navigate('UserProfile', {
-            userId: msg.profileData!.id
-          });
-        }}
-      >
-        <Ionicons name="person-outline" size={14} color={APP_THEME.primaryAccent} />
-        <Text style={{ fontSize: 12, color: APP_THEME.primaryAccent, fontWeight: '600' }}>View Profile ›</Text>
-      </TouchableOpacity>
-      <View style={[styles.tsBubbleRow, { paddingHorizontal: 10, paddingBottom: 8 }]}>
+
+      {/* Hairline Separator */}
+      <View style={[
+        waCardStyles.divider,
+        { backgroundColor: msg.isMe ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)' }
+      ]} />
+
+      {/* WhatsApp-Style Action Buttons */}
+      <View style={waCardStyles.actionsRow}>
+        <TouchableOpacity
+          style={waCardStyles.actionBtn}
+          onPress={openDirectChat}
+          activeOpacity={0.65}
+        >
+          <Ionicons name="chatbubble-ellipses" size={17} color="#25D366" style={{ marginRight: 6 }} />
+          <Text style={waCardStyles.actionTextGreen}>Message</Text>
+        </TouchableOpacity>
+
+        <View style={[
+          waCardStyles.actionDivider,
+          { backgroundColor: msg.isMe ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 255, 255, 0.08)' }
+        ]} />
+
+        <TouchableOpacity
+          style={waCardStyles.actionBtn}
+          onPress={openUserProfile}
+          activeOpacity={0.65}
+        >
+          <Ionicons name="person-outline" size={16} color={APP_THEME.primaryText} style={{ marginRight: 6, opacity: 0.85 }} />
+          <Text style={[waCardStyles.actionTextNeutral, { color: APP_THEME.primaryText }]}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bottom Timestamp and Tick */}
+      <View style={waCardStyles.tsRow}>
         <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
         {msg.isMe && <TickIcon status={msg.status} APP_THEME={APP_THEME} />}
       </View>
     </View>
   );
+});
+
+export const ContactShareCard = ProfileShareCard;
+
+const waCardStyles = StyleSheet.create({
+  cardContainer: {
+    width: Math.min(SCREEN_WIDTH * 0.76, 290),
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1.5 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  cardBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  avatarWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  infoWrapper: {
+    marginLeft: 12,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  contactName: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.15,
+  },
+  contactSubtitle: {
+    fontSize: 13,
+    marginTop: 2,
+    fontWeight: '400',
+  },
+  noteContainer: {
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    marginTop: -2,
+  },
+  noteText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    lineHeight: 18,
+    opacity: 0.85,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    width: '100%',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 44,
+  },
+  actionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+  },
+  actionTextGreen: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#25D366',
+  },
+  actionTextNeutral: {
+    fontSize: 14,
+    fontWeight: '600',
+    opacity: 0.85,
+  },
+  actionDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: '55%',
+  },
+  tsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingBottom: 6,
+    paddingTop: 1,
+  },
 });
