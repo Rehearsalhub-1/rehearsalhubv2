@@ -47,6 +47,11 @@ interface ChatRoom {
   lastMessageStatus?: 'sending' | 'sent' | 'delivered' | 'read';
   isCleared?: boolean;
   isArchived?: boolean;
+  admins?: string[];
+  createdById?: string;
+  createdBy?: string;
+  participants?: string[];
+  type?: string;
 }
 
 const DEFAULT_AVATAR = require('../../assets/image/home1.jpg');
@@ -392,6 +397,11 @@ export default function ChatListScreen({ route, navigation }: any) {
           lastMessageStatus: (typeof rawLastMsg === 'object' ? rawLastMsg?.status : null) || data.lastMessage?.status || 'sent',
           isCleared,
           isArchived,
+          admins: Array.isArray(data.admins) ? data.admins : [],
+          createdById: data.createdById || data.createdBy,
+          createdBy: data.createdBy || data.createdById,
+          participants: participants,
+          type: data.type || (isGroup ? 'group' : 'direct'),
         };
       });
 

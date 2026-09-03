@@ -204,7 +204,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [chatMenuVisible, setChatMenuVisible] = useState(false);
   const [isArchived, setIsArchived] = useState(false);
   const [isBlocked, setIsBlocked] = useState(false);
-  const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
   const [messagesLoadError, setMessagesLoadError] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(false);
   const [listenerRetryKey, setListenerRetryKey] = useState(0);
@@ -227,10 +226,6 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [previewMediaList, setPreviewMediaList] = useState<any[] | null>(null);
   const [previewViewOnce, setPreviewViewOnce] = useState(false);
   const [previewCaption, setPreviewCaption] = useState('');
-  const [listModalVisible, setListModalVisible] = useState(false);
-  const [listModalType, setListModalType] = useState<'starred' | 'pinned'>('starred');
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalMessages, setModalMessages] = useState<any[]>([]);
   const [showPollModal, setShowPollModal] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
   const [callVisible, setCallVisible] = useState(false);
@@ -273,29 +268,20 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [isLoadingDeepLink, setIsLoadingDeepLink] = useState(!incomingRoom && !!deepLinkRoomId);
 
   useEffect(() => {
-    if (!incomingRoom && deepLinkRoomId) {
-      const fetchRoom = async () => {
-        try {
-          const res = await api.chats.getById(deepLinkRoomId);
-          if (res?.success && res.data) {
-            setRoom(res.data);
-          } else {
-            Alert.alert('Error', 'Chat room not found or link is invalid.');
-            navigation.goBack();
-          }
-        } catch {
-          Alert.alert('Error', 'Failed to load chat room.');
-          navigation.goBack();
-        } finally {
-          setIsLoadingDeepLink(false);
+    const targetRoomId = incomingRoom?.id || deepLinkRoomId;
+    if (targetRoomId) {
+      api.chats.getById(targetRoomId).then(res => {
+        if (res?.success && res.data) {
+          setRoom((prev: any) => ({ ...prev, ...res.data }));
         }
-      };
-      fetchRoom();
+      }).catch(() => {});
     }
-  }, [incomingRoom, deepLinkRoomId]);
+  }, [incomingRoom?.id, deepLinkRoomId]);
+
   const { isSetupComplete } = useTrackPlayer();
   const currentUser = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
+  const myId = currentUser?.uid || (currentUser as any)?.id || (profile as any)?.id || '';
   const myName = cleanSenderName(
     profile 
       ? [profile.firstName, profile.lastName].filter(Boolean).join(' ') 
@@ -304,11 +290,21 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const isGroup: boolean = room?.isGroup || room?.type === 'group' || room?.category === 'Groups';
 
   const isGroupAdmin = useMemo(() => {
-    if (!isGroup || !currentUser?.uid) return false;
-    const myId = currentUser.uid;
+    if (!isGroup || !myId) return false;
     const adminList: string[] = Array.isArray(room?.admins) ? room.admins : [];
-    return adminList.includes(myId) || room?.createdById === myId || room?.createdBy === myId || (currentUser as any)?.role === 'hq_admin';
-  }, [isGroup, currentUser?.uid, (currentUser as any)?.role, room?.admins, room?.createdById, room?.createdBy]);
+    const isCreator = room?.createdById === myId || room?.createdBy === myId;
+    const isRoleAdmin = 
+      (currentUser as any)?.role === 'hq_admin' || 
+      (currentUser as any)?.role === 'admin' || 
+      profile?.role === 'hq_admin' || 
+      profile?.role === 'admin' ||
+      profile?.role === 'boss' ||
+      profile?.role === 'zone_admin' ||
+      profile?.role === 'coordinator' ||
+      profile?.isZoneCoordinator === true ||
+      profile?.administration === 'Boss';
+    return adminList.includes(myId) || isCreator || isRoleAdmin;
+  }, [isGroup, myId, (currentUser as any)?.role, profile, room?.admins, room?.createdById, room?.createdBy]);
 
   let resolvedRoomTitle = room?.title || (isGroup ? 'Group Chat' : 'Chat');
   let resolvedRoomAvatarUri = room?.avatar?.uri || (typeof room?.avatar === 'string' ? room.avatar : null);
@@ -480,13 +476,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     }
   }, [route.params?.openSearch]);
 
-  useEffect(() => {
-    if (route.params?.openListModal) {
-      setListModalType(route.params.openListModal);
-      setListModalVisible(true);
-      navigation.setParams({ openListModal: undefined });
-    }
-  }, [route.params?.openListModal]);
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const memoizedMessages = useMemo(() => messages, [messages]);
   const [inputText, setInputText] = useState('');
@@ -765,8 +755,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!cu || !room?.id) return;
     return () => {};
   }, [inputText, room?.id, currentUser?.uid]);
-  useEffect(() => { setPinnedMessages(messages.filter(m => m.pinned)); }, [messages]);
-  useEffect(() => { if (listModalVisible && listModalType === 'starred') setModalLoading(false); }, [listModalVisible, listModalType]);
+
   useEffect(() => {
     let iv: ReturnType<typeof setInterval>;
     if (isRecording) iv = setInterval(() => setRecDuration(p=>p+1), 1000);
@@ -1163,7 +1152,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
   const handleDelete = async () => {
     if (!selectedMsg || !currentUser) return;
-    if (selectedMsg.senderId !== currentUser.uid && !isGroupAdmin) {
+    const isMyMsg = selectedMsg.senderId === myId || selectedMsg.senderId === currentUser.uid || selectedMsg.isMe;
+    if (!isMyMsg && !isGroupAdmin) {
       showToast('You can only delete your own messages');
       setActionVisible(false);
       return;
@@ -1171,37 +1161,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const targetMsgId = selectedMsg.id;
     setActionVisible(false);
     try {
-      await api.chats.deleteMessage(room.id, targetMsgId);
-      setMessages(prev => prev.map(m => m.id === targetMsgId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
-      notifyParticipants('This message was deleted', 'delete');
-      showToast('Message deleted');
-    } catch { showToast('Failed to delete'); }
-  };
-
-  const handleStar = async () => {
-    if (!selectedMsg) return;
-    const targetMsg = selectedMsg;
-    setActionVisible(false);
-    try {
-      await api.chats.updateMessage(room.id, targetMsg.id, {
-        starred: !targetMsg.starred,
-      });
-      setMessages(prev => prev.map(m => m.id === targetMsg.id ? { ...m, starred: !m.starred } : m));
-      showToast(targetMsg.starred ? 'Unstarred' : 'Message starred ⭐');
-    } catch { showToast('Failed to star message'); }
-  };
-
-  const handlePin = async () => {
-    if (!selectedMsg) return;
-    const targetMsg = selectedMsg;
-    setActionVisible(false);
-    try {
-      await api.chats.updateMessage(room.id, targetMsg.id, {
-        pinned: !targetMsg.pinned,
-      });
-      setMessages(prev => prev.map(m => m.id === targetMsg.id ? { ...m, pinned: !m.pinned } : m));
-      showToast(targetMsg.pinned ? 'Unpinned' : 'Message pinned 📌');
-    } catch { showToast('Failed to pin message'); }
+      const targetRoomId = room?.id || incomingRoom?.id || deepLinkRoomId;
+      const res = await api.chats.deleteMessage(targetRoomId, targetMsgId);
+      if (res && ((res as any).success || !(res as any).error)) {
+        setMessages(prev => prev.map(m => m.id === targetMsgId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
+        notifyParticipants('This message was deleted', 'delete');
+        showToast('Message deleted');
+      } else {
+        showToast((res as any)?.error || 'Failed to delete');
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete');
+    }
   };
 
   const handleLoadMore = () => {
@@ -1644,11 +1615,16 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const callerNameToUse = myName || myDetails.name || 'Me';
 
     try {
+      const targetReceiverId = isGroup ? room.id : targetUids[0];
       const callRes = await api.calls.create({
-        receiver_id: isGroup ? room.id : targetUids[0],
+        receiverId: targetReceiverId,
+        receiver_id: targetReceiverId,
         type,
+        chatId: room.id,
         chat_id: room.id,
+        callerName: callerNameToUse,
         caller_name: callerNameToUse,
+        callerAvatar: myDetails.avatar || '',
         caller_avatar: myDetails.avatar || '',
       });
       const callData = callRes?.data || { id: 'call_' + Date.now() };
@@ -1796,7 +1772,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   };
   const renderTextBubble = (msg: ChatMessage) => {
 
-    const fullText = msg.text + (msg.starred ? ' ⭐' : '');
+    const fullText = msg.text;
     const isLong = fullText.length > COLLAPSE_THRESHOLD;
     const isExpanded = expandedMsgs.has(msg.id);
     const displayText = isLong && !isExpanded
@@ -2357,36 +2333,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                 )}
               </View>
             )}
-            {pinnedMessages.length > 0 && (
-              <View style={[styles.pinnedBanner, { backgroundColor: 'rgba(30, 20, 50, 0.85)', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(168, 85, 247, 0.3)' }]}>
-                <Ionicons name="pin" size={16} color={APP_THEME.primaryAccent} style={{ marginRight: 8 }} />
-                <TouchableOpacity
-                  style={{ flex: 1 }}
-                  onPress={() => {
-                    setListModalType('pinned');
-                    setListModalVisible(true);
-                  }}
-                >
-                  <Text style={[styles.pinnedBannerTitle, { color: APP_THEME.primaryText }]} numberOfLines={1}>
-                    Pinned Message
-                  </Text>
-                  <Text style={[styles.pinnedBannerText, { color: APP_THEME.secondaryText }]} numberOfLines={1}>
-                    {pinnedMessages[0].sender}: {pinnedMessages[0].text || (pinnedMessages[0].imageUrl ? '📷 Photo' : pinnedMessages[0].isVoiceNote ? '🎤 Voice note' : 'Attachment')}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={async () => {
-                    try {
-                      setMessages(prev => prev.map(m => m.id === pinnedMessages[0].id ? { ...m, pinned: false } : m));
-                      showToast('Message unpinned');
-                    } catch {}
-                  }}
-                  style={{ padding: 6 }}
-                >
-                  <Ionicons name="close" size={18} color={APP_THEME.secondaryText} />
-                </TouchableOpacity>
-              </View>
-            )}
+
 
             {messagesLoadError ? (
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
@@ -2673,19 +2620,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.actionItem} onPress={handleStar}>
-              <View style={styles.actionIconWrap}>
-                <Ionicons name={selectedMsg?.starred ? 'star' : 'star-outline'} size={20} color="#f59e0b" />
-              </View>
-              <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>{selectedMsg?.starred ? 'Unstar' : 'Star'}</Text>
-            </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionItem} onPress={handlePin}>
-              <View style={styles.actionIconWrap}>
-                <Ionicons name={selectedMsg?.pinned ? 'pin' : 'pin-outline'} size={20} color="#3b82f6" />
-              </View>
-              <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>{selectedMsg?.pinned ? 'Unpin' : 'Pin'}</Text>
-            </TouchableOpacity>
 
             {selectedMsg?.isMe && !selectedMsg.isVoiceNote && !selectedMsg.isDeleted && (
               (() => {
@@ -2921,107 +2856,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             </SafeAreaView>
           </View>
         </Modal>
-        <Modal
-          visible={listModalVisible}
-          animationType="slide"
-          transparent={false}
-          onRequestClose={() => setListModalVisible(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-            <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-      <DoodleBackground />
 
-            <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-            <SafeAreaView style={{ flex: 1 }}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setListModalVisible(false)} style={styles.modalCloseBtn}>
-                  <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>
-                  {listModalType === 'starred' ? 'Starred Messages' : 'Pinned Messages'}
-                </Text>
-                <View style={{ width: 40 }} />
-              </View>
-              <View style={styles.modalTabs}>
-                <TouchableOpacity
-                  style={[styles.modalTab, listModalType === 'starred' && styles.modalTabActive]}
-                  onPress={() => setListModalType('starred')}
-                >
-                  <Text style={[styles.modalTabText, listModalType === 'starred' && styles.modalTabTextActive]}>Starred</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalTab, listModalType === 'pinned' && styles.modalTabActive]}
-                  onPress={() => setListModalType('pinned')}
-                >
-                  <Text style={[styles.modalTabText, listModalType === 'pinned' && styles.modalTabTextActive]}>Pinned</Text>
-                </TouchableOpacity>
-              </View>
-
-              {modalLoading ? (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color={APP_THEME.primaryAccent} />
-                </View>
-              ) : (
-                <FlatList
-                  data={listModalType === 'starred' ? modalMessages : pinnedMessages}
-                  keyExtractor={item => item.id}
-                  contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12 }}
-                  ListEmptyComponent={
-                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 80 }}>
-                      <Ionicons name={listModalType === 'starred' ? 'star-outline' : 'pin-outline'} size={48} color={APP_THEME.secondaryText} />
-                      <Text style={{ color: APP_THEME.secondaryText, marginTop: 12, fontSize: 15 }}>
-                        No {listModalType === 'starred' ? 'starred' : 'pinned'} messages yet
-                      </Text>
-                    </View>
-                  }
-                  renderItem={({ item: msg }) => (
-                    <View style={styles.modalMsgCard}>
-                      <View style={styles.modalMsgHeader}>
-                        <Text style={[styles.modalMsgSender, { color: msg.senderColor }]}>{msg.sender}</Text>
-                        <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
-                      </View>
-                      
-                      <View style={{ marginTop: 4 }}>
-                        {msg.type === 'image' && msg.imageUrl ? (
-                          <View style={{ gap: 6 }}>
-                            <Image source={{ uri: msg.imageUrl }} style={{ width: 120, height: 120, borderRadius: 8 }} contentFit="cover" />
-                            {msg.text ? <Text style={{ color: theme.colors.textPrimary, fontSize: 14 }}>{msg.text}</Text> : null}
-                          </View>
-                        ) : msg.isVoiceNote ? (
-                          <Text style={{ color: APP_THEME.secondaryText, fontStyle: 'italic' }}>🎤 Voice note ({msg.duration})</Text>
-                        ) : (
-                          <Text style={{ color: theme.colors.textPrimary, fontSize: 14 }}>{msg.text}</Text>
-                        )}
-                      </View>
-
-                      <View style={styles.modalMsgFooter}>
-                        <TouchableOpacity
-                          style={styles.modalMsgAction}
-                          onPress={async () => {
-                            try {
-                              if (listModalType === 'starred') {
-    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, starred: false } : m));
-    showToast('Message unstarred');
-  } else {
-    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, pinned: false } : m));
-    showToast('Message unpinned');
-  }
-                            } catch {}
-                          }}
-                        >
-                          <Ionicons name={listModalType === 'starred' ? 'star-outline' : 'pin-outline'} size={14} color={APP_THEME.primaryAccent} />
-                          <Text style={{ color: APP_THEME.primaryAccent, fontSize: 12, fontWeight: '600' }}>
-                            {listModalType === 'starred' ? 'Unstar' : 'Unpin'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-                />
-              )}
-            </SafeAreaView>
-          </View>
-        </Modal>
 
       </SafeAreaView>
     </View>

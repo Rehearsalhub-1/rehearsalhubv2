@@ -165,6 +165,7 @@ export default function CallsScreen({ navigation }: any) {
     const contactAvatar = isOutgoing ? item.receiverAvatar : item.callerAvatar;
     try {
       const callRes = await api.calls.create({
+        receiverId: contactId,
         receiver_id: contactId,
         type: item.type,
       });

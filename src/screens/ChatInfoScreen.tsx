@@ -39,12 +39,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
   const [docMessages, setDocMessages] = useState<any[]>([]);
   const [linkMessages, setLinkMessages] = useState<any[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
-  const [starredModalVisible, setStarredModalVisible] = useState(false);
-  const [starredMessages, setStarredMessages] = useState<any[]>([]);
-  const [starredLoading, setStarredLoading] = useState(false);
-  const [pinnedModalVisible, setPinnedModalVisible] = useState(false);
-  const [pinnedMessages, setPinnedMessages] = useState<any[]>([]);
-  const [pinnedLoading, setPinnedLoading] = useState(false);
+
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
   const [isAddingMembers, setIsAddingMembers] = useState(false);
   const [searchMemberQuery, setSearchMemberQuery] = useState('');
@@ -120,7 +115,19 @@ export default function ChatInfoScreen({ route, navigation }: any) {
           };
         }));
         setMembers(list);
-        setIsAdmin(groupAdmins.includes(currentUser?.uid || '') || false);
+        const userProfile = useUserStore.getState().profile;
+        const myId = currentUser?.uid || (currentUser as any)?.id || (userProfile as any)?.id || '';
+        const isRoleAdmin = 
+          (currentUser as any)?.role === 'hq_admin' || 
+          (currentUser as any)?.role === 'admin' || 
+          userProfile?.role === 'hq_admin' || 
+          userProfile?.role === 'admin' ||
+          userProfile?.role === 'boss' ||
+          userProfile?.role === 'zone_admin' ||
+          userProfile?.role === 'coordinator' ||
+          userProfile?.isZoneCoordinator === true ||
+          userProfile?.administration === 'Boss';
+        setIsAdmin(groupAdmins.includes(myId) || isRoleAdmin);
         setLoading(false);
         const mutedBy: string[] = data.mutedBy || [];
         if (currentUser) setMuted(mutedBy.includes(currentUser.uid));
@@ -162,51 +169,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     }
   };
 
-  const openStarredMessages = async () => {
-    setStarredLoading(true);
-    setStarredModalVisible(true);
-    try {
-      const res = await api.chats.getMessages(room.id);
-      const allMsg: any[] = res?.success && Array.isArray(res.data) ? res.data : [];
-      setStarredMessages(allMsg.filter(d => d.starred === true));
-    } catch (e) {
-      console.error('Failed to load starred messages:', e);
-    } finally {
-      setStarredLoading(false);
-    }
-  };
 
-  const handleUnstarMessage = async (msgId: string) => {
-    try {
-      await api.chats.updateMessage(room.id, msgId, { starred: false });
-      setStarredMessages(prev => prev.filter(m => m.id !== msgId));
-    } catch (e) {
-      console.error('Failed to unstar message:', e);
-    }
-  };
-
-  const handleUnpinMessage = async (msgId: string) => {
-    try {
-      await api.chats.updateMessage(room.id, msgId, { pinned: false });
-      setPinnedMessages(prev => prev.filter(m => m.id !== msgId));
-    } catch (e) {
-      console.error('Failed to unpin message:', e);
-    }
-  };
-
-  const openPinnedMessages = async () => {
-    setPinnedLoading(true);
-    setPinnedModalVisible(true);
-    try {
-      const res = await api.chats.getMessages(room.id);
-      const allMsg: any[] = res?.success && Array.isArray(res.data) ? res.data : [];
-      setPinnedMessages(allMsg.filter(d => d.pinned === true));
-    } catch (e) {
-      console.error('Failed to load pinned messages:', e);
-    } finally {
-      setPinnedLoading(false);
-    }
-  };
 
   const handleClearChat = () => {
     Alert.alert('Clear Chat', 'Delete all messages in this chat? This cannot be undone.', [
@@ -524,17 +487,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.settingRow} onPress={openStarredMessages}>
-              <Ionicons name="star-outline" size={20} color={T.textSecondary} style={styles.settingIcon} />
-              <Text style={styles.settingLabel}>Starred messages</Text>
-              <Ionicons name="chevron-forward" size={16} color={T.textMuted} />
-            </TouchableOpacity>
 
-            <TouchableOpacity style={styles.settingRow} onPress={openPinnedMessages}>
-              <Ionicons name="pin-outline" size={20} color={T.textSecondary} style={styles.settingIcon} />
-              <Text style={styles.settingLabel}>Pinned messages</Text>
-              <Ionicons name="chevron-forward" size={16} color={T.textMuted} />
-            </TouchableOpacity>
 
             <TouchableOpacity style={styles.settingRow} onPress={openMediaGallery}>
               <Ionicons name="image-outline" size={20} color={T.textSecondary} style={styles.settingIcon} />
@@ -718,135 +671,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
         </View>
       </Modal>
 
-      {/* Starred Messages ScreenView */}
-      <Modal
-        visible={starredModalVisible}
-        animationType="slide"
-        onRequestClose={() => setStarredModalVisible(false)}
-      >
-        <View style={[styles.container, { flex: 1 }]}>
-          <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-          <DoodleBackground />
-          <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-          <SafeAreaView style={{ flex: 1 }}>
-            <View style={styles.header}>
-              <TouchableOpacity onPress={() => setStarredModalVisible(false)} style={styles.backBtn}>
-                <Ionicons name="chevron-back" size={26} color={T.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.headerTitle}>Starred Messages</Text>
-              <View style={{ width: 40 }} />
-            </View>
 
-            {starredLoading ? (
-              <ActivityIndicator color={T.accent} style={{ marginTop: 40 }} />
-            ) : starredMessages.length === 0 ? (
-              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-                <Ionicons name="star-outline" size={56} color={T.textMuted} />
-                <Text style={{ color: T.textPrimary, fontSize: 17, fontWeight: '700', marginTop: 16 }}>No starred messages</Text>
-                <Text style={{ color: T.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 8 }}>
-                  Tap and hold any message in this chat and select "Star" to save it here for quick access.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={starredMessages}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ padding: 16 }}
-                renderItem={({ item }) => {
-                  let displayText = item.text || '';
-                  if (typeof displayText === 'string' && displayText.startsWith('{') && displayText.endsWith('}')) {
-                    try {
-                      const p = JSON.parse(displayText);
-                      if (p.text) displayText = p.text;
-                      else if (p.voiceUrl) displayText = '🎤 Voice note';
-                      else if (p.mediaUrl) displayText = '📷 Photo';
-                    } catch {}
-                  }
-                  return (
-                    <View style={{ backgroundColor: T.cardBackground, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: T.bottomTabBorder }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: T.accent }}>{cleanSenderName(item.senderName || 'Member')}</Text>
-                        <TouchableOpacity onPress={() => handleUnstarMessage(item.id)} style={{ padding: 4 }}>
-                          <Ionicons name="star" size={18} color="#f59e0b" />
-                        </TouchableOpacity>
-                      </View>
-                      <Text style={{ fontSize: 15, color: T.textPrimary, lineHeight: 20 }}>{displayText}</Text>
-                      <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 8, alignSelf: 'flex-end' }}>
-                        {new Date(item.createdAt || item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                  );
-                }}
-              />
-            )}
-          </SafeAreaView>
-        </View>
-      </Modal>
-
-      {/* Pinned Messages ScreenView */}
-      <Modal
-        visible={pinnedModalVisible}
-        animationType="slide"
-        onRequestClose={() => setPinnedModalVisible(false)}
-      >
-        <View style={[styles.container, { flex: 1 }]}>
-          <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-          <DoodleBackground />
-          <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-          <SafeAreaView style={{ flex: 1 }}>
-            <View style={styles.header}>
-              <TouchableOpacity onPress={() => setPinnedModalVisible(false)} style={styles.backBtn}>
-                <Ionicons name="chevron-back" size={26} color={T.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.headerTitle}>Pinned Messages</Text>
-              <View style={{ width: 40 }} />
-            </View>
-
-            {pinnedLoading ? (
-              <ActivityIndicator color={T.accent} style={{ marginTop: 40 }} />
-            ) : pinnedMessages.length === 0 ? (
-              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-                <Ionicons name="pin-outline" size={56} color={T.textMuted} />
-                <Text style={{ color: T.textPrimary, fontSize: 17, fontWeight: '700', marginTop: 16 }}>No pinned messages</Text>
-                <Text style={{ color: T.textSecondary, fontSize: 14, textAlign: 'center', marginTop: 8 }}>
-                  Tap and hold any message in this chat and select "Pin" to keep it pinned at the top.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={pinnedMessages}
-                keyExtractor={item => item.id}
-                contentContainerStyle={{ padding: 16 }}
-                renderItem={({ item }) => {
-                  let displayText = item.text || '';
-                  if (typeof displayText === 'string' && displayText.startsWith('{') && displayText.endsWith('}')) {
-                    try {
-                      const p = JSON.parse(displayText);
-                      if (p.text) displayText = p.text;
-                      else if (p.voiceUrl) displayText = '🎤 Voice note';
-                      else if (p.mediaUrl) displayText = '📷 Photo';
-                    } catch {}
-                  }
-                  return (
-                    <View style={{ backgroundColor: T.cardBackground, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: T.bottomTabBorder }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: T.accent }}>{cleanSenderName(item.senderName || 'Member')}</Text>
-                        <TouchableOpacity onPress={() => handleUnpinMessage(item.id)} style={{ padding: 4 }}>
-                          <Ionicons name="pin" size={16} color={T.accent} />
-                        </TouchableOpacity>
-                      </View>
-                      <Text style={{ fontSize: 15, color: T.textPrimary, lineHeight: 20 }}>{displayText}</Text>
-                      <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 8, alignSelf: 'flex-end' }}>
-                        {new Date(item.createdAt || item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                  );
-                }}
-              />
-            )}
-          </SafeAreaView>
-        </View>
-      </Modal>
       <Modal
         visible={!!selectedMember}
         animationType="slide"
