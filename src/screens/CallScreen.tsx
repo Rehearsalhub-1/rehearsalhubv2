@@ -5,13 +5,15 @@ import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Dimensions, Animated, BackHandler, ScrollView
+  Dimensions, Animated, BackHandler, ScrollView,
+  Platform, PermissionsAndroid, Alert, Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
+import * as ImagePicker from 'expo-image-picker';
 import * as Sentry from '@sentry/react-native';
 import { SyncAvatar } from '../components/SyncAvatar';
 import { useUserStore } from '../hooks/useUser';
@@ -30,6 +32,53 @@ import { Room, RoomEvent, Track, VideoPresets } from 'livekit-client';
 import { SafeVideoView as VideoView, safeRegisterGlobals as registerGlobals } from '../lib/safeNativeModules';
 registerGlobals();
 
+const requestCameraPermission = async (): Promise<boolean> => {
+  try {
+    if (Platform.OS === 'android') {
+      const check = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA);
+      if (check) return true;
+      const res = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Camera Access Needed',
+          message: 'RehearsalHub requires camera permission to turn on video during calls.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Cancel',
+        }
+      );
+      if (res === PermissionsAndroid.RESULTS.GRANTED) return true;
+      if (res === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN) {
+        Alert.alert(
+          'Camera Permission Disabled',
+          'Camera access has been disabled for RehearsalHub. Please enable it in your device settings to turn on video.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+      }
+      return false;
+    } else {
+      const { status, canAskAgain } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status === 'granted') return true;
+      if (!canAskAgain) {
+        Alert.alert(
+          'Camera Permission Disabled',
+          'Camera access has been disabled for RehearsalHub. Please enable it in your device settings to turn on video.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() }
+          ]
+        );
+      }
+      return false;
+    }
+  } catch (err) {
+    console.warn('[CameraPermission] Check failed:', err);
+    return false;
+  }
+};
+
 const LIVEKIT_URL = process.env.EXPO_PUBLIC_LIVEKIT_URL || 'wss://rehearsal-hub-livekit.cloud';
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -46,6 +95,7 @@ interface CallParticipant {
 }
 
 export default function CallScreen({ route, navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const styles = getStyles(theme);
   const T = theme.colors;
@@ -270,24 +320,32 @@ export default function CallScreen({ route, navigation }: any) {
         const data: any = await api.calls.getToken(callId, cu?.uid || 'user');
         token = data?.token || null;
         dynamicUrl = data?.url || null;
-      } catch (err) {
-        console.warn('[LiveKit] Token fetch failed:', err);
+      } catch (err: any) {
+        console.warn('[LiveKit] Token fetch failed:', err?.message || err);
       }
 
-      if (!token) throw new Error('Failed to fetch token from backend');
+      if (!token) {
+        console.warn('[LiveKit] No token available from backend for room:', callId);
+        return;
+      }
 
       const serverUrl = dynamicUrl || LIVEKIT_URL;
       await engineRef.current.connect(serverUrl, token);
 
       if (callType === 'video') {
-        await engineRef.current.localParticipant.setCameraEnabled(true);
-        const camTrack = engineRef.current.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
-        if (camTrack) setLocalVideoTrack(camTrack);
+        const hasPerm = await requestCameraPermission();
+        if (hasPerm) {
+          await engineRef.current.localParticipant.setCameraEnabled(true);
+          const camTrack = engineRef.current.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+          if (camTrack) setLocalVideoTrack(camTrack);
+        } else {
+          setCameraOff(true);
+        }
       }
       await engineRef.current.localParticipant.setMicrophoneEnabled(true);
       syncLiveKitParticipants();
-    } catch (e) {
-      console.error('Join channel error', e);
+    } catch (e: any) {
+      console.warn('[LiveKit] Join channel warning:', e?.message || e);
     }
   };
 
@@ -347,19 +405,45 @@ export default function CallScreen({ route, navigation }: any) {
   };
 
   const toggleCamera = async () => {
-    const nextVal = !cameraOff;
-    setCameraOff(nextVal);
-    if (!nextVal) {
-      setCallType('video');
-    }
-    try {
-      if (engineRef.current) {
-        await engineRef.current.localParticipant.setCameraEnabled(!nextVal);
-        const camTrack = engineRef.current.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
-        setLocalVideoTrack(camTrack || null);
+    const turningOn = cameraOff;
+    if (turningOn) {
+      const hasPerm = await requestCameraPermission();
+      if (!hasPerm) return;
+
+      registerGlobals();
+      const hasMedia = typeof navigator !== 'undefined' && !!navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function';
+      if (!hasMedia) {
+        Alert.alert(
+          'Video Call Not Available',
+          'Camera streaming requires WebRTC native support on your device. Audio call remains active.'
+        );
+        return;
       }
-    } catch (e) {
-      console.error('Camera toggle error', e);
+
+      setCameraOff(false);
+      setCallType('video');
+      try {
+        if (engineRef.current) {
+          await engineRef.current.localParticipant.setCameraEnabled(true);
+          const camTrack = engineRef.current.localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+          setLocalVideoTrack(camTrack || null);
+        }
+      } catch (e: any) {
+        console.error('Camera toggle error', e);
+        setCameraOff(true);
+        setCallType('voice');
+        Alert.alert('Camera Error', e?.message || 'Could not enable camera.');
+      }
+    } else {
+      setCameraOff(true);
+      try {
+        if (engineRef.current) {
+          await engineRef.current.localParticipant.setCameraEnabled(false);
+          setLocalVideoTrack(null);
+        }
+      } catch (e) {
+        console.error('Camera toggle error', e);
+      }
     }
   };
 
@@ -449,12 +533,12 @@ export default function CallScreen({ route, navigation }: any) {
   const allGridParticipants: CallParticipant[] = [localParticipant, ...remoteList];
 
   return (
-    <Animated.View style={[{ flex: 1, backgroundColor: '#0b141a' }, { opacity: fadeAnim }]}>
+    <Animated.View style={[{ flex: 1, backgroundColor: '#08080f' }, { opacity: fadeAnim }]}>
       <StatusBar style="light" />
 
-      {/* WhatsApp Background Gradient */}
+      {/* Obsidian Dark Violet Gradient */}
       <LinearGradient
-        colors={['#071a17', '#0c2420', '#071210']}
+        colors={['#07080f', '#0f101d', '#080811']}
         style={StyleSheet.absoluteFillObject}
         start={{ x: 0.2, y: 0 }}
         end={{ x: 0.8, y: 1 }}
@@ -466,19 +550,19 @@ export default function CallScreen({ route, navigation }: any) {
           {remoteVideoTrack && remoteJoined ? (
             <VideoView style={StyleSheet.absoluteFillObject} videoTrack={remoteVideoTrack} objectFit="cover" />
           ) : (
-            <View style={[StyleSheet.absoluteFillObject, styles.videoPlaceholder]}>
+            <View style={[StyleSheet.absoluteFillObject, styles.videoPlaceholder, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
               <SyncAvatar userId={contactId} initialAvatar={contactAvatar} fallbackName={contactName} size={110} bgColor={T.accent} />
               <Text style={styles.videoWaitText}>Waiting for video…</Text>
             </View>
           )}
 
-          {/* Local Floating Video PIP */}
+          {/* Local Floating Video PIP - Offsets below Safe Area */}
           {localVideoTrack && !cameraOff ? (
-            <View style={styles.localPip}>
+            <View style={[styles.localPip, { top: insets.top + 62 }]}>
               <VideoView style={{ flex: 1 }} videoTrack={localVideoTrack} mirror={true} objectFit="cover" />
             </View>
           ) : (
-            <View style={[styles.localPip, styles.localPipOff]}>
+            <View style={[styles.localPip, styles.localPipOff, { top: insets.top + 62 }]}>
               <Ionicons name="videocam-off" size={20} color="rgba(255,255,255,0.6)" />
             </View>
           )}
@@ -486,7 +570,7 @@ export default function CallScreen({ route, navigation }: any) {
       )}
 
       <SafeAreaView style={styles.mainCanvas}>
-        {/* Authentic WhatsApp Top Header */}
+        {/* Authentic Top Header */}
         <View style={styles.topHeader}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()} 
@@ -514,21 +598,30 @@ export default function CallScreen({ route, navigation }: any) {
 
         {/* Center Calling Area */}
         {isGroupCall ? (
-          /* WhatsApp Group Call Grid */
-          <View style={styles.gridContainer}>
+          /* Scrollable Group Call Grid */
+          <ScrollView 
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollGridContent}
+            showsVerticalScrollIndicator={false}
+          >
             {allGridParticipants.map((p, idx) => {
               const isMe = p.id === cu?.uid || p.id === 'me';
               const showVideo = isMe ? (localVideoTrack && !cameraOff) : (p.videoTrack && p.status === 'joined');
               const isTileRinging = p.status === 'ringing';
               const total = allGridParticipants.length;
-              const isTwo = total <= 2;
+
+              const tileStyle = total === 1 
+                ? styles.gridTileSingle 
+                : total === 2 
+                ? styles.gridTileHalf 
+                : styles.gridTileQuarter;
 
               return (
                 <View 
                   key={p.id || `p-${idx}`} 
                   style={[
                     styles.gridTile, 
-                    isTwo ? styles.gridTileHalf : styles.gridTileQuarter,
+                    tileStyle,
                     p.isSpeaking && styles.speakingTileBorder,
                   ]}
                 >
@@ -545,7 +638,7 @@ export default function CallScreen({ route, navigation }: any) {
                         userId={p.id} 
                         initialAvatar={p.avatar} 
                         fallbackName={p.name} 
-                        size={isTwo ? 80 : 60} 
+                        size={total <= 2 ? 80 : 60} 
                         bgColor={T.accent} 
                       />
                       {isTileRinging && (
@@ -562,13 +655,13 @@ export default function CallScreen({ route, navigation }: any) {
                     {p.isMuted ? (
                       <Ionicons name="mic-off" size={12} color="#ef4444" style={{ marginLeft: 4 }} />
                     ) : p.isSpeaking ? (
-                      <Ionicons name="volume-high" size={12} color="#22c55e" style={{ marginLeft: 4 }} />
+                      <Ionicons name="volume-high" size={12} color={T.accentBright || '#c084fc'} style={{ marginLeft: 4 }} />
                     ) : null}
                   </View>
                 </View>
               );
             })}
-          </View>
+          </ScrollView>
         ) : (
           /* 1-on-1 Call Center Stage */
           (callType === 'voice' || status !== 'connected') && (
@@ -621,7 +714,7 @@ export default function CallScreen({ route, navigation }: any) {
                 <Ionicons 
                   name={speakerOn ? "volume-high" : "volume-medium-outline"} 
                   size={22} 
-                  color={speakerOn ? "#25D366" : "#ffffff"} 
+                  color={speakerOn ? "#a78bfa" : "#ffffff"} 
                 />
               </TouchableOpacity>
 
@@ -645,7 +738,7 @@ export default function CallScreen({ route, navigation }: any) {
                 <Ionicons 
                   name={(!cameraOff && callType === 'video') ? "videocam" : "videocam-off"} 
                   size={22} 
-                  color={(!cameraOff && callType === 'video') ? "#25D366" : "#ffffff"} 
+                  color={(!cameraOff && callType === 'video') ? "#a78bfa" : "#ffffff"} 
                 />
               </TouchableOpacity>
 
@@ -759,21 +852,21 @@ const getStyles = (theme: any) => {
       width: 220,
       height: 220,
       borderRadius: 110,
-      backgroundColor: 'rgba(37, 211, 102, 0.08)',
+      backgroundColor: 'rgba(168, 85, 247, 0.09)',
     },
     ringMid: {
       position: 'absolute',
       width: 180,
       height: 180,
       borderRadius: 90,
-      backgroundColor: 'rgba(37, 211, 102, 0.12)',
+      backgroundColor: 'rgba(168, 85, 247, 0.15)',
     },
     ringInner: {
       position: 'absolute',
       width: 150,
       height: 150,
       borderRadius: 75,
-      backgroundColor: 'rgba(37, 211, 102, 0.18)',
+      backgroundColor: 'rgba(168, 85, 247, 0.24)',
     },
     singleAvatarBorder: {
       width: 130,
@@ -781,13 +874,17 @@ const getStyles = (theme: any) => {
       borderRadius: 65,
       overflow: 'hidden',
       borderWidth: 3,
-      borderColor: 'rgba(37, 211, 102, 0.5)',
-      elevation: 6,
+      borderColor: 'rgba(168, 85, 247, 0.65)',
+      elevation: 8,
+      shadowColor: '#a855f7',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 12,
     },
     videoPlaceholder: {
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: '#0a141b',
+      backgroundColor: '#0b0514',
       gap: 16,
     },
     videoWaitText: {
@@ -796,51 +893,52 @@ const getStyles = (theme: any) => {
     },
     localPip: {
       position: 'absolute',
-      top: 85,
       right: 16,
       width: 100,
       height: 145,
       borderRadius: 14,
       overflow: 'hidden',
       borderWidth: 2,
-      borderColor: 'rgba(255,255,255,0.3)',
-      backgroundColor: '#111b21',
-      elevation: 6,
+      borderColor: 'rgba(168, 85, 247, 0.45)',
+      backgroundColor: '#130a21',
+      elevation: 8,
       zIndex: 20,
     },
     localPipOff: {
       justifyContent: 'center',
       alignItems: 'center',
     },
-    /* WhatsApp Group Call Grid */
-    gridContainer: {
-      flex: 1,
+    /* Scrollable Group Call Grid */
+    scrollGridContent: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       justifyContent: 'space-between',
-      alignContent: 'space-between',
       paddingHorizontal: 12,
       paddingVertical: 12,
-      gap: 8,
+      gap: 10,
     },
     gridTile: {
-      backgroundColor: '#182229',
+      backgroundColor: '#160f29',
       borderRadius: 16,
       overflow: 'hidden',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      borderColor: 'rgba(168, 85, 247, 0.18)',
       position: 'relative',
+    },
+    gridTileSingle: {
+      width: '100%',
+      height: 320,
     },
     gridTileHalf: {
       width: '100%',
-      height: '48.5%',
+      height: 230,
     },
     gridTileQuarter: {
       width: '48.5%',
-      height: '48.5%',
+      height: 190,
     },
     speakingTileBorder: {
-      borderColor: '#25D366',
+      borderColor: '#a855f7',
       borderWidth: 2,
     },
     tileAvatarWrap: {
@@ -866,7 +964,7 @@ const getStyles = (theme: any) => {
       left: 8,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: 'rgba(0,0,0,0.65)',
+      backgroundColor: 'rgba(11, 5, 20, 0.82)',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 10,
@@ -888,14 +986,14 @@ const getStyles = (theme: any) => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-around',
-      backgroundColor: 'rgba(17, 27, 33, 0.92)',
+      backgroundColor: 'rgba(19, 10, 33, 0.94)',
       borderRadius: 40,
       paddingHorizontal: 16,
       paddingVertical: 10,
       width: '100%',
       maxWidth: 380,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'rgba(255, 255, 255, 0.12)',
+      borderColor: 'rgba(168, 85, 247, 0.25)',
       elevation: 8,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 4 },
@@ -906,14 +1004,14 @@ const getStyles = (theme: any) => {
       width: 48,
       height: 48,
       borderRadius: 24,
-      backgroundColor: 'rgba(255,255,255,0.12)',
+      backgroundColor: 'rgba(255,255,255,0.10)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     waCtrlBtnActive: {
-      backgroundColor: 'rgba(37, 211, 102, 0.2)',
+      backgroundColor: 'rgba(168, 85, 247, 0.25)',
       borderWidth: 1.5,
-      borderColor: '#25D366',
+      borderColor: '#a855f7',
     },
     waCtrlBtnMuted: {
       backgroundColor: 'rgba(239, 68, 68, 0.2)',
@@ -957,10 +1055,14 @@ const getStyles = (theme: any) => {
       width: 68,
       height: 68,
       borderRadius: 34,
-      backgroundColor: '#25D366',
+      backgroundColor: '#a855f7',
       justifyContent: 'center',
       alignItems: 'center',
-      elevation: 6,
+      elevation: 8,
+      shadowColor: '#a855f7',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.5,
+      shadowRadius: 10,
     },
     btnSubLabel: {
       color: 'rgba(255,255,255,0.7)',

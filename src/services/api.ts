@@ -82,7 +82,7 @@ export const api = {
   // ── Programs & Rehearsals ────────────────────────────────────────────────
   programs: {
     getAll: (zoneId?: string) =>
-      apiClient.get<any>(zoneId ? `/programs?zoneId=${encodeURIComponent(zoneId)}` : '/programs'),
+      apiClient.get<any>(`/programs?includeChurch=true${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`),
     getMemberRehearsals: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/subgroups/member-rehearsals'),
   },
@@ -90,7 +90,7 @@ export const api = {
   // ── Categories ───────────────────────────────────────────────────────────
   categories: {
     getPage: (zoneId?: string) =>
-      apiClient.get<any>(zoneId ? `/categories/zone-page?zoneId=${encodeURIComponent(zoneId)}` : '/categories/page'),
+      apiClient.get<any>(zoneId ? `/categories/page?zoneId=${encodeURIComponent(zoneId)}` : '/categories/page'),
   },
 
   // ── Song Submissions ──────────────────────────────────────────────────────
@@ -261,8 +261,8 @@ export const api = {
 
   // ── Media Library ────────────────────────────────────────────────────────
   media: {
-    getAll: (zoneId?: string, limit = 50) =>
-      apiClient.get<any>(`/media?limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`),
+    getAll: (zoneId?: string, limit = 50, type?: string) =>
+      apiClient.get<any>(`/media?limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}${type ? `&type=${encodeURIComponent(type)}` : ''}`),
     getCategories: () =>
       apiClient.get<any>('/media/categories'),
   },

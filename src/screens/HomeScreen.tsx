@@ -78,9 +78,35 @@ const MENU_SECTIONS = [
 ];
 
 const CLOUD_ASSETS = [
-require('../../assets/image/home1.jpg'),
-require('../../assets/image/home5.jpg'),
-require('../../assets/image/home8.jpg')];
+  require('../../assets/video/cloud3_min.webp'), // cloud 3 for first card
+  require('../../assets/video/cloud2_min.webp'), // cloud 2 for second card
+  require('../../assets/video/cloud4_min.webp'), // cloud 4 for third card (last card)
+];
+
+function LoopingOnceImage({ source, durationMs = 15800, style, contentPosition }: { source: any; durationMs?: number; style: any; contentPosition?: any }) {
+  const imageRef = useRef<any>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        imageRef.current?.stopAnimating?.();
+      } catch {}
+    }, durationMs);
+    return () => clearTimeout(timer);
+  }, [durationMs]);
+
+  return (
+    <Image
+      ref={imageRef}
+      source={source}
+      style={style}
+      contentFit="cover"
+      contentPosition={contentPosition || { x: 0.5, y: 0.5 }}
+      priority="high"
+      cachePolicy="memory-disk"
+    />
+  );
+}
 
 const INITIAL_CARDS = [
   {
@@ -88,21 +114,27 @@ const INITIAL_CARDS = [
   title: 'Ongoing Rehearsal',
   subtitle: 'Join Live Rehearsal',
   mainValue: 'LIVE',
-  route: 'Rehearsal'
+  route: 'Rehearsal',
+  durationMs: 15800,
+  contentPosition: { x: 0.5, y: 0.5 },
 },
 {
   id: '2',
   title: 'Chat Rooms',
   subtitle: 'Subgroups & Bands Chat',
   mainValue: 'CHAT',
-  route: 'ChatRooms'
+  route: 'ChatRooms',
+  durationMs: 15800,
+  contentPosition: { x: 0.5, y: 0.3 },
 },
 {
   id: '3',
   title: 'Calendar',
   subtitle: 'Ministry Programs',
   mainValue: 'LWS',
-  route: 'Calendar'
+  route: 'Calendar',
+  durationMs: 15800,
+  contentPosition: { x: 0.5, y: 0.5 },
 },
 ];
 
@@ -113,10 +145,10 @@ export default function HomeScreen({ navigation }: any) {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [cards, setCards] = useState([
-  { ...INITIAL_CARDS[0], source: CLOUD_ASSETS[1] },
-  { ...INITIAL_CARDS[1], source: CLOUD_ASSETS[0] },
-  { ...INITIAL_CARDS[2], source: CLOUD_ASSETS[2] }]
-  );
+    { ...INITIAL_CARDS[0], source: CLOUD_ASSETS[0] },
+    { ...INITIAL_CARDS[1], source: CLOUD_ASSETS[1] },
+    { ...INITIAL_CARDS[2], source: CLOUD_ASSETS[2] },
+  ]);
 
   const isFocused = useIsFocused();
   const [appState, setAppState] = useState(AppState.currentState);
@@ -390,18 +422,14 @@ export default function HomeScreen({ navigation }: any) {
               }}
               activeOpacity={0.9}>
               
-                {card.source &&
-              <>
-                    <Image
-                      source={card.source}
-                      style={[StyleSheet.absoluteFill, { opacity: 0.85 }]}
-                      contentFit="cover"
-                      priority="high"
-
-                      cachePolicy="memory-disk" 
-                    />
-                  </>
-              }
+                {card.source && (
+                  <LoopingOnceImage
+                    source={card.source}
+                    durationMs={(card as any).durationMs || 8000}
+                    style={[StyleSheet.absoluteFill, { opacity: 0.85 }]}
+                    contentPosition={(card as any).contentPosition}
+                  />
+                )}
                 <LinearGradient
                   colors={['rgba(11, 7, 18, 0.15)', 'rgba(11, 7, 18, 0.65)']}
                   start={{ x: 0.5, y: 0 }}
@@ -494,8 +522,9 @@ export default function HomeScreen({ navigation }: any) {
                   return isZoneCoordinator(contextProfile) || isZoneCoordinator(userProfile as any) || contextProfile?.canAccessPreRehearsal === true || (userProfile as any)?.can_access_pre_rehearsal === true;
                 }
                 if (item.id === 'archives') {
+                  // Only hide if explicitly flagged; otherwise show to all signed-in users
                   if (hf.hideArchives) return false;
-                  return canAccessArchive(contextProfile) || canAccessArchive(userProfile as any);
+                  return true;
                 }
                 if (item.id === 'songs' && hf.hideMinisteredSongs) return false;
                 if (item.id === 'ongoing' && hf.hideOngoing) return false;

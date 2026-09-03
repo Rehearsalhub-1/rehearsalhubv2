@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView, Platform, Dimensions, Modal,
   ActivityIndicator, Animated, ScrollView,
   AppState, Alert, RefreshControl, Linking, FlatList,
+  StatusBar as RNStatusBar,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +19,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
+import { resolveMediaUrl } from '../lib/mediaUtils';
 import { Audio } from 'expo-av'; // kept for recording only — playback uses TrackPlayer
 import {
   SafeTrackPlayer as TrackPlayer,
@@ -27,6 +29,8 @@ import {
 } from '../lib/safeNativeModules';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as WebBrowser from 'expo-web-browser';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as DocumentPicker from 'expo-document-picker';
 import Slider from '@react-native-community/slider';
 
@@ -42,10 +46,92 @@ import { debugSessionLog } from '../lib/debugSessionLog';
 import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+function ChatVideoModal({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+  if (!uri) return null;
+  return <ChatVideoPlayerInner uri={uri} onClose={onClose} />;
+}
 
+function ChatVideoPlayerInner({ uri, onClose }: { uri: string; onClose: () => void }) {
+  const player = useVideoPlayer(uri, p => {
+    p.loop = true;
+    p.play();
+  });
+  const insets = useSafeAreaInsets();
 
+  return (
+    <Modal visible={Boolean(uri)} transparent={false} animationType="fade" onRequestClose={onClose} statusBarTranslucent={true}>
+      <View style={{ flex: 1, backgroundColor: '#000000' }}>
+        <StatusBar style="light" backgroundColor="#000000" />
+        {/* Top Header */}
+        <View style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          paddingTop: Math.max(insets.top, 16),
+          paddingBottom: 12,
+          paddingHorizontal: 16,
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          zIndex: 20,
+        }}>
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
+            Video
+          </Text>
+          <TouchableOpacity
+            onPress={onClose}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              backgroundColor: 'rgba(255,255,255,0.18)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Video Canvas strictly inset from top and bottom bars */}
+        <View style={{
+          flex: 1,
+          width: '100%',
+          paddingTop: Math.max(insets.top, 16) + 50,
+          paddingBottom: Math.max(insets.bottom, 16) + 10,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <VideoView
+            style={{ width: '100%', height: '100%' }}
+            player={player}
+            nativeControls={true}
+            contentFit="contain"
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
 import {
   ChatMessage,
   getSenderColor,
@@ -218,6 +304,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [selectedMsg, setSelectedMsg] = useState<any>(null);
   const [imgViewerVisible, setImgViewerVisible] = useState(false);
   const [imgViewerUri, setImgViewerUri] = useState<string | null>(null);
+  const [videoViewerUri, setVideoViewerUri] = useState<string | null>(null);
   const [viewOnceVisible, setViewOnceVisible] = useState(false);
   const [viewOnceUri, setViewOnceUri] = useState<string | null>(null);
   const [viewOnceTimer, setViewOnceTimer] = useState(7); // 7s to match the actual countdown reset
@@ -658,10 +745,12 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     setMessagesLoadError(null);
     setIsInitialLoading(true);
 
-    AsyncStorage.getItem(cacheKey).then(raw => {
+    AsyncStorage.getItem(cacheKey).then(async raw => {
       if (!raw || cancelled || !isMountedRef.current) return;
       try {
-        const parsed: ChatMessage[] = JSON.parse(raw).map((m: any) => {
+        const clearedAtStr = await AsyncStorage.getItem(`cleared_at_${cu?.uid}_${room.id}`).catch(() => null);
+        const clearedAt = clearedAtStr ? parseInt(clearedAtStr, 10) : 0;
+        let parsed: ChatMessage[] = JSON.parse(raw).map((m: any) => {
           const rawSender = (room?.participantDetails?.[m.senderId]?.name && room.participantDetails[m.senderId].name !== 'Member' ? room.participantDetails[m.senderId].name : null)
             || (m.senderName && m.senderName !== 'Member' ? m.senderName : null)
             || (m.sender && m.sender !== 'Member' ? m.sender : null)
@@ -675,6 +764,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             timestampObj: m.timestampObj ? new Date(m.timestampObj) : new Date(m.createdAt || m.created_at || m.timestamp || Date.now()),
           };
         });
+        if (clearedAt > 0) {
+          parsed = parsed.filter(m => (m.timestampObj?.getTime?.() || 0) > clearedAt);
+        }
         parsed.sort((a, b) => (b.timestampObj?.getTime?.() || 0) - (a.timestampObj?.getTime?.() || 0));
         setMessages(parsed);
         setIsInitialLoading(false);
@@ -692,24 +784,35 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               || (m.sender && m.sender !== 'Member' ? m.sender : null)
               || (room?.participantDetails?.[m.senderId]?.email ? room.participantDetails[m.senderId].email.split('@')[0] : null)
               || 'Member';
+
+            // Parse JSON-encoded text payload (same as backend formatMessage)
+            let parsedPayload: any = null;
+            const rawText: string = m.text || m.content || '';
+            if (typeof rawText === 'string' && rawText.startsWith('{') && rawText.endsWith('}')) {
+              try { parsedPayload = JSON.parse(rawText); } catch {}
+            }
+            const pp = parsedPayload || {};
+            const msgType = m.type || pp.type || 'text';
+            const resolvedMediaUrl = resolveMediaUrl(m.mediaUrl || m.media_url || pp.mediaUrl || pp.media_url);
+
             return {
               id: m.id,
               senderId: m.senderId || m.sender_id,
               sender: cleanSenderName(rawSender),
-              text: m.text || m.content || '',
+              text: pp.text !== undefined ? pp.text : rawText,
               time: displayDt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               isMe: cu ? (m.senderId || m.sender_id) === cu.uid : false,
               senderColor: getSenderColor(m.senderId || '', themeName === 'light'),
-              type: m.type || 'text',
-              imageUrl: m.imageUrl || m.mediaUrl || null,
-              isVoiceNote: m.type === 'voice',
-              isSystem: m.type === 'system',
-              duration: m.duration,
-              audioUrl: m.audioUrl || m.mediaUrl || null,
+              type: msgType,
+              imageUrl: resolveMediaUrl(m.imageUrl || pp.imageUrl || (msgType === 'image' || msgType === 'photo' ? resolvedMediaUrl : null)) || null,
+              isVoiceNote: msgType === 'voice',
+              isSystem: msgType === 'system',
+              duration: m.duration || pp.duration,
+              audioUrl: resolveMediaUrl(m.audioUrl || pp.audioUrl || pp.voiceUrl || ((msgType === 'audio' || msgType === 'voice') ? resolvedMediaUrl : null)) || null,
               timestampObj: displayDt,
               status: m.status || 'sent',
               reactions: m.reactions || {},
-              replyTo: m.replyTo || null,
+              replyTo: m.replyTo || pp.replyTo || null,
               edited: m.edited || false,
               isDeleted: m.deleted || false,
               starred: m.starred || false,
@@ -717,22 +820,28 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               viewOnceViewed: m.viewOnceViewed || false,
               pinned: m.pinned || false,
               waveform: m.waveform || undefined,
-              songData: m.songData || undefined,
-              playlistData: m.playlistData || undefined,
+              songData: m.songData || pp.songData || undefined,
+              playlistData: m.playlistData || pp.playlistData || undefined,
               note: m.note || undefined,
-              videoUrl: m.videoUrl || undefined,
-              documentUrl: m.documentUrl || undefined,
-              documentName: m.documentName || undefined,
-              documentSize: m.documentSize || undefined,
+              videoUrl: resolveMediaUrl(m.videoUrl || pp.videoUrl || (msgType === 'video' ? resolvedMediaUrl : undefined)) || undefined,
+              documentUrl: resolveMediaUrl(m.documentUrl || pp.documentUrl || (msgType === 'document' ? resolvedMediaUrl : undefined)) || undefined,
+              documentName: m.documentName || pp.documentName || undefined,
+              documentSize: m.documentSize || pp.documentSize || undefined,
               callType: m.callType || undefined,
               callId: m.callId || undefined,
-              pollOptions: m.pollOptions || undefined,
-              profileData: m.profileData || m.contactData || m.contact_data || undefined,
-              contactData: m.contactData || m.contact_data || m.profileData || undefined,
+              pollOptions: m.pollOptions || pp.pollOptions || undefined,
+              profileData: m.profileData || m.contactData || m.contact_data || pp.profileData || pp.contactData || undefined,
+              contactData: m.contactData || m.contact_data || m.profileData || pp.contactData || pp.profileData || undefined,
             };
           });
-          msgs.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
-          setMessages(msgs);
+          let finalMsgs = msgs;
+          const clearedAtStr = await AsyncStorage.getItem(`cleared_at_${currentUser?.uid}_${room.id}`).catch(() => null);
+          const clearedAt = clearedAtStr ? parseInt(clearedAtStr, 10) : 0;
+          if (clearedAt > 0) {
+            finalMsgs = msgs.filter(m => (m.timestampObj?.getTime?.() || 0) > clearedAt);
+          }
+          finalMsgs.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
+          setMessages(finalMsgs);
           setIsInitialLoading(false);
           setIsLoadingMore(false);
         }
@@ -1051,42 +1160,121 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   };
   const pickImage = async (useCamera: boolean) => {
     setAttachMenuVisible(false);
-    const perm = useCamera ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { showToast('Permission required'); return; }
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images as any, quality: 0.8 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images as any, quality: 0.8, allowsMultipleSelection: true });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setPreviewMediaList(result.assets);
-      setPreviewCaption(''); setPreviewViewOnce(false);
-    }
+    setTimeout(async () => {
+      try {
+        const perm = useCamera
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert(
+            'Permission Required',
+            `Please allow access to your ${useCamera ? 'camera' : 'photos'} to send images.`
+          );
+          return;
+        }
+        const result = useCamera
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'] as any,
+              quality: 0.8,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'] as any,
+              quality: 0.8,
+              allowsMultipleSelection: true,
+            });
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setPreviewMediaList(result.assets);
+          setPreviewCaption('');
+          setPreviewViewOnce(false);
+        }
+      } catch (err) {
+        console.error('pickImage error:', err);
+        showToast('Could not open image picker');
+      }
+    }, 350);
   };
 
   const pickVideo = async () => {
     setAttachMenuVisible(false);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { showToast('Permission required'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos as any,
-      quality: 0.8,
-      videoMaxDuration: 120, // 2 min max
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      const cu = currentUser;
-      if (!cu || !room?.id) return;
+    setTimeout(async () => {
       try {
-        setIsUploading(true);
-        showToast('Uploading video…');
-        const videoUrl = await uploadImageToCloudinary(result.assets[0].uri, 'video');
-        await api.chats.sendMessage(room.id, {
-          content: '🎥 Video',
-          type: 'video',
-          media_url: videoUrl,
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert(
+            'Permission Required',
+            'Please allow access to your videos to share video clips.'
+          );
+          return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['videos'] as any,
+          quality: 0.8,
+          videoMaxDuration: 1800, // up to 30 min videos
         });
-        notifyParticipants('🎥 Video');
-      } catch { showToast('Failed to send video'); }
-      finally { setIsUploading(false); }
-    }
+        if (!result.canceled && result.assets?.[0]) {
+          const cu = currentUser;
+          if (!cu || !room?.id) return;
+          const asset = result.assets[0];
+          if (asset.fileSize && asset.fileSize > 150 * 1024 * 1024) {
+            Alert.alert(
+              'Video Too Large',
+              'The selected video exceeds the 150 MB upload limit. Please select a shorter or more compressed video.'
+            );
+            return;
+          }
+          const optimisticVideoId = 'pending-video-' + Date.now();
+          try {
+            setIsUploading(true);
+            showToast('Uploading video…');
+            // Optimistic insert with local URI so user sees it immediately
+            const optimisticVideo: ChatMessage = {
+              id: optimisticVideoId,
+              senderId: cu.uid,
+              sender: myName || 'You',
+              text: '🎥 Video',
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              isMe: true,
+              senderColor: getSenderColor(cu.uid, themeName === 'light'),
+              type: 'video',
+              videoUrl: asset.uri, // local URI for immediate preview
+              imageUrl: null,
+              audioUrl: null,
+              isVoiceNote: false,
+              isSystem: false,
+              timestampObj: new Date(),
+              status: 'sending',
+              reactions: {},
+              replyTo: null,
+              edited: false,
+              isDeleted: false,
+              starred: false,
+              viewOnce: false,
+              viewOnceViewed: false,
+              pinned: false,
+            };
+            setMessages(prev => [optimisticVideo, ...prev]);
+            const videoUrl = await uploadImageToCloudinary(asset.uri, 'video');
+            await api.chats.sendMessage(room.id, {
+              content: '🎥 Video',
+              type: 'video',
+              videoUrl,
+              media_url: videoUrl,
+            });
+            // Update optimistic message to final URL + sent status
+            setMessages(prev => prev.map(m => m.id === optimisticVideoId ? { ...m, videoUrl, status: 'sent' } : m));
+            notifyParticipants('🎥 Video');
+          } catch {
+            setMessages(prev => prev.map(m => m.id === optimisticVideoId ? { ...m, status: 'failed' } : m));
+            showToast('Failed to send video');
+          } finally {
+            setIsUploading(false);
+          }
+        }
+      } catch (err) {
+        console.error('pickVideo error:', err);
+        showToast('Could not open video picker');
+      }
+    }, 350);
   };
 
   const sendPreviewMedia = async () => {
@@ -1163,28 +1351,61 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     showToast('Copied to clipboard');
   };
 
-  const handleDelete = async () => {
+  const onMessageLongPress = (msg: ChatMessage) => {
+    if (selectedMessageIds.size > 0) {
+      toggleSelectMessage(msg.id);
+    } else {
+      setSelectedMsg(msg);
+      setActionVisible(true);
+    }
+  };
+
+  const handleDelete = () => {
     if (!selectedMsg || !currentUser) return;
     const isMyMsg = selectedMsg.senderId === myId || selectedMsg.senderId === currentUser.uid || selectedMsg.isMe;
-    if (!isMyMsg && !isGroupAdmin) {
-      showToast('You can only delete your own messages');
-      setActionVisible(false);
-      return;
-    }
     const targetMsgId = selectedMsg.id;
+    const targetRoomId = room?.id || incomingRoom?.id || deepLinkRoomId;
     setActionVisible(false);
-    try {
-      const targetRoomId = room?.id || incomingRoom?.id || deepLinkRoomId;
-      const res = await api.chats.deleteMessage(targetRoomId, targetMsgId);
-      if (res && ((res as any).success || !(res as any).error)) {
-        setMessages(prev => prev.map(m => m.id === targetMsgId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
-        notifyParticipants('This message was deleted', 'delete');
-        showToast('Message deleted');
-      } else {
-        showToast((res as any)?.error || 'Failed to delete');
+
+    const deleteForMe = () => {
+      setMessages(prev => prev.filter(m => m.id !== targetMsgId));
+      showToast('Message deleted for you');
+    };
+
+    const deleteForEveryone = async () => {
+      setMessages(prev => prev.map(m => m.id === targetMsgId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
+      showToast('Message deleted');
+      try {
+        const res = await api.chats.deleteMessage(targetRoomId, targetMsgId);
+        if (res && ((res as any).success || !(res as any).error)) {
+          notifyParticipants('This message was deleted', 'delete');
+        } else {
+          showToast((res as any)?.error || 'Failed to delete');
+        }
+      } catch (err: any) {
+        showToast(err?.message || 'Failed to delete');
       }
-    } catch (err: any) {
-      showToast(err?.message || 'Failed to delete');
+    };
+
+    if (isMyMsg || isGroupAdmin) {
+      Alert.alert(
+        'Delete message?',
+        'Would you like to delete this for everyone or just for yourself?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete for me', onPress: deleteForMe },
+          { text: isGroupAdmin && !isMyMsg ? 'Delete for everyone (Admin)' : 'Delete for everyone', style: 'destructive', onPress: deleteForEveryone },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Delete message?',
+        'Delete this message from your chat?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete for me', style: 'destructive', onPress: deleteForMe },
+        ]
+      );
     }
   };
 
@@ -1265,12 +1486,32 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const saveImageToDevice = async (uri: string) => {
     try {
       showToast('Saving…');
+      if (uri.startsWith('file://') || uri.startsWith('content://')) {
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Save or share image' });
+        } else {
+          showToast('Image saved to device');
+        }
+        return;
+      }
+
+      const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory || '';
+      if (baseDir) {
+        try {
+          const dirInfo = await FileSystem.getInfoAsync(baseDir);
+          if (!dirInfo.exists) {
+            await FileSystem.makeDirectoryAsync(baseDir, { intermediates: true });
+          }
+        } catch {}
+      }
+
       const filename = `rehearsalhub_${Date.now()}.jpg`;
-      const localUri = FileSystem.documentDirectory + filename;
-      await FileSystem.downloadAsync(uri, localUri);
+      const localUri = `${baseDir}${filename}`;
+      const { uri: downloadedUri } = await FileSystem.downloadAsync(uri, localUri);
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(localUri, { mimeType: 'image/jpeg', dialogTitle: 'Save or share image' });
+        await Sharing.shareAsync(downloadedUri, { mimeType: 'image/jpeg', dialogTitle: 'Save or share image' });
       } else {
         showToast('Saved to app folder');
       }
@@ -1281,71 +1522,165 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   };
   const pickDocument = async () => {
     setAttachMenuVisible(false);
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      const cu = currentUser;
-      if (!cu || !room?.id) return;
-      
-      const isAudio = asset.mimeType?.startsWith('audio/') || !!asset.name.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i);
-      const msgType = isAudio ? 'audio' : 'document';
-      
-      showToast(`Sending ${asset.name}…`);
-      setIsUploading(true);
-      const uploadedUrl = await uploadImageToCloudinary(asset.uri, isAudio ? 'video' : 'raw');
-      
-      const docData: Record<string,any> = {
-        chatId: room.id, senderId: cu.uid, senderName: myName || 'You',
-        type: msgType, text: asset.name,
-        timestamp: new Date().toISOString(), edited: false, reactions: {}, status: 'sent',
-      };
-      
-      if (isAudio) {
-        docData.audioUrl = uploadedUrl;
-        docData.duration = '0:00';
-      } else {
-        docData.documentUrl = uploadedUrl;
-        docData.documentName = asset.name;
-        docData.documentSize = asset.size;
+    setTimeout(async () => {
+      try {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          copyToCacheDirectory: true,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        const cu = currentUser;
+        if (!cu || !room?.id) return;
+        
+        const isAudio = asset.mimeType?.startsWith('audio/') || !!asset.name.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i);
+        const msgType = isAudio ? 'audio' : 'document';
+        const optimisticDocId = 'pending-doc-' + Date.now();
+
+        // Insert optimistic message immediately so user sees the file card
+        const optimisticDoc: ChatMessage = {
+          id: optimisticDocId,
+          senderId: cu.uid,
+          sender: myName || 'You',
+          text: asset.name,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isMe: true,
+          senderColor: getSenderColor(cu.uid, themeName === 'light'),
+          type: msgType,
+          imageUrl: null,
+          audioUrl: isAudio ? asset.uri : null,
+          documentUrl: !isAudio ? asset.uri : undefined,
+          documentName: !isAudio ? asset.name : undefined,
+          documentSize: asset.size,
+          isVoiceNote: false,
+          isSystem: false,
+          timestampObj: new Date(),
+          status: 'sending',
+          reactions: {},
+          replyTo: null,
+          edited: false,
+          isDeleted: false,
+          starred: false,
+          viewOnce: false,
+          viewOnceViewed: false,
+          pinned: false,
+          duration: isAudio ? '0:00' : undefined,
+        };
+        setMessages(prev => [optimisticDoc, ...prev]);
+
+        showToast(`Sending ${asset.name}…`);
+        setIsUploading(true);
+        const uploadedUrl = await uploadImageToCloudinary(asset.uri, isAudio ? 'video' : 'raw');
+
+        await api.chats.sendMessage(room.id, {
+          content: isAudio ? '🎧 Audio' : `📄 ${asset.name}`,
+          type: msgType,
+          media_url: uploadedUrl,
+          ...(isAudio ? { audioUrl: uploadedUrl, duration: '0:00' } : { documentUrl: uploadedUrl, documentName: asset.name, documentSize: asset.size }),
+        });
+
+        // Update optimistic message with final URL
+        setMessages(prev => prev.map(m => m.id === optimisticDocId ? {
+          ...m,
+          status: 'sent',
+          audioUrl: isAudio ? uploadedUrl : m.audioUrl,
+          documentUrl: !isAudio ? uploadedUrl : m.documentUrl,
+        } : m));
+
+        notifyParticipants(isAudio ? `🎧 Audio` : `📄 ${asset.name}`);
+      } catch (e) {
+        console.error('Document pick error', e);
+        showToast('Failed to send file');
+      } finally {
+        setIsUploading(false);
       }
-      
-      await api.chats.sendMessage(room.id, {
-        content: isAudio ? '🎧 Audio' : `📄 ${asset.name}`,
-        type: msgType,
-        media_url: uploadedUrl,
-        ...docData,
-      });
-      notifyParticipants(isAudio ? `🎧 Audio` : `📄 ${asset.name}`);
-    } catch (e) {
-      console.error('Document pick error', e);
-      showToast('Failed to send file');
-    } finally {
-      setIsUploading(false);
-    }
+    }, 350);
   };
   const handleDocumentTap = async (msg: ChatMessage) => {
-    if (!msg.documentUrl) {
+    const docUrl = msg.documentUrl || (msg as any).mediaUrl;
+    if (!docUrl) {
       showToast('No document available');
       return;
     }
-    showToast('Downloading document…');
+
+    // 1. If it's a video file -> open in our own in-app video previewer!
+    const isVideo =
+      msg.type === 'video' ||
+      /\.(mp4|mov|m4v|webm|mkv|avi|3gp)$/i.test(docUrl) ||
+      /\.(mp4|mov|m4v|webm|mkv|avi|3gp)$/i.test(msg.documentName || '') ||
+      /\.(mp4|mov|m4v|webm|mkv|avi|3gp)$/i.test(msg.text || '');
+
+    if (isVideo) {
+      setVideoViewerUri(docUrl);
+      return;
+    }
+
+    // 2. If it's an image file -> open in our in-app image previewer!
+    const isImage =
+      msg.type === 'image' ||
+      /\.(jpg|jpeg|png|webp|gif|bmp|heic)$/i.test(docUrl) ||
+      /\.(jpg|jpeg|png|webp|gif|bmp|heic)$/i.test(msg.documentName || '') ||
+      /\.(jpg|jpeg|png|webp|gif|bmp|heic)$/i.test(msg.text || '');
+
+    if (isImage) {
+      setImgViewerUri(docUrl);
+      setImgViewerVisible(true);
+      return;
+    }
+
     try {
-      const ext = msg.documentName?.split('.').pop() || 'file';
-      const localUri = `${FileSystem.documentDirectory}${msg.documentName || `document_${msg.id}.${ext}`}`;
-      const { uri } = await FileSystem.downloadAsync(msg.documentUrl, localUri);
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        await Sharing.shareAsync(uri);
+      // 3. If it's already a local file (e.g., newly picked asset), share directly
+      if (docUrl.startsWith('file://') || docUrl.startsWith('content://')) {
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(docUrl);
+        } else {
+          showToast('File stored on device');
+        }
+        return;
+      }
+
+      // 4. If it's an Office spreadsheet or document from Cloudflare R2 (e.g. .xlsx, .docx)
+      // Google Docs Viewer reliably parses and renders these on mobile screens:
+      const isOfficeDoc =
+        /\.(xlsx|xls|docx|doc|pptx|ppt)$/i.test(docUrl) ||
+        /\.(xlsx|xls|docx|doc|pptx|ppt)$/i.test(msg.documentName || '');
+
+      if (isOfficeDoc && docUrl.startsWith('http')) {
+        showToast('Opening document…');
+        const googleDocsViewer = `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(docUrl)}`;
+        try {
+          await WebBrowser.openBrowserAsync(googleDocsViewer);
+          return;
+        } catch {
+          Linking.openURL(googleDocsViewer).catch(() => Linking.openURL(docUrl));
+          return;
+        }
+      }
+
+      // 5. Open remote PDF or file in native in-app browser viewer
+      showToast('Opening document…');
+      try {
+        await WebBrowser.openBrowserAsync(docUrl);
+        return;
+      } catch (browserErr) {
+        console.warn('WebBrowser open failed, falling back to Linking:', browserErr);
+      }
+
+      // 6. Fallback: open via system browser or external viewer
+      const canOpen = await Linking.canOpenURL(docUrl);
+      if (canOpen) {
+        await Linking.openURL(docUrl);
       } else {
-        showToast('Sharing not available on this device');
+        showToast('Cannot open document on this device');
       }
     } catch (e) {
       console.error('Document tap error:', e);
-      showToast('Failed to download document');
+      if (docUrl.startsWith('http')) {
+        Linking.openURL(docUrl).catch(() => showToast('Failed to open document'));
+      } else {
+        showToast('Failed to open document');
+      }
     }
   };
 
@@ -1417,18 +1752,20 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   };
 
   const handleClearChat = () => {
-    Alert.alert('Clear Chat', 'Are you sure you want to clear all messages in this chat?', [
+    Alert.alert('Clear Chat', 'Clear all messages from this chat on your device? Other participants will still see the conversation.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Clear',
+        text: 'Clear for me',
         style: 'destructive',
         onPress: async () => {
           try {
-            await api.chats.clearMessages(room.id).catch(() => {});
             setMessages([]);
             await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
             await AsyncStorage.removeItem(`cached_messages_${room.id}`);
-            showToast('Chat cleared');
+            if (currentUser?.uid) {
+              await AsyncStorage.setItem(`cleared_at_${currentUser.uid}_${room.id}`, String(Date.now()));
+            }
+            showToast('Chat cleared on this device');
           } catch {
             Alert.alert('Error', 'Failed to clear chat');
           }
@@ -1745,16 +2082,15 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     return `${m}:${sec<10?'0':''}${sec}`;
   };
   const TickIcon = ({ status }: { status: ChatMessage['status'] }) => {
-
     if (status === 'sending')
       return <Ionicons name="time-outline" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-    if (status === 'sent')
-      return <Ionicons name="checkmark" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-    if (status === 'delivered')
-      return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
     if (status === 'failed')
       return <Ionicons name="alert-circle-outline" size={13} color="#ef4444" style={{ marginLeft: 3 }} />;
-    return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColorRead} style={{ marginLeft: 3 }} />;
+    if (status === 'read')
+      return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColorRead} style={{ marginLeft: 3 }} />;
+    if (status === 'delivered')
+      return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
+    return <Ionicons name="checkmark" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
   };
   const ReplyPreview = ({ replyTo, onPress }: { replyTo: NonNullable<ChatMessage['replyTo']>, onPress?: () => void }) => (
     <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.quoteBox}>
@@ -2114,8 +2450,18 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                       </TouchableOpacity>
                     )
                   ) : (
-                    <TouchableOpacity onPress={() => { setImgViewerUri(msg.imageUrl); setImgViewerVisible(true); }}
-                      onLongPress={() => { setSelectedMsg(msg); setActionVisible(true); }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (selectedMessageIds.size > 0) {
+                          toggleSelectMessage(msg.id);
+                        } else {
+                          setImgViewerUri(msg.imageUrl);
+                          setImgViewerVisible(true);
+                        }
+                      }}
+                      onLongPress={() => onMessageLongPress(msg)}
+                      delayLongPress={250}
+                    >
                       <Image source={{ uri: msg.imageUrl }} style={{ width: SCREEN_WIDTH*0.65, height: SCREEN_WIDTH*0.65, borderRadius:8 }} contentFit="cover" />
                       {msg.text ? <Text style={[styles.msgText, { color:APP_THEME.primaryText, marginTop:6, paddingHorizontal:4, paddingBottom: 2 }]}>{msg.text}</Text> : null}
                       <View style={msg.text ? { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', marginRight: 4, marginBottom: 2 } : styles.tsOverlay}>
@@ -2125,28 +2471,46 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                     </TouchableOpacity>
                   )
                 ) : msg.isVoiceNote ? (
-                  <VoiceNoteCard
-                    msg={{ ...msg, audioUrl: msg.audioUrl || msg.documentUrl || null }}
-                    playingId={playingId}
-                    isAudioPlaying={isAudioPlaying}
-                    playAudio={playAudio}
-                    seekAudio={seekAudio}
-                    waveformData={waveformData}
-                    theme={theme}
-                    APP_THEME={APP_THEME}
-                    styles={styles}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.95}
+                    onPress={() => {
+                      if (selectedMessageIds.size > 0) toggleSelectMessage(msg.id);
+                    }}
+                    onLongPress={() => onMessageLongPress(msg)}
+                    delayLongPress={250}
+                  >
+                    <VoiceNoteCard
+                      msg={{ ...msg, audioUrl: msg.audioUrl || msg.documentUrl || null }}
+                      playingId={playingId}
+                      isAudioPlaying={isAudioPlaying}
+                      playAudio={playAudio}
+                      seekAudio={seekAudio}
+                      waveformData={waveformData}
+                      theme={theme}
+                      APP_THEME={APP_THEME}
+                      styles={styles}
+                    />
+                  </TouchableOpacity>
                 ) : (msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) ? (
-                  <AudioFileCard
-                    msg={msg}
-                    playingId={playingId}
-                    isAudioPlaying={isAudioPlaying}
-                    playAudio={playAudio}
-                    seekAudio={seekAudio}
-                    theme={theme}
-                    APP_THEME={APP_THEME}
-                    styles={styles}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.95}
+                    onPress={() => {
+                      if (selectedMessageIds.size > 0) toggleSelectMessage(msg.id);
+                    }}
+                    onLongPress={() => onMessageLongPress(msg)}
+                    delayLongPress={250}
+                  >
+                    <AudioFileCard
+                      msg={msg}
+                      playingId={playingId}
+                      isAudioPlaying={isAudioPlaying}
+                      playAudio={playAudio}
+                      seekAudio={seekAudio}
+                      theme={theme}
+                      APP_THEME={APP_THEME}
+                      styles={styles}
+                    />
+                  </TouchableOpacity>
                 ) : msg.type === 'song_share' ? (
                   <SongShareCard
                     msg={{
@@ -2252,25 +2616,69 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                     </View>
                   </View>
 
-                ) : msg.type === 'video' && msg.videoUrl ? (
-                  <View style={{ position: 'relative' }}>
-                    <View style={{ width: SCREEN_WIDTH * 0.65, height: SCREEN_WIDTH * 0.4, borderRadius: 10, backgroundColor: theme.colors.background, justifyContent: 'center', alignItems: 'center' }}>
-                      <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.8)" />
-                      <Text style={[styles.tsText, { color: theme.colors.textMuted, marginTop: 8 }]}>🎥 Video</Text>
+                ) : msg.type === 'video' && (msg.videoUrl || (msg as any).mediaUrl) ? (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      if (selectedMessageIds.size > 0) {
+                        toggleSelectMessage(msg.id);
+                      } else {
+                        const vUrl = resolveMediaUrl(msg.videoUrl || (msg as any).mediaUrl);
+                        if (vUrl) setVideoViewerUri(vUrl);
+                      }
+                    }}
+                    onLongPress={() => onMessageLongPress(msg)}
+                    delayLongPress={250}
+                    style={{ position: 'relative' }}
+                  >
+                    <View style={{ width: SCREEN_WIDTH * 0.65, height: SCREEN_WIDTH * 0.4, borderRadius: 10, backgroundColor: '#000', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
+                      {/* Show thumbnail using expo-image — works with both local URI and remote URL */}
+                      <Image
+                        source={{ uri: resolveMediaUrl(msg.videoUrl) }}
+                        style={{ ...StyleSheet.absoluteFillObject, borderRadius: 10 }}
+                        contentFit="cover"
+                      />
+                      {/* Play button overlay */}
+                      <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}>
+                        {msg.status === 'sending' ? (
+                          <ActivityIndicator size="large" color="#fff" />
+                        ) : (
+                          <Ionicons name="play-circle" size={52} color="rgba(255,255,255,0.92)" />
+                        )}
+                      </View>
                     </View>
                     <View style={styles.tsOverlay}>
-                      <Text style={[styles.tsText, { color: theme.colors.textPrimary }]}>{msg.time}</Text>
+                      <Text style={[styles.tsText, { color: '#fff' }]}>{msg.time}</Text>
                       {msg.isMe && <TickIcon status={msg.status} />}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ) : msg.type === 'document' ? (
-                  <TouchableOpacity style={styles.docCard} onPress={() => handleDocumentTap(msg)} activeOpacity={0.75}>
+                  <TouchableOpacity
+                    style={styles.docCard}
+                    onPress={() => {
+                      if (selectedMessageIds.size > 0) {
+                        toggleSelectMessage(msg.id);
+                      } else {
+                        handleDocumentTap(msg);
+                      }
+                    }}
+                    onLongPress={() => onMessageLongPress(msg)}
+                    delayLongPress={250}
+                    activeOpacity={0.75}
+                    disabled={msg.status === 'sending'}
+                  >
                     <View style={styles.docIconWrap}>
-                      <Ionicons name="document-text" size={24} color={APP_THEME.primaryAccent} />
+                      {msg.status === 'sending' ? (
+                        <ActivityIndicator size="small" color={APP_THEME.primaryAccent} />
+                      ) : (
+                        <Ionicons name="document-text" size={24} color={APP_THEME.primaryAccent} />
+                      )}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.msgText, { color: APP_THEME.primaryText }]} numberOfLines={1}>{msg.documentName || msg.text || 'Document'}</Text>
-                      {msg.documentSize ? <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{(msg.documentSize / 1024).toFixed(0)} KB</Text> : null}
+                      <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>
+                        {msg.status === 'sending' ? 'Uploading…' : msg.documentSize ? `${(msg.documentSize / 1024).toFixed(0)} KB` : 'Tap to download'}
+                      </Text>
                     </View>
                     <View style={styles.tsBubbleRow}>
                       <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
@@ -2629,8 +3037,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           )}
 
           <View style={[styles.inputDeck, { backgroundColor:'transparent' }]}>
-            <TouchableOpacity style={styles.plusBtn} onPress={() => { setAttachMenuVisible(true); }}>
-              <Ionicons name="add" size={26} color={APP_THEME.secondaryText} />
+            <TouchableOpacity
+              style={styles.plusBtn}
+              onPress={pickDocument}
+              onLongPress={() => setAttachMenuVisible(true)}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="document-text-outline" size={24} color={APP_THEME.secondaryText} />
             </TouchableOpacity>
 
             <View style={[styles.inputBox, { backgroundColor: APP_THEME.inputBg }]}>
@@ -2654,14 +3067,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   </TouchableOpacity>
                 </View>
               ) : (
-                <>
-                  <TextInput style={[styles.inputField, { color:APP_THEME.primaryText }]}
-                    placeholder="Message" placeholderTextColor={APP_THEME.secondaryText}
-                    value={inputText} onChangeText={handleInputChange} multiline />
-                  <TouchableOpacity style={{ padding:6 }} onPress={pickDocument}>
-                    <Ionicons name="document-text-outline" size={20} color={APP_THEME.secondaryText} />
-                  </TouchableOpacity>
-                </>
+                <TextInput style={[styles.inputField, { color:APP_THEME.primaryText }]}
+                  placeholder="Message" placeholderTextColor={APP_THEME.secondaryText}
+                  value={inputText} onChangeText={handleInputChange} multiline />
               )}
             </View>
 
@@ -2714,101 +3122,101 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               })}
             </View>
             <View style={styles.sheetDivider} />
-            <TouchableOpacity style={styles.actionItem} onPress={() => { setReplyingTo(selectedMsg); setActionVisible(false); }}>
-              <View style={styles.actionIconWrap}>
-                <Ionicons name="arrow-undo-outline" size={20} color={APP_THEME.primaryText} />
-              </View>
-              <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Reply</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionItem} onPress={handleForward}>
-              <View style={styles.actionIconWrap}>
-                <Ionicons name="arrow-redo-outline" size={20} color={APP_THEME.primaryText} />
-              </View>
-              <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Forward</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.actionItem} 
-              onPress={() => { 
-                setActionVisible(false); 
-                if (selectedMsg?.id) {
-                  setSelectedMessageIds(new Set([selectedMsg.id]));
-                }
-              }}
-            >
-              <View style={styles.actionIconWrap}>
-                <Ionicons name="checkbox-outline" size={20} color={APP_THEME.primaryText} />
-              </View>
-              <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Select</Text>
-            </TouchableOpacity>
-
-            {selectedMsg?.type === 'text' && !selectedMsg.isDeleted && (
-              <TouchableOpacity style={styles.actionItem} onPress={handleCopy}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              <TouchableOpacity style={styles.actionItem} onPress={() => { setReplyingTo(selectedMsg); setActionVisible(false); }}>
                 <View style={styles.actionIconWrap}>
-                  <Ionicons name="copy-outline" size={20} color={APP_THEME.primaryText} />
+                  <Ionicons name="arrow-undo-outline" size={20} color={APP_THEME.primaryText} />
                 </View>
-                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Copy</Text>
+                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Reply</Text>
               </TouchableOpacity>
-            )}
 
-
-
-            {selectedMsg?.isMe && !selectedMsg.isVoiceNote && !selectedMsg.isDeleted && (
-              (() => {
-                const canEdit = Date.now() - selectedMsg.timestampObj.getTime() < 5 * 60 * 1000;
-                if (!canEdit) return null;
-                return (
-                  <TouchableOpacity style={styles.actionItem} onPress={() => {
-                    setEditingMsg(selectedMsg); setInputText(selectedMsg.text); setActionVisible(false);
-                  }}>
-                    <View style={styles.actionIconWrap}>
-                      <Ionicons name="pencil-outline" size={20} color={APP_THEME.primaryText} />
-                    </View>
-                    <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Edit</Text>
-                  </TouchableOpacity>
-                );
-              })()
-            )}
-
-            {selectedMsg?.isMe && isGroup && !selectedMsg.isDeleted && (
-              <TouchableOpacity style={styles.actionItem} onPress={() => { setActionVisible(false); setShowMessageInfo(true); }}>
+              <TouchableOpacity style={styles.actionItem} onPress={handleForward}>
                 <View style={styles.actionIconWrap}>
-                  <Ionicons name="information-circle-outline" size={20} color={APP_THEME.primaryText} />
+                  <Ionicons name="arrow-redo-outline" size={20} color={APP_THEME.primaryText} />
                 </View>
-                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Info</Text>
+                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Forward</Text>
               </TouchableOpacity>
-            )}
 
-            {(selectedMsg?.isMe || isGroupAdmin) && !selectedMsg?.isDeleted && (
-              <TouchableOpacity style={styles.actionItem} onPress={handleDelete}>
-                <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
-                  <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                </View>
-                <Text style={[styles.actionText, { color: '#ef4444' }]}>
-                  {selectedMsg?.isMe ? 'Delete' : 'Delete as Admin'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {!selectedMsg?.isMe && !selectedMsg?.isDeleted && !selectedMsg?.isSystem && (
-              <TouchableOpacity style={styles.actionItem} onPress={handleReport}>
-                <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-                  <Ionicons name="warning-outline" size={20} color="#f59e0b" />
-                </View>
-                <Text style={[styles.actionText, { color: '#f59e0b' }]}>Report</Text>
-              </TouchableOpacity>
-            )}
-            
-            {selectedMsg?.type === 'image' && selectedMsg?.imageUrl && !selectedMsg?.viewOnce && (
-              <TouchableOpacity style={styles.actionItem} onPress={() => { setActionVisible(false); saveImageToDevice(selectedMsg.imageUrl!); }}>
+              <TouchableOpacity 
+                style={styles.actionItem} 
+                onPress={() => { 
+                  setActionVisible(false); 
+                  if (selectedMsg?.id) {
+                    setSelectedMessageIds(new Set([selectedMsg.id]));
+                  }
+                }}
+              >
                 <View style={styles.actionIconWrap}>
-                  <Ionicons name="download-outline" size={20} color={APP_THEME.primaryText} />
+                  <Ionicons name="checkbox-outline" size={20} color={APP_THEME.primaryText} />
                 </View>
-                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Save to Gallery</Text>
+                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Select</Text>
               </TouchableOpacity>
-            )}
-            <View style={{ height: 24 }} />
+
+              {selectedMsg?.type === 'text' && !selectedMsg.isDeleted && (
+                <TouchableOpacity style={styles.actionItem} onPress={handleCopy}>
+                  <View style={styles.actionIconWrap}>
+                    <Ionicons name="copy-outline" size={20} color={APP_THEME.primaryText} />
+                  </View>
+                  <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Copy</Text>
+                </TouchableOpacity>
+              )}
+
+              {selectedMsg?.isMe && !selectedMsg.isVoiceNote && !selectedMsg.isDeleted && (
+                (() => {
+                  const canEdit = Date.now() - selectedMsg.timestampObj.getTime() < 5 * 60 * 1000;
+                  if (!canEdit) return null;
+                  return (
+                    <TouchableOpacity style={styles.actionItem} onPress={() => {
+                      setEditingMsg(selectedMsg); setInputText(selectedMsg.text); setActionVisible(false);
+                    }}>
+                      <View style={styles.actionIconWrap}>
+                        <Ionicons name="pencil-outline" size={20} color={APP_THEME.primaryText} />
+                      </View>
+                      <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Edit</Text>
+                    </TouchableOpacity>
+                  );
+                })()
+              )}
+
+              {selectedMsg?.isMe && isGroup && !selectedMsg.isDeleted && (
+                <TouchableOpacity style={styles.actionItem} onPress={() => { setActionVisible(false); setShowMessageInfo(true); }}>
+                  <View style={styles.actionIconWrap}>
+                    <Ionicons name="information-circle-outline" size={20} color={APP_THEME.primaryText} />
+                  </View>
+                  <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Info</Text>
+                </TouchableOpacity>
+              )}
+
+              {!selectedMsg?.isDeleted && (
+                <TouchableOpacity style={styles.actionItem} onPress={handleDelete}>
+                  <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  </View>
+                  <Text style={[styles.actionText, { color: '#ef4444' }]}>
+                    Delete
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {!selectedMsg?.isMe && !selectedMsg?.isDeleted && !selectedMsg?.isSystem && (
+                <TouchableOpacity style={styles.actionItem} onPress={handleReport}>
+                  <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
+                    <Ionicons name="warning-outline" size={20} color="#f59e0b" />
+                  </View>
+                  <Text style={[styles.actionText, { color: '#f59e0b' }]}>Report</Text>
+                </TouchableOpacity>
+              )}
+              
+              {selectedMsg?.type === 'image' && selectedMsg?.imageUrl && !selectedMsg?.viewOnce && (
+                <TouchableOpacity style={styles.actionItem} onPress={() => { setActionVisible(false); saveImageToDevice(selectedMsg.imageUrl!); }}>
+                  <View style={styles.actionIconWrap}>
+                    <Ionicons name="download-outline" size={20} color={APP_THEME.primaryText} />
+                  </View>
+                  <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Save to Gallery</Text>
+                </TouchableOpacity>
+              )}
+              <View style={{ height: 24 }} />
+            </ScrollView>
           </Animated.View>
         </Modal>
         <Modal visible={showMessageInfo} transparent animationType="slide" onRequestClose={() => setShowMessageInfo(false)}>
@@ -2816,29 +3224,53 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
             <DoodleBackground />
             <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-            <SafeAreaView style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: APP_THEME.border }}>
-                <TouchableOpacity onPress={() => setShowMessageInfo(false)} style={{ padding: 4 }}>
+            <View style={{ flex: 1, paddingTop: Math.max(insets?.top || 0, Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 44) }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: APP_THEME.border }}>
+                <TouchableOpacity onPress={() => setShowMessageInfo(false)} style={{ padding: 6 }}>
                   <Ionicons name="chevron-back" size={26} color={APP_THEME.primaryText} />
                 </TouchableOpacity>
-                <Text style={{ fontSize: 17, fontWeight: '700', color: APP_THEME.primaryText }}>Message Info</Text>
-                <View style={{ width: 40 }} />
+                <Text style={{ fontSize: 18, fontWeight: '700', color: APP_THEME.primaryText }}>Message Info</Text>
+                <View style={{ width: 38 }} />
               </View>
-              <ScrollView style={{ flex: 1 }}>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={true}>
                 <View style={{ padding: 16, backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: 16, marginHorizontal: 16, borderRadius: 12 }}>
-                  <Text style={{ color: APP_THEME.primaryText }}>{selectedMsg?.text || 'Media Message'}</Text>
-                  <Text style={{ color: APP_THEME.secondaryText, fontSize: 12, marginTop: 4 }}>{selectedMsg?.time}</Text>
+                  {selectedMsg?.imageUrl && (
+                    <Image
+                      source={{ uri: selectedMsg.imageUrl }}
+                      style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 8 }}
+                      contentFit="cover"
+                    />
+                  )}
+                  {selectedMsg?.isVoiceNote && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <Ionicons name="mic" size={18} color={APP_THEME.primaryAccent} />
+                      <Text style={{ color: APP_THEME.primaryAccent, fontWeight: '600', fontSize: 13 }}>Voice Note</Text>
+                    </View>
+                  )}
+                  {selectedMsg?.documentName && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <Ionicons name="document-text-outline" size={18} color={APP_THEME.primaryAccent} />
+                      <Text style={{ color: APP_THEME.primaryText, fontWeight: '600', fontSize: 14 }}>{selectedMsg.documentName}</Text>
+                    </View>
+                  )}
+                  {selectedMsg?.text ? (
+                    <Text style={{ color: APP_THEME.primaryText, fontSize: 15, lineHeight: 21 }}>{selectedMsg.text}</Text>
+                  ) : null}
+                  <Text style={{ color: APP_THEME.secondaryText, fontSize: 12, marginTop: 6 }}>{selectedMsg?.time}</Text>
                 </View>
 
                 {(() => {
                   const readers: any[] = [];
                   const delivered: any[] = [];
+                  const isRead = selectedMsg?.status === 'read';
+                  const readByList: string[] = Array.isArray(selectedMsg?.readBy) ? selectedMsg.readBy : [];
+
                   if (chatData?.participantDetails) {
                     Object.keys(chatData.participantDetails || {}).forEach(uid => {
                       if (uid === currentUser?.uid) return;
                       const details = chatData.participantDetails[uid];
-                      const unread = chatData.unreadCount?.[uid] || 0;
-                      if (unread === 0) {
+                      const hasRead = readByList.includes(uid) || (isRead && readByList.length === 0);
+                      if (hasRead) {
                         readers.push({ uid, ...details });
                       } else {
                         delivered.push({ uid, ...details });
@@ -2849,23 +3281,29 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   return (
                     <>
                       <Text style={{ color: APP_THEME.primaryAccent, paddingHorizontal: 16, paddingBottom: 8, fontWeight: 'bold' }}>
-                        Read by
+                        Read by ({readers.length})
                       </Text>
                       {readers.map(r => (
                         <View key={r.uid} style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
                           <SyncAvatar userId={r.uid} fallbackName={r.name} size={40} isGroup={false} />
-                          <Text style={{ color: APP_THEME.primaryText, marginLeft: 12, fontSize: 16 }}>{r.name}</Text>
+                          <View style={{ marginLeft: 12, flex: 1 }}>
+                            <Text style={{ color: APP_THEME.primaryText, fontSize: 16 }} numberOfLines={1}>{r.name}</Text>
+                          </View>
+                          <Ionicons name="checkmark-done" size={18} color="#38bdf8" />
                         </View>
                       ))}
                       {readers.length === 0 && <Text style={{ color: APP_THEME.secondaryText, paddingHorizontal: 16, paddingBottom: 16 }}>No one has read this yet.</Text>}
 
                       <Text style={{ color: APP_THEME.primaryAccent, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, fontWeight: 'bold' }}>
-                        Delivered to
+                        Delivered to ({delivered.length})
                       </Text>
                       {delivered.map(r => (
                         <View key={r.uid} style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
                           <SyncAvatar userId={r.uid} fallbackName={r.name} size={40} isGroup={false} />
-                          <Text style={{ color: APP_THEME.primaryText, marginLeft: 12, fontSize: 16 }}>{r.name}</Text>
+                          <View style={{ marginLeft: 12, flex: 1 }}>
+                            <Text style={{ color: APP_THEME.primaryText, fontSize: 16 }} numberOfLines={1}>{r.name}</Text>
+                          </View>
+                          <Ionicons name="checkmark" size={18} color={APP_THEME.secondaryText} />
                         </View>
                       ))}
                       {delivered.length === 0 && <Text style={{ color: APP_THEME.secondaryText, paddingHorizontal: 16, paddingBottom: 16 }}>No one else in group.</Text>}
@@ -2873,58 +3311,111 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   );
                 })()}
               </ScrollView>
-            </SafeAreaView>
+            </View>
           </View>
         </Modal>
+        <ChatVideoModal uri={videoViewerUri} onClose={() => setVideoViewerUri(null)} />
         <Modal visible={imgViewerVisible} transparent animationType="fade" onRequestClose={() => setImgViewerVisible(false)}>
-          <View style={{ flex:1, backgroundColor: theme.colors.background }}>
-            <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-      <DoodleBackground />
-
-            <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
+          <View style={{ flex: 1, backgroundColor: '#000000' }}>
             <SafeAreaView style={{ flex: 1 }}>
-              <View style={{ flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16, paddingTop:8, zIndex:10 }}>
-                <TouchableOpacity onPress={() => setImgViewerVisible(false)} style={styles.imgViewerBtn}>
-                  <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setImgViewerVisible(false)}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => imgViewerUri && saveImageToDevice(imgViewerUri)} style={styles.imgViewerBtn}>
-                  <Ionicons name="download-outline" size={22} color={theme.colors.textPrimary} />
+                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Photo</Text>
+                <TouchableOpacity
+                  onPress={() => imgViewerUri && saveImageToDevice(imgViewerUri)}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="download-outline" size={22} color="#FFFFFF" />
                 </TouchableOpacity>
               </View>
-              <ScrollView maximumZoomScale={4} minimumZoomScale={1} contentContainerStyle={{ flexGrow:1, justifyContent:'center', alignItems:'center' }}>
-                {imgViewerUri && <Image source={{ uri:imgViewerUri }} style={{ width:SCREEN_WIDTH, height:SCREEN_WIDTH*1.4 }} contentFit="contain" />}
-              </ScrollView>
+              <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
+                {imgViewerUri && (
+                  <Image
+                    source={{ uri: imgViewerUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="contain"
+                  />
+                )}
+              </View>
             </SafeAreaView>
           </View>
         </Modal>
         <Modal visible={viewOnceVisible} transparent animationType="fade" onRequestClose={() => setViewOnceVisible(false)}>
-          <View style={{ flex:1, backgroundColor: theme.colors.background }}>
-            <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-      <DoodleBackground />
-
-            <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
+          <View style={{ flex: 1, backgroundColor: '#000000' }}>
             <SafeAreaView style={{ flex: 1 }}>
-              <View style={{ flexDirection:'row', justifyContent:'space-between', paddingHorizontal:16, paddingTop:8, zIndex:10 }}>
-                <TouchableOpacity onPress={() => setViewOnceVisible(false)} style={styles.imgViewerBtn}>
-                  <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setViewOnceVisible(false)}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: 'rgba(255,255,255,0.15)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
-                <View style={[styles.imgViewerBtn, { backgroundColor:'rgba(192,132,252,0.3)' }]}>
-                  <Text style={{ color:theme.colors.textPrimary, fontWeight:'bold', fontSize:16 }}>{viewOnceTimer}s</Text>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14, backgroundColor: 'rgba(192,132,252,0.25)' }}>
+                  <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 }}>{viewOnceTimer}s</Text>
                 </View>
+                <View style={{ width: 40 }} />
               </View>
-              <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
-                {viewOnceUri && <Image source={{ uri:viewOnceUri }} style={{ width:SCREEN_WIDTH, height:SCREEN_WIDTH*1.4 }} contentFit="contain" />}
+              <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
+                {viewOnceUri && (
+                  <Image
+                    source={{ uri: viewOnceUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    contentFit="contain"
+                  />
+                )}
               </View>
-              <View style={{ paddingBottom:40, alignItems:'center' }}>
-                <Ionicons name="eye-outline" size={24} color={theme.colors.textMuted} />
-                <Text style={{ color:theme.colors.textMuted, marginTop:4, fontSize:13 }}>View once — disappears in {viewOnceTimer}s</Text>
+              <View style={{ paddingBottom: 24, alignItems: 'center' }}>
+                <Ionicons name="eye-outline" size={22} color="rgba(255,255,255,0.6)" />
+                <Text style={{ color: 'rgba(255,255,255,0.6)', marginTop: 4, fontSize: 13 }}>
+                  View once — disappears in {viewOnceTimer}s
+                </Text>
               </View>
             </SafeAreaView>
           </View>
         </Modal>
         <Modal visible={attachMenuVisible} transparent animationType="slide" onRequestClose={() => setAttachMenuVisible(false)}>
-          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setAttachMenuVisible(false)}>
-            <View style={[styles.attachMenu, { backgroundColor: theme.colors.backgroundDark }]}>
+          {/* Full-screen dismiss area - sits behind the menu card */}
+          <View style={[styles.overlay, { justifyContent: 'flex-end' }]}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFillObject}
+              activeOpacity={1}
+              onPress={() => setAttachMenuVisible(false)}
+            />
+            {/* Menu card stops event propagation so button taps don't dismiss the modal */}
+            <View
+              style={[styles.attachMenu, { backgroundColor: theme.colors.backgroundDark, marginBottom: 90, marginHorizontal: 16, alignSelf: 'stretch' }]}
+              onStartShouldSetResponder={() => true}
+              onTouchEnd={e => e.stopPropagation()}
+            >
               <View style={styles.attachRow}>
                 {[
                   { icon:'document', color:'#7f66ff', label:'Document', onPress: pickDocument },
@@ -2932,7 +3423,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   { icon:'image', color:'#00a884', label:'Gallery', onPress:()=>pickImage(false) },
                   { icon:'videocam', color:'#f59e0b', label:'Video', onPress: pickVideo },
                 ].map(item => (
-                  <TouchableOpacity key={item.label} style={styles.attachBtn} onPress={item.onPress}>
+                  <TouchableOpacity key={item.label} style={styles.attachBtn} onPress={item.onPress} activeOpacity={0.75}>
                     <View style={[styles.attachIcon, { backgroundColor:item.color }]}>
                       <Ionicons name={item.icon as any} size={24} color={theme.colors.textPrimary} />
                     </View>
@@ -2941,51 +3432,196 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                 ))}
               </View>
             </View>
-          </TouchableOpacity>
+          </View>
         </Modal>
-        <Modal visible={!!previewMediaList} transparent={false} animationType="fade" onRequestClose={() => setPreviewMediaList(null)}>
-          <View style={{ flex:1, backgroundColor: theme.colors.background }}>
-            <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-      <DoodleBackground />
+        <Modal
+          visible={!!previewMediaList}
+          transparent={false}
+          animationType="fade"
+          onRequestClose={() => setPreviewMediaList(null)}
+          statusBarTranslucent={true}
+        >
+          <View style={{ flex: 1, backgroundColor: '#0B141A' }}>
+            <StatusBar style="light" backgroundColor="#0B141A" />
+            <KeyboardAvoidingView
+              style={{ flex: 1 }}
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+              <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
+                {/* WhatsApp Top Header */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 16,
+                  paddingVertical: 12,
+                  backgroundColor: '#0B141A',
+                  zIndex: 10,
+                }}>
+                  <TouchableOpacity
+                    onPress={() => setPreviewMediaList(null)}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 20,
+                      backgroundColor: 'rgba(255,255,255,0.12)',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="close" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
 
-            <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-            <SafeAreaView style={{ flex: 1 }}>
-              <View style={{ flexDirection:'row', alignItems:'center', paddingHorizontal:16, paddingVertical:10 }}>
-                <TouchableOpacity onPress={() => setPreviewMediaList(null)} style={{ padding:6 }}>
-                  <Ionicons name="close" size={26} color={theme.colors.textPrimary} />
-                </TouchableOpacity>
-                <Text style={{ color:theme.colors.textPrimary, fontSize:17, fontWeight:'600', marginLeft:12, flex:1 }}>Preview ({previewMediaList?.length || 0})</Text>
-                <TouchableOpacity onPress={() => setPreviewViewOnce(p=>!p)} style={{ flexDirection:'row', alignItems:'center', gap:6, padding:6 }}>
-                  <Ionicons name={previewViewOnce ? 'eye-off' : 'eye-outline'} size={20} color={previewViewOnce ? APP_THEME.primaryAccent : theme.colors.textPrimary} />
-                  <Text style={{ color: previewViewOnce ? APP_THEME.primaryAccent : theme.colors.textPrimary, fontSize:13 }}>View once</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{ flex:1, justifyContent:'center', alignItems:'center' }}>
-                {previewMediaList && previewMediaList.length > 0 && (
-                  <FlatList
-                    data={previewMediaList}
-                    horizontal
-                    pagingEnabled
-                    showsHorizontalScrollIndicator={false}
-                    keyExtractor={(item, index) => index.toString()}
-                    renderItem={({ item }) => (
-                      <View style={{ width: SCREEN_WIDTH, justifyContent: 'center', alignItems: 'center' }}>
-                        <Image source={{ uri: item.uri }} style={{ width: SCREEN_WIDTH - 32, height: (SCREEN_WIDTH - 32) * 1.3, borderRadius: 16 }} contentFit="cover" />
-                      </View>
-                    )}
-                  />
-                )}
-              </View>
-              <KeyboardAvoidingView behavior={Platform.OS==='ios' ? 'padding' : 'height'}>
-                <View style={{ flexDirection:'row', alignItems:'center', padding:12, backgroundColor: theme.colors.cardBackground }}>
-                  <TextInput style={{ flex:1, backgroundColor: theme.colors.cardBackgroundLight, color: theme.colors.textPrimary, borderRadius:22, paddingHorizontal:16, paddingVertical:10, fontSize:15, marginRight:10 }}
-                    placeholder={previewMediaList?.length && previewMediaList.length > 1 ? "Add a caption to the first image…" : "Add a caption…"} placeholderTextColor={theme.colors.textMuted} value={previewCaption} onChangeText={setPreviewCaption} />
-                  <TouchableOpacity style={[styles.sendBtn, { backgroundColor: APP_THEME.primaryAccent }]} onPress={sendPreviewMedia} disabled={isUploading}>
-                    {isUploading ? <ActivityIndicator size="small" color={theme.colors.textPrimary} /> : <Ionicons name="send" size={18} color={theme.colors.textPrimary} style={{ marginLeft:2 }} />}
+                  <View style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 5,
+                    borderRadius: 14,
+                    backgroundColor: 'rgba(255,255,255,0.1)',
+                  }}>
+                    <Text style={{ color: '#E9EDEF', fontSize: 14, fontWeight: '600' }}>
+                      {previewMediaList?.length === 1 ? 'Preview' : `${previewMediaList?.length || 0} items`}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setPreviewViewOnce(p => !p)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 16,
+                      backgroundColor: previewViewOnce ? 'rgba(0, 168, 132, 0.25)' : 'rgba(255, 255, 255, 0.12)',
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={previewViewOnce ? 'eye' : 'eye-outline'}
+                      size={18}
+                      color={previewViewOnce ? '#00A884' : '#E9EDEF'}
+                    />
+                    <Text style={{
+                      color: previewViewOnce ? '#00A884' : '#E9EDEF',
+                      fontSize: 12,
+                      fontWeight: '600',
+                    }}>
+                      {previewViewOnce ? 'View once' : 'Standard'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
-              </KeyboardAvoidingView>
-            </SafeAreaView>
+
+                {/* Centered Media Canvas - Fits 100% within screen, never overflowing */}
+                <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
+                  {previewMediaList && previewMediaList.length > 0 && (
+                    <FlatList
+                      data={previewMediaList}
+                      horizontal
+                      pagingEnabled
+                      showsHorizontalScrollIndicator={false}
+                      keyExtractor={(_, index) => index.toString()}
+                      style={{ flex: 1, width: '100%' }}
+                      contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
+                      renderItem={({ item }) => (
+                        <View style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center', padding: 8 }}>
+                          <Image
+                            source={{ uri: item.uri }}
+                            style={{ width: SCREEN_WIDTH - 16, height: '100%' }}
+                            contentFit="contain"
+                          />
+                        </View>
+                      )}
+                    />
+                  )}
+                </View>
+
+                {/* WhatsApp Caption Input and Send Button Deck */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 12,
+                  paddingTop: 8,
+                  paddingBottom: 10,
+                  backgroundColor: '#0B141A',
+                  gap: 10,
+                }}>
+                  <View style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: 'rgba(32, 44, 51, 0.95)',
+                    borderRadius: 24,
+                    paddingHorizontal: 16,
+                    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+                    minHeight: 46,
+                  }}>
+                    <TextInput
+                      style={{
+                        flex: 1,
+                        color: '#FFFFFF',
+                        fontSize: 15,
+                        maxHeight: 90,
+                        paddingVertical: 4,
+                      }}
+                      placeholder={previewMediaList?.length && previewMediaList.length > 1 ? "Add a caption to first item…" : "Add a caption…"}
+                      placeholderTextColor="#8696A0"
+                      value={previewCaption}
+                      onChangeText={setPreviewCaption}
+                      multiline
+                    />
+                    <TouchableOpacity
+                      onPress={() => setPreviewViewOnce(p => !p)}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        borderWidth: 1.5,
+                        borderColor: previewViewOnce ? '#00A884' : '#8696A0',
+                        backgroundColor: previewViewOnce ? 'rgba(0, 168, 132, 0.25)' : 'transparent',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        marginLeft: 8,
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{
+                        color: previewViewOnce ? '#00A884' : '#8696A0',
+                        fontSize: 13,
+                        fontWeight: '700',
+                      }}>
+                        1
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: '#00A884',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      shadowColor: '#000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.35,
+                      shadowRadius: 3,
+                      elevation: 5,
+                    }}
+                    onPress={sendPreviewMedia}
+                    disabled={isUploading}
+                    activeOpacity={0.8}
+                  >
+                    {isUploading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name="send" size={20} color="#FFFFFF" style={{ marginLeft: 2 }} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
+            </KeyboardAvoidingView>
           </View>
         </Modal>
 

@@ -24,7 +24,8 @@ export default function DetailsScreen({ route, navigation }: any) {
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
   const [activeTrack, setActiveTrack] = useState(initialTrack);
-  const [fontSizeModifier, setFontSizeModifier] = useState(0);
+  const [fontSizeModifier, setFontSizeModifier] = useState(0);
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
   const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack, skipToNext, skipToPrevious } = useTrackPlayer();
   useEffect(() => {
     if (currentTrack && currentTrack.id !== activeTrack?.id) {
@@ -84,7 +85,29 @@ export default function DetailsScreen({ route, navigation }: any) {
             
             <Ionicons name="chevron-down" size={28} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={[styles.headerText, { flex: 1, textAlign: 'center', marginHorizontal: 16 }]} numberOfLines={1} ellipsizeMode="tail">{activeTrack?.title || 'Song Details & Metadata'}</Text>
+          <TouchableOpacity 
+            style={{ flex: 1, marginHorizontal: 12, justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setIsTitleExpanded(!isTitleExpanded)}
+            activeOpacity={0.7}
+          >
+            <Text 
+              style={[
+                styles.headerText, 
+                { 
+                  textAlign: 'center', 
+                  color: '#FFFFFF',
+                  fontWeight: '700',
+                  textShadowColor: theme.colors.accent,
+                  textShadowRadius: 6,
+                  textShadowOffset: { width: 0, height: 0 },
+                }
+              ]} 
+              numberOfLines={isTitleExpanded ? undefined : 1} 
+              ellipsizeMode="tail"
+            >
+              {activeTrack?.title || 'Song Details & Metadata'}
+            </Text>
+          </TouchableOpacity>
           <View style={styles.headerBtn} />
         </View>
 

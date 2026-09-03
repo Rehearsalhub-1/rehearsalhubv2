@@ -86,6 +86,9 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
   const [shareTrack, setShareTrack] = useState<any>(null);
   const [shareTracks, setShareTracks] = useState<any[] | null>(null);
 
+  const [quickFilter, setQuickFilter] = useState<'all' | 'praise-night' | 'communion' | 'gfap' | 'special'>('all');
+  const [searchProgramQuery, setSearchProgramQuery] = useState('');
+
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
   const [tracksForOptions, setTracksForOptions] = useState<any[]>([]);
@@ -95,7 +98,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [selectedSinger, selectedProgramId, searchQuery]);
+  }, [selectedSinger, selectedProgramId, searchQuery, quickFilter]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -160,7 +163,6 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       if (!isMountedRef.current) return;
 
       const songsFailed = !songsResult || songsResult.success === false;
-      const programsFailed = !programsResult || programsResult.success === false;
 
       if (songsFailed) {
         throw new Error('Songs fetch failed');
@@ -169,25 +171,39 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       const rawSongs = Array.isArray(songsResult) ? songsResult : (songsResult?.success ? (songsResult.data || []) : []);
       const fetchedPrograms = Array.isArray(programsResult) ? programsResult : (programsResult?.success ? (programsResult.data || []) : []);
 
-      const getProgramTime = (val: any) => {
-        if (!val) return 0;
-        if (typeof val.toDate === 'function') return val.toDate().getTime();
-        if (val._seconds) return val._seconds * 1000;
-        if (val.seconds) return val.seconds * 1000;
-        const d = new Date(val).getTime();
-        return isNaN(d) ? 0 : d;
-      };
-      const sortedPrograms = [...fetchedPrograms].sort((a: any, b: any) => {
-        const timeA = getProgramTime(a.createdAt || a.timestamp || a.date);
-        const timeB = getProgramTime(b.createdAt || b.timestamp || b.date);
-        return timeB - timeA;
-      }).map(p => {
-        const time = getProgramTime(p.createdAt || p.timestamp || p.date);
-        if (time > 0) {
-           const d = new Date(time);
-           p.dateLabel = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      // Build program lookup maps by Song ID and Song Title
+      const songIdToProgramMap: Record<string, { id: string; name: string; bannerImage?: string }> = {};
+      const songTitleToProgramMap: Record<string, { id: string; name: string; bannerImage?: string }> = {};
+      const validPrograms: any[] = [];
+
+      (fetchedPrograms || []).forEach((p: any) => {
+        const pName = (p.name || p.title || '').trim();
+        const pId = p.id;
+        const pBanner = p.bannerImage || null;
+        const pDate = p.dateLabel || p.date || '';
+        const songsList = Array.isArray(p.songs) ? p.songs : (Array.isArray(p.programSongs) ? p.programSongs : []);
+
+        if (pName && songsList.length > 0) {
+          validPrograms.push({
+            id: pId,
+            name: pName,
+            songCount: songsList.length,
+            bannerImage: pBanner,
+            date: pDate,
+          });
+
+          songsList.forEach((s: any) => {
+            const actualSong = s.song || s;
+            const sId = actualSong.id || s.songId || s.id;
+            if (sId && !songIdToProgramMap[sId]) {
+              songIdToProgramMap[sId] = { id: pId, name: pName, bannerImage: pBanner };
+            }
+            const sTitle = (actualSong.title || s.title || '').trim().toLowerCase();
+            if (sTitle && !songTitleToProgramMap[sTitle]) {
+              songTitleToProgramMap[sTitle] = { id: pId, name: pName, bannerImage: pBanner };
+            }
+          });
         }
-        return p;
       });
       
       const mappedSongs = (rawSongs || [])
@@ -195,11 +211,17 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         .map((song: any, index: number) => {
           const songAudioUrl = resolveSongAudioUrl(song);
           const resolvedAudioUrls = resolveSongAudioUrls(song);
+          const linkedProg = songIdToProgramMap[song.id] || songTitleToProgramMap[(song.title || '').trim().toLowerCase()];
+          const progName = linkedProg?.name || song.programName || song.program || song.category || 'Loveworld Singers';
+          const progId = linkedProg?.id || song.programId || song.praiseNightId || null;
+          const progBanner = linkedProg?.bannerImage || song.programBannerImage || null;
+
           return {
             id: song.id || `song-${index}`,
             title: song.title || 'Untitled Song',
             subtitle: song.leadSinger || song.writer || 'Loveworld Singers',
-            program: song.praiseNightId || song.program || 'Loveworld Singers',
+            program: progName,
+            programId: progId,
             leadSinger: song.leadSinger || 'Unknown',
             writer: song.writer || 'Unknown',
             conductor: song.conductor || 'Evang. Kathy',
@@ -216,17 +238,19 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             rehearsalCount: getRehearsalCount(song),
             conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
             history: song.history || '',
-          comments: song.comments || '',
-          leadKeyboardist: song.leadKeyboardist || '',
-          drummer: song.drummer || '',
-          leadGuitarist: song.leadGuitarist || '',
-          createdAt: song.createdAt ? typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString() : new Date().toISOString(),
-          imageUrl: song.imageUrl || '',
-          image: getTrackImage(song, index),
-          zoneId: resolvedZoneId,
-          collectionName: isHQ ? 'praise_night_songs' : 'zone_songs'
-        };
-      });
+            comments: song.comments || '',
+            leadKeyboardist: song.leadKeyboardist || '',
+            drummer: song.drummer || '',
+            leadGuitarist: song.leadGuitarist || '',
+            createdAt: song.createdAt ? (typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString()) : new Date().toISOString(),
+            imageUrl: song.imageUrl || progBanner || '',
+            image: progBanner ? { uri: progBanner } : getTrackImage(song, index),
+            zoneId: resolvedZoneId,
+            collectionName: isHQ ? 'praise_night_songs' : 'zone_songs'
+          };
+        });
+
+      validPrograms.sort((a, b) => b.songCount - a.songCount);
 
       const distinctCategories: string[] = Array.from(
         new Set(
@@ -238,18 +262,18 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
       setSongs(mappedSongs);
       setSingers([...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[]);
-      setPrograms(distinctCategories);
+      setPrograms(validPrograms);
       setCategories(distinctCategories);
       setIsLoading(false);
 
       cachedSongs = mappedSongs;
       cachedSingers = [...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[];
-      cachedPrograms = distinctCategories;
+      cachedPrograms = validPrograms;
       cachedCategories = distinctCategories;
 
       Promise.all([
         AsyncStorage.setItem(`MINISTERED_SONGS_CACHE_${resolvedZoneId}`, JSON.stringify(mappedSongs)),
-        AsyncStorage.setItem(`MINISTERED_PROGRAMS_CACHE_${resolvedZoneId}`, JSON.stringify(sortedPrograms)),
+        AsyncStorage.setItem(`MINISTERED_PROGRAMS_CACHE_${resolvedZoneId}`, JSON.stringify(validPrograms)),
         AsyncStorage.setItem(`MINISTERED_SINGERS_CACHE_${resolvedZoneId}`, JSON.stringify(cachedSingers)),
         AsyncStorage.setItem(`MINISTERED_CATEGORIES_CACHE_${resolvedZoneId}`, JSON.stringify(cachedCategories))
       ]).catch(() => {});
@@ -303,16 +327,24 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     if (selectedSinger && t.leadSinger !== selectedSinger) return false;
     if (selectedProgramId) {
       const songProgram = (t.program || '').toLowerCase();
-      const songCategory = (t.category || '').toLowerCase();
-      const songCats = Array.isArray(t.categories) ? t.categories.map((c: any) => String(c || '').toLowerCase()) : [];
+      const songProgramId = (t.programId || '').toLowerCase();
       const target = selectedProgramId.toLowerCase();
-      const matches = songProgram === target || songCategory === target || songCats.includes(target);
+      const matches = songProgram === target || songProgramId === target || songProgram.includes(target);
       if (!matches) return false;
+    }
+    if (quickFilter !== 'all') {
+      const prog = (t.program || '').toLowerCase();
+      const cat = (t.category || '').toLowerCase();
+      if (quickFilter === 'praise-night' && !prog.includes('praise night') && !cat.includes('praise')) return false;
+      if (quickFilter === 'communion' && !prog.includes('communion') && !cat.includes('communion')) return false;
+      if (quickFilter === 'gfap' && !prog.includes('gfap') && !prog.includes('gdop') && !cat.includes('gfap')) return false;
+      if (quickFilter === 'special' && !prog.includes('special') && !prog.includes('thanksgiving') && !prog.includes('conference') && !prog.includes('eve') && !prog.includes('service') && !prog.includes('hslhs')) return false;
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (t.title?.toLowerCase() || '').includes(q) || 
              (t.leadSinger?.toLowerCase() || '').includes(q) || 
+             (t.writer?.toLowerCase() || '').includes(q) ||
              (t.program?.toLowerCase() || '').includes(q) ||
              (t.category?.toLowerCase() || '').includes(q);
     }
@@ -326,7 +358,16 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
   const displayedTracks = filteredTracks.slice(0, visibleCount);
 
-  const hasFilter = !!(selectedSinger || selectedProgramId);
+  const hasFilter = !!(selectedSinger || selectedProgramId || quickFilter !== 'all');
+
+  const filteredProgramsInModal = useMemo(() => {
+    if (!searchProgramQuery.trim()) return programs;
+    const q = searchProgramQuery.toLowerCase();
+    return (programs || []).filter((p: any) => {
+      const name = (p.name || p.title || p || '').toLowerCase();
+      return name.includes(q);
+    });
+  }, [programs, searchProgramQuery]);
 
   const openTrack = (track: any, overrideQueue?: any[]) => {
     if (isSelectionMode) {
@@ -368,12 +409,9 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             </Text>
             <TouchableOpacity
               style={{ backgroundColor: theme.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 }}
-              onPress={() => {
-                if (navigation.canGoBack()) navigation.goBack();
-                else navigation.navigate('Home');
-              }}
+              onPress={() => navigation.navigate('Home')}
             >
-              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Go Back</Text>
+              <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700' }}>Return to Home</Text>
             </TouchableOpacity>
           </SafeAreaView>
         </>
@@ -431,16 +469,19 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           <View style={s.heroBanner}>
             <Image source={require('../../assets/image/home1.jpg')} style={StyleSheet.absoluteFillObject} contentFit="cover" />
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.85)']}
-              locations={[0, 0.6, 1]}
+              colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.85)']}
+              locations={[0, 0.5, 1]}
               style={StyleSheet.absoluteFillObject}
             />
             <View style={s.heroContent}>
               <View style={s.heroLogoRow}>
                 <Image source={require('../../assets/logo/logo.png')} style={s.heroLogo} contentFit="contain" />
+                <Text style={s.heroLogoText}>Official Repertoire</Text>
               </View>
               <Text style={s.heroTitle}>Ministered Songs</Text>
-              <Text style={s.heroSub}>Complete repertoire archive</Text>
+              <Text style={s.heroSub}>
+                {selectedProgramId ? `Program: ${selectedProgramId}` : 'Browse by Praise Night, Service & Soloist'}
+              </Text>
               <View style={s.heroStats}>
                 <View style={s.statItem}>
                   <Text style={s.statNum}>{(songs || []).length}</Text>
@@ -448,23 +489,25 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 </View>
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
-                  <Text style={s.statNum}>{(singers || []).length}</Text>
-                  <Text style={s.statLbl}>Soloists</Text>
+                  <Text style={s.statNum}>{(programs || []).length}</Text>
+                  <Text style={s.statLbl}>Programs</Text>
                 </View>
                 <View style={s.statDivider} />
                 <View style={s.statItem}>
-                  <Text style={s.statNum}>{(categories || []).length}</Text>
-                  <Text style={s.statLbl}>Categories</Text>
+                  <Text style={s.statNum}>{(singers || []).length}</Text>
+                  <Text style={s.statLbl}>Soloists</Text>
                 </View>
               </View>
             </View>
           </View>
+
+          {/* Search Row */}
           <View style={s.searchRow}>
             <View style={s.searchBox}>
               <Ionicons name="search" size={17} color={theme.colors.textMuted} style={{ marginRight: 8 }} />
               <TextInput
                 style={s.searchInput}
-                placeholder="Search songs, singers, programs…"
+                placeholder="Search songs, soloists, programs…"
                 placeholderTextColor={theme.colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -479,18 +522,100 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
               style={[s.filterBtn, hasFilter && s.filterBtnActive]}
               onPress={() => { setShowFilterModal(true); }}
             >
-              <Ionicons name="options-outline" size={18} color={hasFilter ? theme.colors.textPrimary : theme.colors.textMuted} />
+              <Ionicons name="options-outline" size={18} color={hasFilter ? '#ffffff' : theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
+
+          {/* Quick Filter Horizontal Scroll Pills */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.quickFilterRow}
+          >
+            {[
+              { id: 'all', label: 'All Songs', icon: 'musical-notes', count: songs.length },
+              { id: 'praise-night', label: 'Praise Nights', icon: 'flame', count: null },
+              { id: 'communion', label: 'Communion', icon: 'wine', count: null },
+              { id: 'gfap', label: 'GFAP / GDOP', icon: 'globe-outline', count: null },
+              { id: 'special', label: 'Special Programs', icon: 'sparkles', count: null },
+            ].map((chip) => {
+              const isActive = quickFilter === chip.id;
+              return (
+                <TouchableOpacity
+                  key={chip.id}
+                  style={[s.chip, isActive && s.chipActive]}
+                  onPress={() => {
+                    setQuickFilter(chip.id as any);
+                    setSelectedProgramId(null);
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <Ionicons
+                    name={chip.icon as any}
+                    size={13}
+                    color={isActive ? '#ffffff' : theme.colors.accent}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[s.chipText, isActive && s.chipTextActive]}>
+                    {chip.label}
+                  </Text>
+                  {chip.count !== null && (
+                    <View style={[s.chipBadge, isActive && { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
+                      <Text style={[s.chipBadgeText, isActive && { color: '#ffffff' }]}>{chip.count}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Active Filter Badges */}
+          {hasFilter && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 12 }}>
+              {selectedProgramId && (
+                <TouchableOpacity
+                  style={s.activeFilterPill}
+                  onPress={() => setSelectedProgramId(null)}
+                >
+                  <Ionicons name="folder" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                  <Text style={s.activeFilterPillText}>{selectedProgramId}</Text>
+                  <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              )}
+              {selectedSinger && (
+                <TouchableOpacity
+                  style={s.activeFilterPill}
+                  onPress={() => setSelectedSinger(null)}
+                >
+                  <Ionicons name="person" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                  <Text style={s.activeFilterPillText}>{selectedSinger}</Text>
+                  <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              )}
+              {quickFilter !== 'all' && (
+                <TouchableOpacity
+                  style={s.activeFilterPill}
+                  onPress={() => setQuickFilter('all')}
+                >
+                  <Ionicons name="funnel" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                  <Text style={s.activeFilterPillText}>
+                    {quickFilter === 'praise-night' ? 'Praise Nights' : quickFilter === 'communion' ? 'Communion' : quickFilter === 'gfap' ? 'GFAP / GDOP' : 'Special Programs'}
+                  </Text>
+                  <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           <View style={s.actionRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Text style={s.countText}>{filteredTracks.length} songs</Text>
               {hasFilter && (
                 <TouchableOpacity
                   style={s.clearBadge}
-                  onPress={() => { setSelectedSinger(null); setSelectedProgramId(null); }}
+                  onPress={() => { setSelectedSinger(null); setSelectedProgramId(null); setQuickFilter('all'); }}
                 >
-                  <Text style={s.clearBadgeText}>Clear</Text>
+                  <Text style={s.clearBadgeText}>Reset</Text>
                   <Ionicons name="close" size={12} color={theme.colors.textPrimary} />
                 </TouchableOpacity>
               )}
@@ -599,7 +724,14 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                     <Text style={[s.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
                     <Text style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.key}</Text>
                   </View>
-                  <Text style={[s.trackProgram, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.program}</Text>
+                  {track.program ? (
+                    <View style={[s.trackProgramBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.2)' }]}>
+                      <Ionicons name="musical-notes" size={9} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                      <Text style={[s.trackProgramBadgeText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
+                        {track.program}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
                 {!isSelectionMode && (
                   <TouchableOpacity
@@ -748,6 +880,24 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 </TouchableOpacity>
               ))}
             </View>
+            {filterTab === 'program' && (
+              <View style={s.modalSearchBox}>
+                <Ionicons name="search" size={15} color={theme.colors.textMuted} style={{ marginRight: 6 }} />
+                <TextInput
+                  style={s.modalSearchInput}
+                  placeholder="Search program (e.g. 28, 23, Communion)..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={searchProgramQuery}
+                  onChangeText={setSearchProgramQuery}
+                  autoCapitalize="none"
+                />
+                {searchProgramQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchProgramQuery('')}>
+                    <Ionicons name="close-circle" size={15} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
             <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
               <View style={{ gap: 8, paddingBottom: 16 }}>
                 {filterTab === 'singer' ? (
@@ -764,18 +914,29 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                     </TouchableOpacity>
                   ))
                 ) : (
-                  [null, ...programs].map(item => (
-                    <TouchableOpacity
-                      key={item || 'all'}
-                      style={[s.filterOption, selectedProgramId === item && s.filterOptionActive]}
-                      onPress={() => { setSelectedProgramId(item); }}
-                    >
-                      <Text style={[s.filterOptionText, selectedProgramId === item && s.filterOptionTextActive]}>
-                        {item || 'All Programs / Categories'}
-                      </Text>
-                      {selectedProgramId === item && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
-                    </TouchableOpacity>
-                  ))
+                  [null, ...filteredProgramsInModal].map((item: any) => {
+                    const isAll = item === null;
+                    const itemName = isAll ? 'All Programs' : (item.name || item.title || item);
+                    const count = item?.songCount ? ` (${item.songCount} songs)` : '';
+                    const isSelected = isAll ? selectedProgramId === null : (selectedProgramId === itemName || selectedProgramId === item?.id);
+
+                    return (
+                      <TouchableOpacity
+                        key={isAll ? 'all' : (item.id || itemName)}
+                        style={[s.filterOption, isSelected && s.filterOptionActive]}
+                        onPress={() => { setSelectedProgramId(isAll ? null : itemName); }}
+                      >
+                        <View style={{ flex: 1, paddingRight: 8 }}>
+                          <Text style={[s.filterOptionText, isSelected && s.filterOptionTextActive]} numberOfLines={1}>
+                            {itemName}
+                          </Text>
+                          {item?.date ? <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>{item.date}</Text> : null}
+                        </View>
+                        {count ? <Text style={{ color: isSelected ? theme.colors.accent : theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginRight: 8 }}>{count}</Text> : null}
+                        {isSelected && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
+                      </TouchableOpacity>
+                    );
+                  })
                 )}
               </View>
             </ScrollView>
@@ -946,6 +1107,92 @@ const getStyles = (theme: any) => {
   filterOptionActive: { backgroundColor: T.accentSubtle, borderColor: T.accent },
   filterOptionText: { color: T.textPrimary, fontSize: 15, fontWeight: '600' },
   filterOptionTextActive: { color: T.textPrimary, fontWeight: '700' },
+  quickFilterRow: { paddingHorizontal: 16, marginBottom: 14, gap: 8 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: T.cardBackgroundLight,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: T.surfaceBorder,
+  },
+  chipActive: {
+    backgroundColor: T.accent,
+    borderColor: T.accent,
+  },
+  chipText: {
+    color: T.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  chipTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
+  },
+  chipBadge: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    marginLeft: 6,
+  },
+  chipBadgeText: {
+    color: T.textSecondary,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  activeFilterPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(192, 132, 252, 0.15)',
+    borderWidth: 1,
+    borderColor: T.accent,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  activeFilterPillText: {
+    color: T.accent,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  trackProgramBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(192, 132, 252, 0.12)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(192, 132, 252, 0.25)',
+    marginTop: 4,
+  },
+  trackProgramBadgeText: {
+    color: T.accent,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  modalSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: T.inputBackground,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 38,
+    borderWidth: 1,
+    borderColor: T.inputBorder,
+    marginBottom: 12,
+  },
+  modalSearchInput: {
+    flex: 1,
+    color: T.inputText,
+    fontSize: 13,
+    fontWeight: '500',
+  },
   modalFooter: { flexDirection: 'row', gap: 12, marginTop: 16 },
   resetBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: T.cardBackgroundLight, alignItems: 'center' },
   resetBtnText: { color: T.textPrimary, fontSize: 15, fontWeight: '600' },

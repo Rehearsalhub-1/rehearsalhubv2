@@ -112,12 +112,18 @@ export const SafeAndroidVisibility = {
 // 4. LiveKit Safe Wrapper
 // ==========================================
 let rawLiveKit: any = null;
-if (!isExpoGo) {
-  try {
-    rawLiveKit = require('@livekit/react-native');
-  } catch (e) {
-    console.log('[SafeNative] LiveKit native module not available.');
-  }
+let rawWebRTC: any = null;
+
+try {
+  rawLiveKit = require('@livekit/react-native');
+} catch (e) {
+  console.log('[SafeNative] LiveKit native module not available.');
+}
+
+try {
+  rawWebRTC = require('@livekit/react-native-webrtc');
+} catch (e) {
+  console.log('[SafeNative] WebRTC native module not available.');
 }
 
 export const SafeVideoView = rawLiveKit?.VideoView || function FallbackVideoView(props: any) {
@@ -125,13 +131,28 @@ export const SafeVideoView = rawLiveKit?.VideoView || function FallbackVideoView
 };
 
 export const safeRegisterGlobals = () => {
-  if (!isExpoGo && rawLiveKit?.registerGlobals) {
-    try {
+  try {
+    if (rawLiveKit?.registerGlobals) {
       rawLiveKit.registerGlobals();
-    } catch (e) {
-      console.log('[SafeNative] LiveKit registerGlobals failed:', e);
     }
+  } catch (e) {
+    console.log('[SafeNative] LiveKit registerGlobals error:', e);
   }
+
+  try {
+    if (rawWebRTC?.registerGlobals) {
+      rawWebRTC.registerGlobals();
+    }
+  } catch (e) {
+    console.log('[SafeNative] WebRTC registerGlobals error:', e);
+  }
+
+  // Fallback: if navigator.mediaDevices is still missing but rawWebRTC.mediaDevices exists
+  try {
+    if (typeof navigator !== 'undefined' && !navigator.mediaDevices && rawWebRTC?.mediaDevices) {
+      (navigator as any).mediaDevices = rawWebRTC.mediaDevices;
+    }
+  } catch {}
 };
 
 // ==========================================

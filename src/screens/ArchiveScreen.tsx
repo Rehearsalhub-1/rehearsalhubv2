@@ -1,10 +1,11 @@
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   Dimensions,
@@ -96,10 +97,30 @@ export default function ArchiveScreen({ navigation }: any) {
         
         const isHQ = isHQGroup(resolvedZoneId);
 
-        const [categoriesResult, programsResult] = await Promise.all([
+        let [categoriesResult, programsResult] = await Promise.all([
           api.categories.getPage(isHQ ? undefined : resolvedZoneId).catch(() => null),
           api.programs.getAll(isHQ ? undefined : resolvedZoneId).catch(() => null),
         ]);
+
+        // Fallback: If zone-scoped query returned empty or failed, fetch global programs
+        if (!programsResult?.success || !Array.isArray(programsResult.data) || programsResult.data.length === 0) {
+          try {
+            const fallbackProgs = await api.programs.getAll().catch(() => null);
+            if (fallbackProgs?.success && Array.isArray(fallbackProgs.data) && fallbackProgs.data.length > 0) {
+              programsResult = fallbackProgs;
+            }
+          } catch {}
+        }
+
+        // Fallback: If categories returned empty or failed, fetch global page categories
+        if (!categoriesResult?.success || !Array.isArray(categoriesResult.data) || categoriesResult.data.length === 0) {
+          try {
+            const fallbackCats = await api.categories.getPage().catch(() => null);
+            if (fallbackCats?.success && Array.isArray(fallbackCats.data) && fallbackCats.data.length > 0) {
+              categoriesResult = fallbackCats;
+            }
+          } catch {}
+        }
 
         let fetchedCategories: any[] = categoriesResult?.success && Array.isArray(categoriesResult.data) ? categoriesResult.data : [];
         let allPrograms: any[] = [];
@@ -110,11 +131,15 @@ export default function ArchiveScreen({ navigation }: any) {
         }
 
         if (active) {
+          const cleanStr = (s: string) => (s || '').trim().toLowerCase();
+
           const mappedCategories = fetchedCategories.map((cat: any) => {
+            const catName = cleanStr(cat.name || cat.title || '');
+
             const progs = allPrograms.filter((p: any) => {
-              const isArchive = p.category === 'archive';
-              const matchesCategory = p.pageCategory === cat.name;
-              return isArchive && matchesCategory;
+              const isArchive = p.category === 'archive' || p.status === 'archive' || p.isArchived || p.status === 'published';
+              const pCat = cleanStr(p.pageCategory || p.page_category || '');
+              return (isArchive && pCat === catName) || (pCat === catName);
             });
 
             progs.sort((a: any, b: any) => {
@@ -149,13 +174,10 @@ export default function ArchiveScreen({ navigation }: any) {
           mappedCategories.sort((a, b) => a.orderIndex - b.orderIndex);
           const visibleCategories = mappedCategories.filter((c) => c.programs.length > 0);
 
-          const freshJson = JSON.stringify(visibleCategories.map(c => ({ id: c.id, programCount: c.programCount })));
-          const cachedJson = JSON.stringify(cached?.map((c: any) => ({ id: c.id, programCount: c.programCount })) || []);
-          if (freshJson !== cachedJson) {
-            setCategories(visibleCategories);
+          setCategories(visibleCategories);
+          if (visibleCategories.length > 0) {
+            await writeCache(cacheKey, visibleCategories);
           }
-
-          await writeCache(cacheKey, visibleCategories);
           setIsLoading(false);
         }
       } catch (err) {
@@ -305,6 +327,33 @@ const getStyles = (theme: any) => {
     fontSize: 20,
     fontWeight: '700',
     letterSpacing: -0.5
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.cardBackgroundLight,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.bottomTabBorder,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: theme.colors.textPrimary,
+    paddingVertical: 0,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
   },
   content: {
     flex: 1

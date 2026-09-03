@@ -35,6 +35,7 @@ export default function HistoryScreen({ route, navigation }: any) {
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
   const [activeTrack, setActiveTrack] = useState(initialTrack);
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState('lyrics');
   const [expandedId, setExpandedId] = useState<string | null>('lyrics-1');
   const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack } = useTrackPlayer();
@@ -263,7 +264,29 @@ export default function HistoryScreen({ route, navigation }: any) {
             
             <Ionicons name="chevron-down" size={28} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={[styles.headerText, { flex: 1, textAlign: 'center', marginHorizontal: 16 }]} numberOfLines={1} ellipsizeMode="tail">{activeTrack?.title || 'Historical Archive'}</Text>
+          <TouchableOpacity 
+            style={{ flex: 1, marginHorizontal: 12, justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setIsTitleExpanded(!isTitleExpanded)}
+            activeOpacity={0.7}
+          >
+            <Text 
+              style={[
+                styles.headerText, 
+                { 
+                  textAlign: 'center', 
+                  color: '#FFFFFF',
+                  fontWeight: '700',
+                  textShadowColor: theme.colors.accent,
+                  textShadowRadius: 6,
+                  textShadowOffset: { width: 0, height: 0 },
+                }
+              ]} 
+              numberOfLines={isTitleExpanded ? undefined : 1} 
+              ellipsizeMode="tail"
+            >
+              {activeTrack?.title || 'Historical Archive'}
+            </Text>
+          </TouchableOpacity>
           <View style={styles.headerBtn} />
         </View>
 

@@ -509,14 +509,6 @@ export default function ChatListScreen({ route, navigation }: any) {
           </TouchableOpacity>
           
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity onPress={async () => {
-              const perm = await ImagePicker.requestCameraPermissionsAsync();
-              if (!perm.granted) { showToast('Camera permission required'); return; }
-              const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images as any, quality: 0.8 });
-              if (!result.canceled && result.assets?.[0]) showToast('Photo taken — open a chat to send it');
-            }}>
-              <Ionicons name="camera" size={24} color={theme.gradients.headerTextColor} />
-            </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('CreateGroup')}>
               <Ionicons name="people" size={24} color={theme.gradients.headerTextColor} />
             </TouchableOpacity>

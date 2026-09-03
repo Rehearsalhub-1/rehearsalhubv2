@@ -66,6 +66,27 @@ const SLEEP_TIMER_OPTIONS = [
   { label: 'End of current song', minutes: -1 },
 ];
 
+const isConductorGuideText = (text: string | null | undefined): boolean => {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('harmony') ||
+    lower.includes('harmonies') ||
+    lower.includes('unison') ||
+    lower.includes('verse 1') ||
+    lower.includes('verse 2') ||
+    lower.includes('modulate') ||
+    lower.includes('modulation') ||
+    lower.includes('coda') ||
+    lower.includes('refrain') ||
+    lower.includes('prechorus') ||
+    lower.includes('pre-chorus') ||
+    lower.includes('turnaround') ||
+    lower.includes('interlude') ||
+    (lower.includes('<div') && lower.includes('solo'))
+  );
+};
+
 const ExpandableText = ({ style, children, gradientColors }: { style: any, children: React.ReactNode, gradientColors?: readonly [string, string, ...string[]] }) => {
   const [expanded, setExpanded] = useState(false);
   const textProps = {
@@ -333,8 +354,63 @@ export default function PlayerScreen({ route, navigation }: any) {
   };
 
   const [activeTrack, setActiveTrack] = useState(initialTrack || fallbackTrack);
+  const lastPlayedTrackIdRef = useRef<string | null>(null);
+
+  // Sync activeTrack when navigating with new route params
+  useEffect(() => {
+    const paramTrack = route.params?.activeTrack;
+    if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+      setActiveTrack(paramTrack);
+    }
+  }, [route.params?.activeTrack]);
+
+  // Hydrate full song data from API when track is missing details (e.g. opened from chat share)
+  useEffect(() => {
+    if (!activeTrack?.id) return;
+    const isStub = !activeTrack.lyrics && !activeTrack.audioUrl;
+    if (!isStub) return;
+
+    let active = true;
+    api.songs.getById(String(activeTrack.id)).then(res => {
+      if (!active) return;
+      if (res?.success && res.data) {
+        const song = res.data;
+        const rawAudioUrl = song.audioFile || song.audioUrls?.full || song.audioUrl;
+        const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl;
+        setActiveTrack((prev: any) => ({
+          ...prev,
+          ...song,
+          audioUrl: songAudioUrl || prev?.audioUrl,
+          lyrics: song.lyrics || prev?.lyrics,
+          solfa: song.notation || song.solfas || song.solfa || prev?.solfa,
+          conductorGuide: song.conductorGuide || song.guide || prev?.conductorGuide,
+        }));
+      }
+    }).catch(err => {
+      console.warn('[PlayerScreen] Failed to hydrate song:', err);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [activeTrack?.id]);
+
   const { width } = useWindowDimensions();
   const [activePreviewTab, setActivePreviewTab] = useState('Lyrics');
+  const [songHistorySummary, setSongHistorySummary] = useState<string>('');
+
+  useEffect(() => {
+    if (!activeTrack?.id) return;
+    let active = true;
+    api.songs.getHistory(String(activeTrack.id).trim()).then(res => {
+      if (!active) return;
+      if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+        const lines = res.data.slice(0, 4).map((item: any) => `• **${item.title || item.type}:** ${item.description || item.new_value || ''}`);
+        setSongHistorySummary(lines.join('\n\n'));
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [activeTrack?.id]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showMoreAssetsModal, setShowMoreAssetsModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -487,18 +563,25 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   // Sync activeTrack metadata automatically when TrackPlayer advances to next/prev song
   useEffect(() => {
-    if (currentTrack && currentTrack.id && String(currentTrack.id) !== String(activeTrack?.id)) {
-      setActiveTrack((prev: any) => ({
-        ...prev,
-        ...currentTrack,
-        lyrics: currentTrack.lyrics || prev?.lyrics,
-        solfa: currentTrack.solfa || currentTrack.solfas || currentTrack.notation || prev?.solfa,
-        conductorGuide: currentTrack.conductorGuide || currentTrack.guide || prev?.conductorGuide,
-        comments: currentTrack.comments || prev?.comments,
-        history: currentTrack.history || prev?.history,
-      }));
+    if (currentTrack && currentTrack.id) {
+      const currentId = String(currentTrack.id);
+      setActiveTrack((prev: any) => {
+        if (prev && String(prev.id) === currentId) {
+          return prev;
+        }
+        lastPlayedTrackIdRef.current = currentId;
+        return {
+          ...prev,
+          ...currentTrack,
+          lyrics: currentTrack.lyrics || prev?.lyrics,
+          solfa: currentTrack.solfa || currentTrack.solfas || currentTrack.notation || prev?.solfa,
+          conductorGuide: currentTrack.conductorGuide || currentTrack.guide || prev?.conductorGuide,
+          comments: currentTrack.comments || prev?.comments,
+          history: currentTrack.history || prev?.history,
+        };
+      });
     }
-  }, [currentTrack]);
+  }, [currentTrack?.id]);
 
   // Sleep Timer Countdown Interval
   useEffect(() => {
@@ -679,12 +762,23 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   useEffect(() => {
     if (!activeTrack?.id) return;
-    const isSameTrack = currentTrack && String(currentTrack.id) === String(activeTrack.id);
-    if (isSameTrack) return;
-    if (!currentTrack || String(currentTrack.id) !== String(activeTrack.id) || (!currentTrack.audioUrl && activeTrack.audioUrl)) {
-      play(activeTrack, initialQueue || undefined, false);
+    const currentId = currentTrack?.id ? String(currentTrack.id) : null;
+    const activeId = String(activeTrack.id);
+    const isSameTrack = currentId === activeId;
+    const needsAudioReload = isSameTrack && !currentTrack?.audioUrl && Boolean(activeTrack.audioUrl);
+
+    if (isSameTrack && !needsAudioReload) {
+      lastPlayedTrackIdRef.current = activeId;
+      return;
     }
-  }, [activeTrack?.id]);
+
+    if (lastPlayedTrackIdRef.current === activeId && !needsAudioReload) {
+      return;
+    }
+
+    lastPlayedTrackIdRef.current = activeId;
+    play(activeTrack, initialQueue || undefined, false);
+  }, [activeTrack?.id, activeTrack?.audioUrl]);
 
   const handlePlayPause = async () => {
     if (currentTrack && String(currentTrack.id) !== String(activeTrack.id)) {
@@ -852,7 +946,19 @@ export default function PlayerScreen({ route, navigation }: any) {
             <Ionicons name="chevron-down" size={28} color="#ffffff" />
           </TouchableOpacity>
           <ExpandableText 
-            style={[styles.headerText, { flex: 1, textAlign: 'center', marginHorizontal: 16, color: '#000000', textShadowColor: 'rgba(255,255,255,0.1)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }]} 
+            style={[
+              styles.headerText,
+              {
+                flex: 1,
+                textAlign: 'center',
+                marginHorizontal: 16,
+                color: '#FFFFFF',
+                fontWeight: '800',
+                textShadowColor: theme.colors.accent || '#8B5CF6',
+                textShadowOffset: { width: 0, height: 0 },
+                textShadowRadius: 10,
+              }
+            ]} 
           >
             {activeTrack?.title || 'Now Playing'}
           </ExpandableText>
@@ -1067,151 +1173,162 @@ export default function PlayerScreen({ route, navigation }: any) {
               </View>
             </View>
 
-          {activePreviewTab === 'Lyrics' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 24, paddingHorizontal: 4 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Lyrics preview</Text>
-                {activeTrack.lyrics ? (
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 170, minHeight: 80 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                    <RenderHtml
-                      contentWidth={width - 100}
-                      source={{ html: parseMarkdown(activeTrack.lyrics) }}
-                      baseStyle={{ ...theme.typography.htmlBase }}
-                      tagsStyles={{
-                        p: { margin: 0, padding: 0 },
-                        strong: { color: theme.colors.accent, fontWeight: '800' },
-                        b: { color: theme.colors.accent, fontWeight: '800' }
-                      }}
-                    />
-                  </ScrollView>
-                ) : (
-                  <View style={{ minHeight: 80, justifyContent: 'center' }}>
-                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No lyrics available.</Text>
-                  </View>
-                )}
-              </View>
-              <TouchableOpacity
-                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                activeOpacity={0.8}
-                onPress={() => {
-                  navigation.navigate('Lyrics', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                <Ionicons name="expand" size={22} color={theme.colors.accent} />
-              </TouchableOpacity>
-            </View>
-          )}
+                   {/* Solfa vs Conductor resolved data */}
+          {(() => {
+            const resolvedConductorGuide = activeTrack.conductorGuide || (isConductorGuideText(activeTrack.solfa) ? activeTrack.solfa : '');
+            const resolvedSolfa = isConductorGuideText(activeTrack.solfa) ? '' : (activeTrack.solfa || '');
+            const resolvedHistory = songHistorySummary || activeTrack.history || (activeTrack.program ? `**Ministered at ${activeTrack.program}**\n\n- **Lead Singer:** ${activeTrack.leadSinger || 'Loveworld Singers'}\n- **Conductor:** ${activeTrack.conductor || '—'}\n- **Key:** ${activeTrack.key || '—'} · **Tempo:** ${activeTrack.tempo || '—'}\n- **Rehearsal Count:** x${activeTrack.rehearsalCount ?? 0}` : '');
 
-          {activePreviewTab === 'Conductor' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 24, paddingHorizontal: 4 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Conductor preview</Text>
-                {activeTrack.conductorGuide ? (
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 170, minHeight: 80 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                    <RenderHtml
-                      contentWidth={width - 100}
-                      source={{ html: parseMarkdown(activeTrack.conductorGuide) }}
-                      baseStyle={{ ...theme.typography.htmlBase }}
-                      tagsStyles={{
-                        p: { margin: 0, padding: 0 },
-                        strong: { color: theme.colors.accent, fontWeight: '800' },
-                        b: { color: theme.colors.accent, fontWeight: '800' }
-                      }}
-                    />
-                  </ScrollView>
-                ) : (
-                  <View style={{ minHeight: 80, justifyContent: 'center' }}>
-                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No conductor guide provided.</Text>
+            return (
+              <>
+                {activePreviewTab === 'Lyrics' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Lyrics preview</Text>
+                      {activeTrack.lyrics ? (
+                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+                          <RenderHtml
+                            contentWidth={width - 100}
+                            source={{ html: parseMarkdown(activeTrack.lyrics) }}
+                            baseStyle={{ ...theme.typography.htmlBase }}
+                            tagsStyles={{
+                              p: { margin: 0, padding: 0 },
+                              strong: { color: theme.colors.accent, fontWeight: '800' },
+                              b: { color: theme.colors.accent, fontWeight: '800' }
+                            }}
+                          />
+                        </ScrollView>
+                      ) : (
+                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No lyrics available.</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        navigation.navigate('Lyrics', { activeTrack, backgroundColor: "#8b5cf6" });
+                      }}>
+                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
+                    </TouchableOpacity>
                   </View>
                 )}
-              </View>
-              <TouchableOpacity
-                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                activeOpacity={0.8}
-                onPress={() => {
-                  navigation.navigate('Conductor', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                <Ionicons name="expand" size={22} color={theme.colors.accent} />
-              </TouchableOpacity>
-            </View>
-          )}
 
-          {activePreviewTab === 'Solfa' && (!fromAllSongs || isHQ) && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 24, paddingHorizontal: 4 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Solfa preview</Text>
-                {activeTrack.solfa ? (
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 170, minHeight: 80 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                    <RenderHtml
-                      contentWidth={width - 100}
-                      source={{ html: parseMarkdown(activeTrack.solfa) }}
-                      baseStyle={{ ...theme.typography.htmlBase }}
-                      tagsStyles={{
-                        p: { margin: 0, padding: 0 },
-                        strong: { color: theme.colors.accent, fontWeight: '800' },
-                        b: { color: theme.colors.accent, fontWeight: '800' }
-                      }}
-                    />
-                  </ScrollView>
-                ) : (
-                  <View style={{ minHeight: 80, justifyContent: 'center' }}>
-                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No solfa notation available.</Text>
+                {activePreviewTab === 'Conductor' && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Conductor preview</Text>
+                      {resolvedConductorGuide ? (
+                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+                          <RenderHtml
+                            contentWidth={width - 100}
+                            source={{ html: parseMarkdown(resolvedConductorGuide) }}
+                            baseStyle={{ ...theme.typography.htmlBase }}
+                            tagsStyles={{
+                              p: { margin: 0, padding: 0 },
+                              strong: { color: theme.colors.accent, fontWeight: '800' },
+                              b: { color: theme.colors.accent, fontWeight: '800' }
+                            }}
+                          />
+                        </ScrollView>
+                      ) : (
+                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No conductor guide provided.</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        navigation.navigate('Conductor', { activeTrack, backgroundColor: "#8b5cf6" });
+                      }}>
+                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
+                    </TouchableOpacity>
                   </View>
                 )}
-              </View>
-              <TouchableOpacity
-                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                activeOpacity={0.8}
-                onPress={() => {
-                  navigation.navigate('Solfa', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                <Ionicons name="expand" size={22} color={theme.colors.accent} />
-              </TouchableOpacity>
-            </View>
-          )}
 
-          {activePreviewTab === 'History' && (!fromAllSongs || isHQ) && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 24, paddingHorizontal: 4 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>History preview</Text>
-                {activeTrack.history ? (
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 170, minHeight: 80 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                    <RenderHtml
-                      contentWidth={width - 100}
-                      source={{ html: parseMarkdown(activeTrack.history) }}
-                      baseStyle={{ ...theme.typography.htmlBase }}
-                      tagsStyles={{
-                        p: { margin: 0, padding: 0 },
-                        strong: { color: theme.colors.accent, fontWeight: '800' },
-                        b: { color: theme.colors.accent, fontWeight: '800' }
-                      }}
-                    />
-                  </ScrollView>
-                ) : (
-                  <View style={{ minHeight: 80, justifyContent: 'center' }}>
-                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No history available.</Text>
+                {activePreviewTab === 'Solfa' && (!fromAllSongs || isHQ) && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Solfa preview</Text>
+                      {resolvedSolfa ? (
+                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+                          <RenderHtml
+                            contentWidth={width - 100}
+                            source={{ html: parseMarkdown(resolvedSolfa) }}
+                            baseStyle={{ ...theme.typography.htmlBase }}
+                            tagsStyles={{
+                              p: { margin: 0, padding: 0 },
+                              strong: { color: theme.colors.accent, fontWeight: '800' },
+                              b: { color: theme.colors.accent, fontWeight: '800' }
+                            }}
+                          />
+                        </ScrollView>
+                      ) : (
+                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No solfa notation available.</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        navigation.navigate('Solfa', { activeTrack, backgroundColor: "#8b5cf6" });
+                      }}>
+                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
+                    </TouchableOpacity>
                   </View>
                 )}
-              </View>
-              <TouchableOpacity
-                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                activeOpacity={0.8}
-                onPress={() => {
-                  navigation.navigate('History', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                <Ionicons name="expand" size={22} color={theme.colors.accent} />
-              </TouchableOpacity>
-            </View>
-          )}
+
+                {activePreviewTab === 'History' && (!fromAllSongs || isHQ) && (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>History preview</Text>
+                      {resolvedHistory ? (
+                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+                          <RenderHtml
+                            contentWidth={width - 100}
+                            source={{ html: parseMarkdown(resolvedHistory) }}
+                            baseStyle={{ ...theme.typography.htmlBase }}
+                            tagsStyles={{
+                              p: { margin: 0, padding: 0 },
+                              strong: { color: theme.colors.accent, fontWeight: '800' },
+                              b: { color: theme.colors.accent, fontWeight: '800' }
+                            }}
+                          />
+                        </ScrollView>
+                      ) : (
+                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No history available.</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        navigation.navigate('History', { activeTrack, backgroundColor: "#8b5cf6" });
+                      }}>
+                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            );
+          })()}
 
           {activePreviewTab === 'Comments' && !fromAllSongs && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 24, paddingHorizontal: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Comments preview</Text>
                 {activeTrack.comments ? (
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 170, minHeight: 80 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+                  <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
                     <RenderHtml
                       contentWidth={width - 100}
-                      source={{ html: getParsedCommentsHtml() }}
+                      source={{ html: parseMarkdown(activeTrack.comments) }}
                       baseStyle={{ ...theme.typography.htmlBase }}
                       tagsStyles={{
                         p: { margin: 0, padding: 0 },
@@ -1221,8 +1338,8 @@ export default function PlayerScreen({ route, navigation }: any) {
                     />
                   </ScrollView>
                 ) : (
-                  <View style={{ minHeight: 80, justifyContent: 'center' }}>
-                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No comments from directors.</Text>
+                  <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No comments available.</Text>
                   </View>
                 )}
               </View>
@@ -1238,10 +1355,10 @@ export default function PlayerScreen({ route, navigation }: any) {
           )}
 
           {activePreviewTab === 'Details' && !fromAllSongs && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24, paddingHorizontal: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Song Details</Text>
-                <View style={{ maxHeight: 80, overflow: 'hidden' }}>
+                <View style={{ maxHeight: 120, overflow: 'hidden' }}>
                   <ExpandableText style={{ fontSize: 13, color: theme.colors.textPrimary, fontWeight: '500' }}>
                     <Text style={{ fontWeight: '700', color: theme.colors.accent }}>Lead: </Text>{activeTrack.leadSinger || 'Unknown'}
                   </ExpandableText>
@@ -1261,28 +1378,26 @@ export default function PlayerScreen({ route, navigation }: any) {
             </View>
           )}
 
-          {/* Crystal-Clear Section Looper Panel */}
+          {/* Simple & Intuitive Section Looper (A-B) */}
           {(showABLooperStrip || abLoop.active || abLoop.start !== null) && (
             <View style={styles.abLooperStrip}>
-              {/* Header with Title and Reset */}
+              {/* Header: Title and Reset */}
               <View style={styles.abLooperHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Ionicons name="infinite" size={16} color={theme.colors.accent} />
-                  <Text style={styles.abLooperTitle}>Section Looper</Text>
-                  <Text style={styles.abLooperSubtitle}>
-                    {abLoop.active
-                      ? `(${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)})`
-                      : abLoop.start !== null
-                      ? '• Tap End (B) to loop'
-                      : '• Tap Start (A) to begin'}
-                  </Text>
+                  <Text style={styles.abLooperTitle}>A-B Loop</Text>
+                  {abLoop.active && (
+                    <View style={{ backgroundColor: theme.colors.accent + '25', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                      <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '800' }}>ACTIVE</Text>
+                    </View>
+                  )}
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {(abLoop.start !== null || abLoop.end !== null || abLoop.active) && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  {(abLoop.start !== null || abLoop.end !== null) && (
                     <TouchableOpacity
                       onPress={() => {
                         clearABLoop();
-                        showToast('Section Loop Reset', 'trash-outline');
+                        showToast('Loop Reset', 'trash-outline');
                       }}
                       style={styles.abResetBtn}
                     >
@@ -1300,103 +1415,81 @@ export default function PlayerScreen({ route, navigation }: any) {
                 </View>
               </View>
 
-              {/* Set Point A & Point B Controls */}
+              {/* Simple 2-Point Set Buttons + Loop Toggle */}
               <View style={styles.abPointsRow}>
                 {/* Point A */}
-                <View style={{ flex: 1 }}>
-                  <TouchableOpacity
-                    style={[
-                      styles.abPointBox,
-                      abLoop.start !== null && { borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.15)' }
-                    ]}
-                    onPress={async () => {
-                      const posSec = await TrackPlayer.getPosition().catch(() => 0);
-                      const posMs = Math.floor(posSec * 1000);
-                      await setLoopPointA(posMs);
-                      showToast(`Point A: ${formatTime(posMs)}`, 'flag');
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Ionicons name="flag" size={12} color={abLoop.start !== null ? '#38bdf8' : theme.colors.textMuted} />
-                      <Text style={styles.abPointLabel}>START (A)</Text>
-                    </View>
-                    <Text style={[styles.abPointTime, abLoop.start !== null && { color: '#38bdf8' }]}>
-                      {abLoop.start !== null ? formatTime(abLoop.start) : 'Set Current'}
-                    </Text>
-                  </TouchableOpacity>
-                  {abLoop.start !== null && (
-                    <View style={styles.nudgeRow}>
-                      <TouchableOpacity onPress={() => adjustLoopPointA(-1000)} style={styles.nudgeBtn}>
-                        <Text style={styles.nudgeText}>-1s</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => adjustLoopPointA(1000)} style={styles.nudgeBtn}>
-                        <Text style={styles.nudgeText}>+1s</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-
-                <Ionicons name="arrow-forward" size={14} color={theme.colors.textMuted} style={{ marginTop: abLoop.start !== null ? -14 : 0 }} />
+                <TouchableOpacity
+                  style={[
+                    styles.abPointBox,
+                    { flex: 1 },
+                    abLoop.start !== null && { borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.15)' }
+                  ]}
+                  onPress={async () => {
+                    const posSec = await TrackPlayer.getPosition().catch(() => 0);
+                    const posMs = Math.floor(posSec * 1000);
+                    await setLoopPointA(posMs);
+                    showToast(`Start (A): ${formatTime(posMs)}`, 'flag');
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="flag" size={12} color={abLoop.start !== null ? '#38bdf8' : theme.colors.textMuted} />
+                    <Text style={styles.abPointLabel}>START (A)</Text>
+                  </View>
+                  <Text style={[styles.abPointTime, abLoop.start !== null && { color: '#38bdf8' }]}>
+                    {abLoop.start !== null ? formatTime(abLoop.start) : 'Set Current'}
+                  </Text>
+                </TouchableOpacity>
 
                 {/* Point B */}
-                <View style={{ flex: 1 }}>
-                  <TouchableOpacity
-                    style={[
-                      styles.abPointBox,
-                      abLoop.end !== null && { borderColor: '#ec4899', backgroundColor: 'rgba(236, 72, 153, 0.15)' }
-                    ]}
-                    onPress={async () => {
-                      const posSec = await TrackPlayer.getPosition().catch(() => 0);
-                      const posMs = Math.floor(posSec * 1000);
-                      if (abLoop.start !== null && posMs <= abLoop.start) {
-                        showToast('Point B must be after Point A', 'alert-circle');
-                        return;
-                      }
-                      await setLoopPointB(posMs);
-                      showToast(`Point B: ${formatTime(posMs)}`, 'flag');
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <Ionicons name="flag" size={12} color={abLoop.end !== null ? '#ec4899' : theme.colors.textMuted} />
-                      <Text style={styles.abPointLabel}>END (B)</Text>
-                    </View>
-                    <Text style={[styles.abPointTime, abLoop.end !== null && { color: '#ec4899' }]}>
-                      {abLoop.end !== null ? formatTime(abLoop.end) : (abLoop.start !== null ? 'Set Current' : '--:--')}
-                    </Text>
-                  </TouchableOpacity>
-                  {abLoop.end !== null && (
-                    <View style={styles.nudgeRow}>
-                      <TouchableOpacity onPress={() => adjustLoopPointB(-1000)} style={styles.nudgeBtn}>
-                        <Text style={styles.nudgeText}>-1s</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => adjustLoopPointB(1000)} style={styles.nudgeBtn}>
-                        <Text style={styles.nudgeText}>+1s</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.abPointBox,
+                    { flex: 1 },
+                    abLoop.end !== null && { borderColor: '#ec4899', backgroundColor: 'rgba(236, 72, 153, 0.15)' }
+                  ]}
+                  onPress={async () => {
+                    const posSec = await TrackPlayer.getPosition().catch(() => 0);
+                    const posMs = Math.floor(posSec * 1000);
+                    if (abLoop.start !== null && posMs <= abLoop.start) {
+                      showToast('End (B) must be after Start (A)', 'alert-circle');
+                      return;
+                    }
+                    await setLoopPointB(posMs);
+                    showToast(`End (B): ${formatTime(posMs)}`, 'flag');
+                  }}
+                  activeOpacity={0.75}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="flag" size={12} color={abLoop.end !== null ? '#ec4899' : theme.colors.textMuted} />
+                    <Text style={styles.abPointLabel}>END (B)</Text>
+                  </View>
+                  <Text style={[styles.abPointTime, abLoop.end !== null && { color: '#ec4899' }]}>
+                    {abLoop.end !== null ? formatTime(abLoop.end) : 'Set Current'}
+                  </Text>
+                </TouchableOpacity>
 
-                {/* Loop / Pause Button */}
+                {/* Loop / Play Toggle */}
                 <TouchableOpacity
                   style={[
                     styles.abLoopToggleBtn,
                     abLoop.active && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
                     !(abLoop.start !== null && abLoop.end !== null && abLoop.end > abLoop.start) && { opacity: 0.45 },
-                    { marginTop: abLoop.start !== null ? -14 : 0 }
                   ]}
                   disabled={!(abLoop.start !== null && abLoop.end !== null && abLoop.end > abLoop.start)}
                   onPress={() => {
                     toggleABLoop();
                     if (!abLoop.active) {
-                      showToast(`Looping ${formatTime(abLoop.start!)} ➔ ${formatTime(abLoop.end!)}`, 'infinite');
+                      showToast(`Looping ${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)}`, 'infinite');
                     } else {
                       showToast('Section Loop Paused', 'pause-circle-outline');
                     }
                   }}
+                  activeOpacity={0.8}
                 >
                   <Ionicons
-                    name={abLoop.active ? "pause" : "play"}
-                    size={16}
+                    name={abLoop.active ? "infinite" : "play"}
+                    size={18}
                     color={abLoop.active ? theme.colors.backgroundDark : theme.colors.textPrimary}
                   />
                   <Text style={[
@@ -2133,8 +2226,9 @@ const getStyles = (theme: any, insets: any) => {
   },
   artContainer: {
     width: '100%',
-    aspectRatio: SCREEN_WIDTH >= 768 ? 1.8 : 1.10,
-    maxHeight: SCREEN_WIDTH >= 768 ? 450 : undefined,
+    aspectRatio: SCREEN_WIDTH >= 768 ? 1.65 : 1.22,
+    minHeight: SCREEN_WIDTH >= 768 ? 380 : 310,
+    maxHeight: SCREEN_WIDTH >= 768 ? 420 : 340,
     borderRadius: 0,
     overflow: 'hidden',
     marginTop: 0,
@@ -2148,15 +2242,16 @@ const getStyles = (theme: any, insets: any) => {
   },
   overlayContent: {
     flex: 1,
-    padding: 24,
-    paddingTop: 95,
+    paddingHorizontal: 20,
+    paddingTop: 72,
+    paddingBottom: 12,
     justifyContent: 'flex-end'
   },
   tableContainer: {
     width: '100%',
     flex: 1,
     justifyContent: 'flex-end',
-    gap: 6
+    gap: 3
   },
   tableRowFull: {
     flexDirection: 'row',

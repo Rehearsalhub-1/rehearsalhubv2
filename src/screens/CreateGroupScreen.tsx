@@ -139,7 +139,7 @@ export default function CreateGroupScreen({ navigation }: any) {
   const pickGroupAvatar = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images as any, quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (!result.canceled && result.assets?.[0]) {
       try {
         const url = await uploadImageToCloudinary(result.assets[0].uri);

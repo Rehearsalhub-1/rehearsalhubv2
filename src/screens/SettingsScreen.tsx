@@ -360,7 +360,7 @@ export default function SettingsScreen({ navigation }: any) {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('Permission required'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images as any,
+      mediaTypes: ['images'] as any,
       quality: 0.85, allowsEditing: true, aspect: [1, 1],
     });
     if (result.canceled || !result.assets?.[0]) return;

@@ -24,6 +24,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resolveSongAudioUrls } from '../lib/mediaUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 20; // songs per page
@@ -37,20 +38,21 @@ interface LyricLine {
 }
 
 const parseLRCLyrics = (lrc: string): LyricLine[] => {
-  if (!lrc || !lrc.trim()) return [{ time: 0, text: 'No synced lyrics available' }];
+  if (!lrc || !lrc.trim()) return [{ time: 0, text: 'No lyrics available' }];
   const lines = lrc.split('\n');
   const parsed: LyricLine[] = [];
-  const timeRegex = /\[(\d+):(\d{2})(?:\.(\d+))?\]/g;
+  const timeRegex = /\[(\d{1,2}):(\d{2})(?:\.(\d+))?\]/g;
 
   lines.forEach(line => {
     let match;
     const matches = [];
+    timeRegex.lastIndex = 0;
     while ((match = timeRegex.exec(line)) !== null) {
       matches.push(match);
     }
 
     if (matches.length > 0) {
-      const text = line.replace(/\[\d+:\d{2}(?:\.\d+)?\]/g, '').trim();
+      const text = line.replace(/\[\d{1,2}:\d{2}(?:\.\d+)?\]/g, '').trim();
       if (text) {
         matches.forEach(m => {
           const minutes = parseInt(m[1], 10);
@@ -68,12 +70,6 @@ const parseLRCLyrics = (lrc: string): LyricLine[] => {
 
   if (parsed.length > 0) {
     return parsed.sort((a, b) => a.time - b.time);
-  }
-
-  // Fallback: If no timestamp tags [mm:ss] exist, convert plain lyric lines so singers can still read and practice
-  const cleanLines = lines.map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('['));
-  if (cleanLines.length > 0) {
-    return cleanLines.map((text, idx) => ({ time: idx * 4, text }));
   }
 
   return [{ time: 0, text: 'No synced lyrics available' }];
@@ -332,19 +328,29 @@ export default function KaraokeScreen({ route, navigation }: any) {
     })()
     : library;
 
-  const handleSelectSong = (song: any) => {
+  const handleSelectSong = (rawSong: any) => {
     stopAudio();
+    if (!rawSong) return;
+
+    const resolvedUrls = resolveSongAudioUrls(rawSong);
+    const song = {
+      ...rawSong,
+      audioUrls: resolvedUrls,
+    };
     setActiveSong(song);
-    const initialPart = song.audioUrls?.full ? 'full' : (song.audioUrl ? 'full' : 'none');
+
+    const availableParts = Object.keys(resolvedUrls);
+    const initialPart = resolvedUrls.full ? 'full' : (availableParts[0] || 'full');
     setActivePart(initialPart);
+
     let parsedLyrics: LyricLine[];
-    const rawLrc = song.karaokeLrcText || song.lrcText || song.syncedLyricsText || song.lyrics;
+    const rawLrc = song.karaokeLrcText || song.lrcText || song.syncedLyricsText || song.lyrics_lrc || song.lyricsLrc || song.lrc;
     if (Array.isArray(song.syncedLyrics) && song.syncedLyrics.length > 0) {
       parsedLyrics = [...song.syncedLyrics].sort((a: LyricLine, b: LyricLine) => a.time - b.time);
-    } else if (rawLrc) {
+    } else if (rawLrc && typeof rawLrc === 'string' && rawLrc.trim()) {
       parsedLyrics = parseLRCLyrics(rawLrc);
     } else {
-      parsedLyrics = parseLRCLyrics('');
+      parsedLyrics = [{ time: 0, text: 'No synced lyrics available' }];
     }
     setLyrics(parsedLyrics);
     setCurrentLineIndex(0);
@@ -366,9 +372,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
   }, [activeSong, activePart, isPlayerReady]);
 
   const getActiveAudioUrl = () => {
-    if (activePart === 'full') return activeSong.audioUrls?.full || activeSong.audioUrl || null;
-    if (activeSong.audioUrls?.[activePart]) return activeSong.audioUrls[activePart];
-    return activeSong.audioUrl || null;
+    if (!activeSong) return null;
+    const urls = activeSong.audioUrls || {};
+    if (activePart === 'full') return urls.full || activeSong.audioUrl || activeSong.audioFile || null;
+    if (urls[activePart]) return urls[activePart];
+    return urls.full || activeSong.audioUrl || activeSong.audioFile || null;
   };
 
   const loadAudioTrack = async () => {

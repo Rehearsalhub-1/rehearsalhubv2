@@ -73,14 +73,23 @@ export default function SubmitSongScreen({ navigation }: any) {
     setLoadingSubmissions(true);
     try {
       const res: any = await api.submissions.mine();
-      const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.items) ? res.items : [];
-      setMySubmissions(items);
+      const rawItems = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.items) ? res.items : [];
+      const myUid = user.uid;
+      const myName = profile ? [profile.firstName, profile.lastName].filter(Boolean).join(' ').toLowerCase() : '';
+
+      const filtered = rawItems.filter((item: any) => {
+        if (item.userId && myUid && item.userId === myUid) return true;
+        if (item.groupId && myUid && item.groupId === myUid) return true;
+        if (myName && item.writer && item.writer.toLowerCase().includes(myName)) return true;
+        return false;
+      });
+      setMySubmissions(filtered);
     } catch (e) {
       console.error('Failed to load my submissions:', e);
     } finally {
       setLoadingSubmissions(false);
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile?.firstName]);
 
   useEffect(() => {
     fetchMySubmissions();
@@ -293,9 +302,13 @@ export default function SubmitSongScreen({ navigation }: any) {
           </View>
         </View>
 
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           {activeTab === 'submit' ? (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formContainer}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={[styles.formContainer, { flexGrow: 1, paddingBottom: 160 }]}
+            >
               {editingSubmission && (
                 <View style={styles.editBanner}>
                   <Ionicons name="pencil" size={16} color="#d97706" />

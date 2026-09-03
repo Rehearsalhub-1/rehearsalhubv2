@@ -314,25 +314,54 @@ export default function CalendarScreen({ route, navigation }: any) {
           }
         }
 
+const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: boolean } => {
+  if (!rawBday || typeof rawBday !== 'string') return { isThisWeek: false, isToday: false };
+  const d = new Date(rawBday);
+  if (isNaN(d.getTime())) return { isThisWeek: false, isToday: false };
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  const thisYearBday = new Date(currentYear, d.getMonth(), d.getDate());
+
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setHours(23, 59, 59, 999);
+
+  const isThisWeek = thisYearBday >= startOfWeek && thisYearBday <= endOfWeek;
+  const isToday = thisYearBday.getMonth() === now.getMonth() && thisYearBday.getDate() === now.getDate();
+
+  return { isThisWeek, isToday };
+};
+
         const profRes = await api.profiles.getBirthdays(userZoneId).catch(() => null);
         const rawBirthdays = profRes?.data || [];
         const now = new Date();
-        const results: BirthdayUser[] = rawBirthdays.map((b: any) => {
+        const results: BirthdayUser[] = [];
+        for (const b of rawBirthdays) {
+          if (!b.birthday) continue;
+          const { isThisWeek, isToday } = isBirthdayThisWeek(b.birthday);
+          if (!isThisWeek && !b.isToday) continue;
+
           let bdayDate = new Date(b.birthday);
           let age: number | undefined = undefined;
           if (!isNaN(bdayDate.getTime())) {
             age = now.getFullYear() - bdayDate.getFullYear();
           }
-          return {
+          results.push({
             id: b.id,
             first_name: b.first_name || 'Member',
             last_name: b.last_name || '',
             birthday: b.birthday,
             profile_image_url: b.profile_image_url,
             age: age || 0,
-            isToday: !!b.isToday,
-          };
-        });
+            isToday: isToday || !!b.isToday,
+          });
+        }
         results.sort((a, b) => (b.isToday ? 1 : 0) - (a.isToday ? 1 : 0));
         
         if (isMounted) {
@@ -475,10 +504,13 @@ export default function CalendarScreen({ route, navigation }: any) {
   const upcomingEvents = React.useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    return events.filter(ev => {
-      const end = new Date(ev.end);
-      return end >= now;
-    }).slice(0, 5);
+    return events
+      .filter(ev => {
+        const end = new Date(ev.end);
+        return end.getTime() >= now.getTime();
+      })
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .slice(0, 5);
   }, [events]);
 
   return (
@@ -615,9 +647,8 @@ export default function CalendarScreen({ route, navigation }: any) {
             {eventsLoading ? (
               <ActivityIndicator color={theme.colors.accent} style={{ marginVertical: 20 }} />
             ) : selectedDateEvents.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingVertical: 18 }}>
-                <Ionicons name="calendar-outline" size={32} color={theme.colors.textMuted} />
-                <Text style={{ color: theme.colors.textMuted, marginTop: 8, fontSize: 13 }}>No events on this date</Text>
+              <View style={{ alignItems: 'center', paddingVertical: 14 }}>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>No events on this date</Text>
                 
                 {upcomingEvents.length > 0 && (
                   <View style={{ width: '100%', marginTop: 20 }}>

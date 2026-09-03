@@ -21,8 +21,18 @@ export const uploadMedia = async (
       mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
     } else if (resourceType === 'video') {
       mime = ext === 'mov' ? 'video/quicktime' : 'video/mp4';
+    } else if (ext === 'pdf') {
+      mime = 'application/pdf';
+    } else if (ext === 'doc' || ext === 'docx') {
+      mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    } else if (ext === 'xls' || ext === 'xlsx') {
+      mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    } else if (ext === 'txt') {
+      mime = 'text/plain';
+    } else if (ext === 'm4a' || ext === 'mp3' || ext === 'wav' || ext === 'aac' || ext === 'ogg' || ext === 'opus') {
+      mime = `audio/${ext}`;
     } else {
-      mime = (ext === 'm4a' || ext === 'mp3' || ext === 'wav' || ext === 'aac') ? `audio/${ext}` : 'audio/mpeg';
+      mime = 'application/octet-stream';
     }
 
     const filename = `upload_${Date.now()}.${ext}`;
@@ -33,7 +43,15 @@ export const uploadMedia = async (
       name: filename,
     } as any);
 
-    formData.append('folder', resourceType === 'image' ? 'statuses' : resourceType === 'video' ? 'statuses_video' : 'audio');
+    const folder = resourceType === 'image'
+      ? 'statuses'
+      : resourceType === 'video'
+      ? 'statuses_video'
+      : (ext === 'mp3' || ext === 'm4a' || ext === 'wav' || ext === 'aac')
+      ? 'audio'
+      : 'documents';
+
+    formData.append('folder', folder);
 
     const token = await SecureStore.getItemAsync('jwt');
     const headers: Record<string, string> = {};
@@ -55,7 +73,12 @@ export const uploadMedia = async (
     }
 
     const data = await response.json();
-    return data.data?.url || data.url;
+    const rawUrl = data.data?.url || data.url;
+    if (rawUrl && typeof rawUrl === 'string' && rawUrl.includes('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev')) {
+      const key = rawUrl.split('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/')[1];
+      if (key) return `${BASE_URL}/upload/file/${key}`;
+    }
+    return rawUrl;
   } catch (error) {
     console.error('[Storage] Upload Error:', error);
     throw error;

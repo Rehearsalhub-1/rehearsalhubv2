@@ -145,7 +145,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'unread'>('all');
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'unread' | 'chat' | 'rehearsals' | 'calls' | 'announcements'>('all');
   const [selectedNotif, setSelectedNotif] = useState<NotificationItem | null>(null);
   const user = useUserStore(s => s.user);
 
@@ -166,7 +166,7 @@ export default function NotificationsScreen({ route, navigation }: any) {
           sender_name: d.senderName || d.sender_name || 'Admin',
           action_url: d.actionUrl || d.action_url,
           created_at: d.createdAt || d.created_at || new Date().toISOString(),
-          is_read: !!d.is_read,
+          is_read: d.is_read !== undefined ? Boolean(d.is_read) : Boolean(d.isRead),
           target_audience: d.targetAudience || d.target_audience || 'all',
           target_user_id: d.targetUserId || d.target_user_id,
           zoneId: d.zoneId || d.zone_id,
@@ -211,6 +211,15 @@ export default function NotificationsScreen({ route, navigation }: any) {
     }
   };
 
+  const handleDismiss = async (id: string) => {
+    try {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      await api.notifications.delete(id).catch(() => {});
+    } catch (e) {
+      console.error('Error dismissing notification:', e);
+    }
+  };
+
   const handleDeleteNotif = async (id: string) => {
     try {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -251,9 +260,57 @@ export default function NotificationsScreen({ route, navigation }: any) {
     return notifications.filter(n => !n.is_read).length;
   }, [notifications]);
 
+  const chatCount = useMemo(() => {
+    return notifications.filter(notif => {
+      const cat = (notif.category || '').toLowerCase();
+      const type = (notif.type || '').toLowerCase();
+      const title = (notif.title || '').toLowerCase();
+      const url = (notif.action_url || '').toLowerCase();
+      return (
+        cat === 'chat' ||
+        type === 'chat' ||
+        cat === 'message' ||
+        url.includes('chat') ||
+        title.includes('message') ||
+        title.includes('chat')
+      );
+    }).length;
+  }, [notifications]);
+
   const filteredNotifications = useMemo(() => {
     return notifications.filter((notif) => {
       if (selectedFilter === 'unread') return !notif.is_read;
+      if (selectedFilter === 'chat') {
+        const cat = (notif.category || '').toLowerCase();
+        const type = (notif.type || '').toLowerCase();
+        const title = (notif.title || '').toLowerCase();
+        const msg = (notif.message || '').toLowerCase();
+        const url = (notif.action_url || '').toLowerCase();
+        return (
+          cat === 'chat' ||
+          type === 'chat' ||
+          cat === 'message' ||
+          url.includes('chat') ||
+          title.includes('message') ||
+          title.includes('chat') ||
+          msg.includes('sent a message')
+        );
+      }
+      if (selectedFilter === 'rehearsals') {
+        const cat = (notif.category || '').toLowerCase();
+        const title = (notif.title || '').toLowerCase();
+        return cat === 'rehearsal' || title.includes('rehearsal');
+      }
+      if (selectedFilter === 'calls') {
+        const cat = (notif.category || '').toLowerCase();
+        const type = (notif.type || '').toLowerCase();
+        const title = (notif.title || '').toLowerCase();
+        return cat === 'call' || type === 'call' || title.includes('call');
+      }
+      if (selectedFilter === 'announcements') {
+        const cat = (notif.category || '').toLowerCase();
+        return cat === 'announcement' || cat === 'system' || cat === 'admin' || cat === 'general';
+      }
       return true;
     });
   }, [notifications, selectedFilter]);
@@ -339,31 +396,39 @@ export default function NotificationsScreen({ route, navigation }: any) {
             </TouchableOpacity>
           </View>
           <View style={styles.filterPillsContainer}>
-            <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 5 }}>
-              {(['all', 'unread'] as const).map((filter) => (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 5, gap: 8 }}
+            >
+              {([
+                { key: 'all', label: 'ALL' },
+                { key: 'unread', label: unreadCount > 0 ? `UNREAD (${unreadCount})` : 'UNREAD' },
+                { key: 'chat', label: chatCount > 0 ? `CHAT (${chatCount})` : 'CHAT' },
+                { key: 'rehearsals', label: 'REHEARSALS' },
+                { key: 'calls', label: 'CALLS' },
+                { key: 'announcements', label: 'ANNOUNCEMENTS' },
+              ] as const).map((filter) => (
                 <TouchableOpacity
-                  key={filter}
-                  onPress={() => setSelectedFilter(filter)}
+                  key={filter.key}
+                  onPress={() => setSelectedFilter(filter.key as any)}
                   style={[
                     styles.filterPill,
-                    { flex: 1, alignItems: 'center', justifyContent: 'center' },
-                    selectedFilter === filter && styles.filterPillActive,
+                    selectedFilter === filter.key && styles.filterPillActive,
                   ]}
                   activeOpacity={0.8}
                 >
                   <Text
                     style={[
                       styles.filterPillText,
-                      selectedFilter === filter && styles.filterPillTextActive,
+                      selectedFilter === filter.key && styles.filterPillTextActive,
                     ]}
                   >
-                    {filter === 'unread' && unreadCount > 0
-                      ? `UNREAD (${unreadCount})`
-                      : filter.toUpperCase()}
+                    {filter.label}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
           {loading && !refreshing ? (
             <View style={styles.centerWrap}>

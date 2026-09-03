@@ -5,8 +5,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Switch, Alert, ActivityIndicator, Modal, FlatList, Share,
+  Platform, StatusBar as RNStatusBar, Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { DoodleBackground } from '../components/DoodleBackground';
@@ -25,6 +26,8 @@ export default function ChatInfoScreen({ route, navigation }: any) {
   const { theme } = useTheme();
   const styles = getStyles(theme);
   const T = theme.colors;
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets?.top || 0, Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 44);
 
   const [room, setRoom] = useState<any>(route.params?.room || {});
   const isGroup = room.isGroup || room.type === 'group';
@@ -159,9 +162,63 @@ export default function ChatInfoScreen({ route, navigation }: any) {
     try {
       const res = await api.chats.getMessages(room.id);
       const allMsg: any[] = res?.success && Array.isArray(res.data) ? res.data : [];
-      setMediaMessages(allMsg.filter(d => ['image', 'video', 'photo'].includes(d.type) || (typeof d.text === 'string' && (d.text.includes('"imageUrl"') || d.text.includes('"mediaUrl"')))));
-      setDocMessages(allMsg.filter(d => ['document', 'file', 'pdf'].includes(d.type) || (typeof d.text === 'string' && d.text.includes('"documentName"'))));
-      setLinkMessages(allMsg.filter(d => d.type === 'text' && (d.text?.includes('http://') || d.text?.includes('https://'))));
+
+      const mediaList: any[] = [];
+      const docList: any[] = [];
+      const linkList: any[] = [];
+
+      allMsg.forEach((d: any) => {
+        let parsed: any = null;
+        if (typeof d.text === 'string' && d.text.startsWith('{') && d.text.endsWith('}')) {
+          try { parsed = JSON.parse(d.text); } catch {}
+        }
+
+        const msgType = d.type || parsed?.type || 'text';
+        const msgText = typeof d.text === 'string' ? (parsed?.text !== undefined ? parsed.text : d.text) : (d.content || '');
+        const mediaUri = d.imageUrl || d.videoUrl || d.mediaUrl || d.media_url || parsed?.imageUrl || parsed?.videoUrl || parsed?.mediaUrl || parsed?.media_url;
+        const docUri = d.documentUrl || parsed?.documentUrl || mediaUri;
+        const docName = d.documentName || parsed?.documentName || d.songData?.title || parsed?.songData?.title || d.playlistData?.name || parsed?.playlistData?.name || (msgType === 'audio' || msgType === 'voice' ? (msgText && !msgText.startsWith('{') ? msgText : 'Audio Recording') : null);
+
+        // Media items (Images, Photos, Videos)
+        if (['image', 'video', 'photo'].includes(msgType) || (mediaUri && !['document', 'audio', 'voice'].includes(msgType))) {
+          if (mediaUri) {
+            mediaList.push({
+              ...d,
+              ...parsed,
+              type: msgType,
+              uri: mediaUri,
+              imageUrl: mediaUri,
+            });
+          }
+        }
+
+        // Docs items (Documents, PDFs, Audios, Songs, Playlists)
+        if (['document', 'file', 'pdf', 'audio', 'voice', 'song_share', 'playlist_share'].includes(msgType) || docName || d.documentUrl || parsed?.documentUrl) {
+          docList.push({
+            ...d,
+            ...parsed,
+            type: msgType,
+            docUri: docUri || mediaUri,
+            docName: docName || 'Shared Document',
+          });
+        }
+
+        // Links items
+        const textToScan = `${msgText} ${typeof d.content === 'string' ? d.content : ''}`;
+        const urlMatches = textToScan.match(/https?:\/\/[^\s"'<>]+/gi);
+        if (urlMatches && urlMatches.length > 0) {
+          urlMatches.forEach((url: string) => {
+            linkList.push({
+              ...d,
+              url: url.trim(),
+            });
+          });
+        }
+      });
+
+      setMediaMessages(mediaList);
+      setDocMessages(docList);
+      setLinkMessages(linkList);
     } catch (e) {
       console.error('Failed to load media:', e);
     } finally {
@@ -172,17 +229,18 @@ export default function ChatInfoScreen({ route, navigation }: any) {
 
 
   const handleClearChat = () => {
-    Alert.alert('Clear Chat', 'Delete all messages in this chat? This cannot be undone.', [
+    Alert.alert('Clear Chat', 'Clear all messages from this chat on your device? Other participants will still see the conversation.', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Clear', style: 'destructive', onPress: async () => {
+        text: 'Clear for me', style: 'destructive', onPress: async () => {
           try {
             if (!currentUser?.uid) return;
-            await api.chats.clearMessages(room.id).catch(() => {});
+            // Only clear locally on this device; DO NOT wipe server messages for other users!
             await AsyncStorage.removeItem(`chat_msgs_${room.id}`);
             await AsyncStorage.removeItem(`cached_messages_${room.id}`);
+            await AsyncStorage.setItem(`cleared_at_${currentUser.uid}_${room.id}`, String(Date.now()));
 
-            Alert.alert('Success', 'Chat cleared successfully', [
+            Alert.alert('Success', 'Chat cleared on your device', [
               { text: 'OK', onPress: () => navigation.goBack() }
             ]);
           } catch (err) {
@@ -384,7 +442,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
                 fallbackName={displayName}
                 isGroup={isGroup}
                 size={100}
-                bgColor={isGroup ? '#00a884' : T.accent}
+                bgColor={T.accent}
               />
             </View>
             <Text style={styles.profileName}>{displayName}</Text>
@@ -533,9 +591,9 @@ export default function ChatInfoScreen({ route, navigation }: any) {
                       </View>
                       {!isMe && (
                         isAdmin ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,168,132,0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
-                            <Text style={{ color: '#00a884', fontSize: 12, fontWeight: '700', marginRight: 4 }}>Manage</Text>
-                            <Ionicons name="settings-outline" size={14} color="#00a884" />
+                          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: T.accent + '20', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }}>
+                            <Text style={{ color: T.accent, fontSize: 12, fontWeight: '700', marginRight: 4 }}>Manage</Text>
+                            <Ionicons name="settings-outline" size={14} color={T.accent} />
                           </View>
                         ) : (
                           <Ionicons name="chevron-forward" size={16} color={T.textMuted} />
@@ -576,7 +634,7 @@ export default function ChatInfoScreen({ route, navigation }: any) {
           <DoodleBackground />
 
           <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-          <SafeAreaView style={{ flex: 1 }}>
+          <View style={{ flex: 1, paddingTop: topInset }}>
             <View style={styles.header}>
               <TouchableOpacity onPress={() => setMediaModalVisible(false)} style={styles.backBtn}>
                 <Ionicons name="chevron-back" size={26} color={T.textPrimary} />
@@ -609,12 +667,12 @@ export default function ChatInfoScreen({ route, navigation }: any) {
                 <FlatList
                   data={mediaMessages}
                   numColumns={3}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(item, index) => item.id || `media_${index}`}
                   contentContainerStyle={{ padding: 4 }}
                   renderItem={({ item }) => (
                     <View style={{ flex: 1/3, aspectRatio: 1, padding: 2 }}>
                       <Image
-                        source={{ uri: item.imageUrl || item.videoUrl }}
+                        source={{ uri: item.uri || item.imageUrl || item.videoUrl || item.mediaUrl || item.media_url }}
                         style={{ flex: 1, borderRadius: 6 }}
                         contentFit="cover"
                       />
@@ -631,13 +689,18 @@ export default function ChatInfoScreen({ route, navigation }: any) {
               ) : (
                 <FlatList
                   data={docMessages}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(item, index) => item.id || `doc_${index}`}
                   contentContainerStyle={{ padding: 16 }}
                   renderItem={({ item }) => (
                     <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, marginBottom: 8 }}>
-                      <Ionicons name={item.type === 'audio' ? 'musical-notes' : 'document'} size={24} color={T.accent} />
+                      <Ionicons name={item.type === 'audio' || item.type === 'voice' ? 'musical-notes' : item.type === 'song_share' ? 'disc' : 'document'} size={24} color={T.accent} />
                       <View style={{ marginLeft: 12, flex: 1 }}>
-                        <Text style={{ color: T.textPrimary }} numberOfLines={1}>{item.documentName || item.songData?.title || item.playlistData?.name || 'Audio File'}</Text>
+                        <Text style={{ color: T.textPrimary, fontWeight: '600', fontSize: 14 }} numberOfLines={1}>
+                          {item.docName || item.documentName || item.songData?.title || item.playlistData?.name || 'Shared File'}
+                        </Text>
+                        <Text style={{ color: T.textMuted, fontSize: 12, marginTop: 2 }}>
+                          {item.type ? item.type.toUpperCase() : 'FILE'}
+                        </Text>
                       </View>
                     </View>
                   )}
@@ -652,22 +715,25 @@ export default function ChatInfoScreen({ route, navigation }: any) {
               ) : (
                 <FlatList
                   data={linkMessages}
-                  keyExtractor={item => item.id}
+                  keyExtractor={(item, index) => item.id ? `${item.id}_${index}` : `link_${index}`}
                   contentContainerStyle={{ padding: 16 }}
                   renderItem={({ item }) => (
-                    <TouchableOpacity onPress={() => {
-                      const match = item.text?.match(/https?:\/\/[^\s]+/);
-                      if (match && match[0]) import('react-native').then(m => m.Linking.openURL(match[0]));
-                    }} style={{ padding: 16, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, marginBottom: 8 }}>
-                      <Text style={{ color: T.accent, textDecorationLine: 'underline' }} numberOfLines={2}>
-                        {item.text?.match(/https?:\/\/[^\s]+/)?.[0] || 'Link'}
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (item.url) Linking.openURL(item.url).catch(() => {});
+                      }}
+                      style={{ padding: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}
+                    >
+                      <Ionicons name="link" size={20} color={T.accent} style={{ marginRight: 10 }} />
+                      <Text style={{ color: T.accent, textDecorationLine: 'underline', flex: 1, fontSize: 14 }} numberOfLines={2}>
+                        {item.url || item.text || 'Link'}
                       </Text>
                     </TouchableOpacity>
                   )}
                 />
               )
             )}
-          </SafeAreaView>
+          </View>
         </View>
       </Modal>
 

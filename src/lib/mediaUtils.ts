@@ -9,23 +9,37 @@
  * No side-effects, no external dependencies.
  */
 
+const BACKEND_BASE = (process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/+$/, '').replace(/\/api$/, '');
+
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+  if (trimmed.includes('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev')) {
+    const key = trimmed.split('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/')[1];
+    if (key) {
+      return `${BACKEND_BASE}/upload/file/${key}`;
+    }
+  }
+  return trimmed;
+}
+
 export function optimizeImage(
   url: string | null | undefined,
   _opts?: { width?: number; quality?: number }
 ): string {
-  return url || '';
+  return resolveMediaUrl(url);
 }
 
 export function thumbnailImage(url: string | null | undefined): string {
-  return url || '';
+  return resolveMediaUrl(url);
 }
 
 export function bannerImage(url: string | null | undefined): string {
-  return url || '';
+  return resolveMediaUrl(url);
 }
 
 export function optimizeAudio(url: string | null | undefined): string {
-  return url || '';
+  return resolveMediaUrl(url);
 }
 
 /**

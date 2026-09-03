@@ -19,11 +19,13 @@ interface CardBaseProps {
 export const TickIcon = ({ status, APP_THEME }: { status: ChatMessage['status']; APP_THEME: any }) => {
   if (status === 'sending')
     return <Ionicons name="time-outline" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-  if (status === 'sent')
-    return <Ionicons name="checkmark" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
+  if (status === 'failed')
+    return <Ionicons name="alert-circle-outline" size={13} color="#ef4444" style={{ marginLeft: 3 }} />;
+  if (status === 'read')
+    return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColorRead} style={{ marginLeft: 3 }} />;
   if (status === 'delivered')
     return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-  return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColorRead} style={{ marginLeft: 3 }} />;
+  return <Ionicons name="checkmark" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
 };
 
 interface AudioFileCardProps extends CardBaseProps {

@@ -27,6 +27,7 @@ interface CallLog {
   duration?: number;
   timestamp: Date;
   chatId?: string;
+  isGroup?: boolean;
 }
 
 const fmtDuration = (s?: number): string => {
@@ -82,19 +83,22 @@ export default function CallsScreen({ navigation }: any) {
             computedStatus = 'incoming';
           }
 
+          const isGroup = Boolean(d.isGroup || (d.chatId && d.chatId.startsWith('group')) || (d.receiverId && d.receiverId.startsWith('group')));
+
           return {
             id: d.id,
             callerId: d.callerId || d.caller_id,
             callerName: d.callerName || d.caller_name || 'Caller',
             callerAvatar: d.callerAvatar || d.caller_avatar,
             receiverId: d.receiverId || d.receiver_id,
-            receiverName: d.receiverName || d.receiver_name || 'Receiver',
+            receiverName: d.receiverName || d.receiver_name || (isGroup ? 'Group Call' : 'Receiver'),
             receiverAvatar: d.receiverAvatar || d.receiver_avatar,
             type: d.type || 'voice',
             status: computedStatus,
             duration: d.duration,
             timestamp: new Date(d.createdAt || d.created_at || Date.now()),
             chatId: d.chatId || d.chat_id,
+            isGroup,
           };
         });
         setCalls(logs);
@@ -160,14 +164,17 @@ export default function CallsScreen({ navigation }: any) {
     const cu = currentUser;
     if (!cu) return;
     const isOutgoing = item.callerId === cu.uid;
+    const isGroup = Boolean(item.isGroup || item.chatId);
     const contactId = isOutgoing ? item.receiverId : item.callerId;
-    const contactName = isOutgoing ? item.receiverName : item.callerName;
+    const contactName = isGroup ? (item.receiverName || 'Group Call') : (isOutgoing ? item.receiverName : item.callerName);
     const contactAvatar = isOutgoing ? item.receiverAvatar : item.callerAvatar;
     try {
       const callRes = await api.calls.create({
         receiverId: contactId,
         receiver_id: contactId,
         type: item.type,
+        chatId: item.chatId,
+        isGroup,
       });
       navigation.navigate('Call', {
         callId: (callRes as any)?.data?.id || "",
@@ -176,6 +183,8 @@ export default function CallsScreen({ navigation }: any) {
         contactName,
         contactAvatar,
         isIncoming: false,
+        isGroupCall: isGroup,
+        chatId: item.chatId,
         roomId: item.chatId || '',
       });
     } catch (e) {
@@ -191,8 +200,16 @@ export default function CallsScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: CallLog }) => {
     const isOutgoing = item.callerId === currentUser?.uid;
+    const isGroup = Boolean(item.isGroup || (item.chatId && item.chatId.startsWith('group')) || (item.receiverId && item.receiverId.startsWith('group')));
     const contactId = isOutgoing ? item.receiverId : item.callerId;
-    const contactName = isOutgoing ? (item.receiverName && item.receiverName !== 'Receiver' ? item.receiverName : 'Member') : (item.callerName || 'Member');
+    let contactName = 'Member';
+    if (isGroup) {
+      contactName = item.receiverName && item.receiverName !== 'Receiver' && item.receiverName !== 'Member' ? item.receiverName : 'Group Call';
+    } else if (isOutgoing) {
+      contactName = item.receiverName && item.receiverName !== 'Receiver' ? item.receiverName : 'Member';
+    } else {
+      contactName = item.callerName || 'Member';
+    }
     const contactAvatar = isOutgoing ? item.receiverAvatar : item.callerAvatar;
     const icon = statusIcon(item.status, item.type);
     const isSelected = selectedCalls.has(item.id);
@@ -223,13 +240,20 @@ export default function CallsScreen({ navigation }: any) {
             />
           </View>
         )}
-        <SyncAvatar userId={contactId} initialAvatar={contactAvatar} fallbackName={contactName} size={50} />
+        {isGroup ? (
+          <View style={[styles.groupAvatarWrap, { backgroundColor: T.accent + '22', borderColor: T.accent }]}>
+            <Ionicons name="people" size={24} color={T.accent} />
+          </View>
+        ) : (
+          <SyncAvatar userId={contactId} initialAvatar={contactAvatar} fallbackName={contactName} size={50} />
+        )}
         <View style={styles.callInfo}>
           <Text style={styles.callName}>{contactName}</Text>
           <View style={styles.callMeta}>
             <Ionicons name={icon.name} size={14} color={icon.color} style={{ marginRight: 4 }} />
             <Text style={[styles.callStatus, { color: (item.status === 'missed' || item.status === 'canceled') ? T.danger : T.textSecondary }]}>
               {item.status === 'missed' ? 'Missed' : item.status === 'canceled' ? 'Canceled' : item.status === 'outgoing' ? 'Outgoing' : 'Incoming'}
+              {isGroup ? ' group' : ''}
               {item.type === 'video' ? ' video' : ' call'}
               {item.duration ? ` · ${fmtDuration(item.duration)}` : ''}
             </Text>
@@ -362,6 +386,14 @@ const getStyles = (theme: any) => {
       justifyContent: 'center', alignItems: 'center',
     },
     separator: { height: StyleSheet.hairlineWidth, backgroundColor: T.bottomTabBorder, marginLeft: 78 },
+    groupAvatarWrap: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      borderWidth: 1.5,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: T.textPrimary },
     emptySub: { fontSize: 14, color: T.textSecondary },
