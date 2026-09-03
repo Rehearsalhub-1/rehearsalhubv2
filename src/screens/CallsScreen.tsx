@@ -328,20 +328,6 @@ export default function CallsScreen({ navigation }: any) {
             }
           />
         )}
-        <View style={styles.tabBar}>
-          <TouchableOpacity style={styles.tabItem}>
-            <Ionicons name="call" size={24} color={T.accent} />
-            <Text style={[styles.tabLabel, { color: T.accent }]}>Calls</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.tabItem} onPress={() => {
-            navigation.navigate('ChatRooms');
-          }}>
-            <Ionicons name="chatbubbles-outline" size={24} color={T.accent} style={{ opacity: 0.6 }} />
-            <Text style={[styles.tabLabel, { color: T.accent, opacity: 0.6 }]}>Chats</Text>
-          </TouchableOpacity>
-        </View>
-
       </SafeAreaView>
     </View>
   );
@@ -378,25 +364,5 @@ const getStyles = (theme: any) => {
     empty: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 10 },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: T.textPrimary },
     emptySub: { fontSize: 14, color: T.textSecondary },
-    tabBar: {
-      height: 50,
-      backgroundColor: T.surface,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: T.bottomTabBorder,
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      alignItems: 'center',
-      paddingBottom: 2
-    },
-    tabItem: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      flex: 1
-    },
-    tabLabel: {
-      fontSize: 10,
-      marginTop: 3,
-      fontWeight: '500'
-    },
   });
 };

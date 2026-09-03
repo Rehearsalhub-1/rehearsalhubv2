@@ -24,7 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUserStore } from '../hooks/useUser';
 import { cleanSenderName } from '../components/chat';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -208,12 +208,6 @@ export default function ChatListScreen({ route, navigation }: any) {
   const [toastMessage, setToastMessage] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 800);
-  }, []);
 
   // Shimmer animation - DISABLED to reduce CPU heat
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -255,161 +249,178 @@ export default function ChatListScreen({ route, navigation }: any) {
     }
   }, [route?.params?.chatId, route?.params?.conversationId, route?.params?.conversation, chatRooms]);
 
-  useEffect(() => {
+  const fetchChats = useCallback(async (isRefresh: boolean = false) => {
     const currentUser = user;
     if (!currentUser) {
       setLoading(false);
+      setRefreshing(false);
       return;
     }
+    if (isRefresh) setRefreshing(true);
 
-    const fetchChats = async () => {
-      try {
-        const storedArchived = await AsyncStorage.getItem(`archived_chats_${currentUser.uid}`);
-        const archivedIds: string[] = storedArchived ? JSON.parse(storedArchived) : [];
+    try {
+      const storedArchived = await AsyncStorage.getItem(`archived_chats_${currentUser.uid}`);
+      const archivedIds: string[] = storedArchived ? JSON.parse(storedArchived) : [];
 
-        const storedDeleted = await AsyncStorage.getItem(`deleted_chats_${currentUser.uid}`);
-        const deletedIds: string[] = storedDeleted ? JSON.parse(storedDeleted) : [];
+      const storedDeleted = await AsyncStorage.getItem(`deleted_chats_${currentUser.uid}`);
+      const deletedIds: string[] = storedDeleted ? JSON.parse(storedDeleted) : [];
 
-        const res = await api.chats.getAll();
-        const allRows = res.success && Array.isArray(res.data) ? res.data : [];
+      const res = await api.chats.getAll();
+      const allRows = res.success && Array.isArray(res.data) ? res.data : [];
 
-        // Strictly filter chats where user is active participant and chat is not deleted
-        const rows = allRows.filter((data: any) => {
-          if (deletedIds.includes(data.id)) return false;
-          const participants: string[] = Array.isArray(data.participants)
-            ? data.participants.map(String)
-            : Array.isArray(data.memberIds)
-              ? data.memberIds.map(String)
-              : typeof data.participants === 'object' && data.participants !== null
-                ? Object.keys(data.participants)
-                : [];
-          if (participants.length === 0) return true;
-          return participants.includes(currentUser.uid);
-        });
+      // Strictly filter chats where user is active participant and chat is not deleted
+      const rows = allRows.filter((data: any) => {
+        if (deletedIds.includes(data.id)) return false;
+        const participants: string[] = Array.isArray(data.participants)
+          ? data.participants.map(String)
+          : Array.isArray(data.memberIds)
+            ? data.memberIds.map(String)
+            : typeof data.participants === 'object' && data.participants !== null
+              ? Object.keys(data.participants)
+              : [];
+        if (participants.length === 0) return true;
+        return participants.includes(currentUser.uid);
+      });
 
-        const rooms: ChatRoom[] = rows.map((data: any) => {
-          const isGroup = ['group', 'channel', 'announcement'].includes(String(data.type || '').toLowerCase()) || data.isGroup === true || data.category === 'Groups';
-          let title = data.title || data.name || (isGroup ? 'Group Chat' : 'Chat');
-          
-          const participants: string[] = Array.isArray(data.participants)
-            ? data.participants.map(String)
-            : Array.isArray(data.memberIds)
-              ? data.memberIds.map(String)
-              : typeof data.participants === 'object' && data.participants !== null
-                ? Object.keys(data.participants)
-                : [];
+      const rooms: ChatRoom[] = rows.map((data: any) => {
+        const isGroup = ['group', 'channel', 'announcement'].includes(String(data.type || '').toLowerCase()) || data.isGroup === true || data.category === 'Groups';
+        let title = data.title || data.name || (isGroup ? 'Group Chat' : 'Chat');
+        
+        const participants: string[] = Array.isArray(data.participants)
+          ? data.participants.map(String)
+          : Array.isArray(data.memberIds)
+            ? data.memberIds.map(String)
+            : typeof data.participants === 'object' && data.participants !== null
+              ? Object.keys(data.participants)
+              : [];
 
-          if (!isGroup) {
-            const otherUserId = participants.find((id: string) => id !== currentUser.uid)
-              || (typeof data.id === 'string' && data.id.includes('_') ? data.id.split('_').find((id: string) => id !== currentUser.uid) : null);
-            const otherDetails = otherUserId ? data.participantDetails?.[otherUserId] : null;
-            const computedOtherName = (otherDetails?.name && otherDetails.name !== 'Member')
-              ? otherDetails.name
-              : [otherDetails?.firstName, otherDetails?.lastName].filter(Boolean).join(' ').trim()
-                || (otherDetails?.email ? otherDetails.email.split('@')[0] : '');
+        if (!isGroup) {
+          const otherUserId = participants.find((id: string) => id !== currentUser.uid)
+            || (typeof data.id === 'string' && data.id.includes('_') ? data.id.split('_').find((id: string) => id !== currentUser.uid) : null);
+          const otherDetails = otherUserId ? data.participantDetails?.[otherUserId] : null;
+          const computedOtherName = (otherDetails?.name && otherDetails.name !== 'Member')
+            ? otherDetails.name
+            : [otherDetails?.firstName, otherDetails?.lastName].filter(Boolean).join(' ').trim()
+              || (otherDetails?.email ? otherDetails.email.split('@')[0] : '');
 
-            if (computedOtherName) {
-              title = cleanSenderName(computedOtherName);
-            } else if (data.title && data.title !== 'Chat' && data.title !== 'Direct Chat' && data.title !== 'Direct Message' && data.title !== 'Member') {
-              title = cleanSenderName(data.title);
-            } else if (data.name && data.name !== 'Chat' && data.name !== 'Direct Chat' && data.name !== 'Direct Message' && data.name !== 'Member') {
-              title = cleanSenderName(data.name);
-            }
+          if (computedOtherName) {
+            title = cleanSenderName(computedOtherName);
+          } else if (data.title && data.title !== 'Chat' && data.title !== 'Direct Chat' && data.title !== 'Direct Message' && data.title !== 'Member') {
+            title = cleanSenderName(data.title);
+          } else if (data.name && data.name !== 'Chat' && data.name !== 'Direct Chat' && data.name !== 'Direct Message' && data.name !== 'Member') {
+            title = cleanSenderName(data.name);
           }
+        }
 
-          // API returns lastMessage as a string or object, and lastTimestamp as ISO string
-          const rawLastMsg = data.lastMessage;
-          const lastMsgText: string = typeof rawLastMsg === 'string'
-            ? rawLastMsg
-            : (rawLastMsg?.text || 'No messages yet');
-          const rawTimestamp = data.lastTimestamp || (typeof rawLastMsg === 'object' ? rawLastMsg?.timestamp : null) || data.createdAt;
+        // API returns lastMessage as a string or object, and lastTimestamp as ISO string
+        const rawLastMsg = data.lastMessage;
+        let lastMsgText: string = typeof rawLastMsg === 'string'
+          ? rawLastMsg
+          : (rawLastMsg?.text || 'No messages yet');
 
-          // Last sender: can be in rawLastMsg.senderId, data.lastMessageSenderId, or data.rawData
-          const lastSenderId: string = (typeof rawLastMsg === 'object' && rawLastMsg?.senderId) || data.lastMessageSenderId || data.rawData?.lastSenderId || '';
-          let senderName = '';
-          if (lastSenderId === currentUser.uid) {
-            senderName = 'You';
-          } else if (typeof rawLastMsg === 'object' && rawLastMsg?.senderName && rawLastMsg.senderName !== 'Member') {
-            senderName = cleanSenderName(rawLastMsg.senderName).split(' ')[0] || '';
-          } else if (data.lastMessageSenderName && data.lastMessageSenderName !== 'Member') {
-            senderName = cleanSenderName(data.lastMessageSenderName).split(' ')[0] || '';
-          } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.name && data.participantDetails[lastSenderId].name !== 'Member') {
-            senderName = cleanSenderName(data.participantDetails[lastSenderId].name).split(' ')[0] || '';
-          } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.email) {
-            const prefix = data.participantDetails[lastSenderId].email.split('@')[0];
-            senderName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+        // Parse structured JSON payloads
+        if (typeof lastMsgText === 'string' && lastMsgText.startsWith('{') && lastMsgText.endsWith('}')) {
+          try {
+            const parsed = JSON.parse(lastMsgText);
+            if (parsed.voiceUrl || parsed.audioUrl) lastMsgText = '🎤 Voice note';
+            else if (parsed.mediaUrl || parsed.imageUrl) lastMsgText = '📷 Photo';
+            else if (parsed.documentName) lastMsgText = `📄 ${parsed.documentName}`;
+            else if (parsed.songData) lastMsgText = `🎵 ${parsed.songData.title || 'Song'}`;
+            else if (parsed.text) lastMsgText = parsed.text;
+          } catch {}
+        }
+
+        const rawTimestamp = data.lastTimestamp || (typeof rawLastMsg === 'object' ? rawLastMsg?.timestamp : null) || data.createdAt;
+
+        // Last sender: can be in rawLastMsg.senderId, data.lastMessageSenderId, or data.rawData
+        const lastSenderId: string = (typeof rawLastMsg === 'object' && rawLastMsg?.senderId) || data.lastMessageSenderId || data.rawData?.lastSenderId || '';
+        let senderName = '';
+        if (lastSenderId === currentUser.uid) {
+          senderName = 'You';
+        } else if (typeof rawLastMsg === 'object' && rawLastMsg?.senderName && rawLastMsg.senderName !== 'Member') {
+          senderName = cleanSenderName(rawLastMsg.senderName).split(' ')[0] || '';
+        } else if (data.lastMessageSenderName && data.lastMessageSenderName !== 'Member') {
+          senderName = cleanSenderName(data.lastMessageSenderName).split(' ')[0] || '';
+        } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.name && data.participantDetails[lastSenderId].name !== 'Member') {
+          senderName = cleanSenderName(data.participantDetails[lastSenderId].name).split(' ')[0] || '';
+        } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.email) {
+          const prefix = data.participantDetails[lastSenderId].email.split('@')[0];
+          senderName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+        }
+
+        let roomAvatar: any = data.avatar ? (typeof data.avatar === 'string' ? { uri: data.avatar } : data.avatar) : null;
+        if (!isGroup) {
+          const otherId = participants.find((id: string) => id !== currentUser.uid)
+            || (typeof data.id === 'string' && data.id.includes('_') ? data.id.split('_').find((id: string) => id !== currentUser.uid) : null);
+          if (otherId && data.participantDetails?.[otherId]?.avatar) {
+            roomAvatar = { uri: data.participantDetails[otherId].avatar };
           }
+        }
+        if (!roomAvatar) roomAvatar = { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&background=1c1c1e&color=ffffff&size=128` };
 
-          let roomAvatar: any = data.avatar ? (typeof data.avatar === 'string' ? { uri: data.avatar } : data.avatar) : null;
-          if (!isGroup) {
-            const otherId = participants.find((id: string) => id !== currentUser.uid)
-              || (typeof data.id === 'string' && data.id.includes('_') ? data.id.split('_').find((id: string) => id !== currentUser.uid) : null);
-            if (otherId && data.participantDetails?.[otherId]?.avatar) {
-              roomAvatar = { uri: data.participantDetails[otherId].avatar };
-            }
-          }
-          if (!roomAvatar) roomAvatar = { uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(title)}&background=1c1c1e&color=ffffff&size=128` };
+        // Cleared-at logic
+        const clearedAtVal = data.clearedAt?.[currentUser.uid];
+        const lastMsgTime = rawTimestamp;
+        let isCleared = false;
+        let clearedDate: Date | null = null;
+        if (clearedAtVal) {
+          const cDate = new Date(clearedAtVal);
+          clearedDate = cDate;
+          if (!lastMsgTime) { isCleared = true; }
+          else { isCleared = new Date(lastMsgTime) <= cDate; }
+        }
 
-          // Cleared-at logic
-          const clearedAtVal = data.clearedAt?.[currentUser.uid];
-          const lastMsgTime = rawTimestamp;
-          let isCleared = false;
-          let clearedDate: Date | null = null;
-          if (clearedAtVal) {
-            const cDate = new Date(clearedAtVal);
-            clearedDate = cDate;
-            if (!lastMsgTime) { isCleared = true; }
-            else { isCleared = new Date(lastMsgTime) <= cDate; }
-          }
+        const previewText = isCleared ? 'No messages yet' : lastMsgText.replace('📷 Image', '📷');
+        const isArchived = data.archived?.[currentUser.uid] === true || archivedIds.includes(data.id);
+        const dateVal = rawTimestamp ? new Date(rawTimestamp) : (isCleared && clearedDate ? clearedDate : new Date(0));
+        const unreadCount = isCleared ? 0 : (typeof data.unreadCount === 'object' ? (data.unreadCount?.[currentUser.uid] || 0) : (data.unreadCount ?? data.unread ?? 0));
 
-          const previewText = isCleared ? 'No messages yet' : lastMsgText.replace('📷 Image', '📷');
-          const isArchived = data.archived?.[currentUser.uid] === true || archivedIds.includes(data.id);
-          const dateVal = rawTimestamp ? new Date(rawTimestamp) : (isCleared && clearedDate ? clearedDate : new Date(0));
-          const unreadCount = isCleared ? 0 : (typeof data.unreadCount === 'object' ? (data.unreadCount?.[currentUser.uid] || 0) : (data.unreadCount ?? data.unread ?? 0));
+        return {
+          id: data.id,
+          title,
+          sender: isCleared ? '' : senderName,
+          lastMessageSenderId: isCleared ? '' : lastSenderId,
+          lastMessage: isCleared ? 'No messages yet' : previewText,
+          time: isCleared ? '' : formatTime(dateVal),
+          timestampObj: isCleared ? new Date(0) : dateVal,
+          unread: unreadCount,
+          avatar: roomAvatar,
+          isGroup,
+          category: (isGroup ? 'Groups' : 'Direct') as 'Groups' | 'Direct',
+          participantDetails: data.participantDetails || {},
+          clearedAt: data.clearedAt || {},
+          lastMessageStatus: (typeof rawLastMsg === 'object' ? rawLastMsg?.status : null) || data.lastMessage?.status || 'sent',
+          isCleared,
+          isArchived,
+        };
+      });
 
-          return {
-            id: data.id,
-            title,
-            sender: isCleared ? '' : senderName,
-            lastMessageSenderId: isCleared ? '' : lastSenderId,
-            lastMessage: isCleared ? 'No messages yet' : previewText,
-            time: isCleared ? '' : formatTime(dateVal),
-            timestampObj: isCleared ? new Date(0) : dateVal,
-            unread: unreadCount,
-            avatar: roomAvatar,
-            isGroup,
-            category: (isGroup ? 'Groups' : 'Direct') as 'Groups' | 'Direct',
-            participantDetails: data.participantDetails || {},
-            clearedAt: data.clearedAt || {},
-            lastMessageStatus: (typeof rawLastMsg === 'object' ? rawLastMsg?.status : null) || data.lastMessage?.status || 'sent',
-            isCleared,
-            isArchived,
-          };
-        });
-        rooms.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
-        setChatRooms(prev => {
-          if (rooms.length === 0 && prev.length > 0) return prev;
-          AsyncStorage.setItem('cached_chat_rooms', JSON.stringify(rooms)).catch(() => {});
-          return rooms;
-        });
-        setLoading(false);
-      } catch (error) {
-        console.error('Error fetching chats:', error);
-        setLoading(false);
-      }
-    };
-
-    fetchChats();
-    return undefined;
+      rooms.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
+      setChatRooms(rooms);
+      AsyncStorage.setItem('cached_chat_rooms', JSON.stringify(rooms)).catch(() => {});
+      setLoading(false);
+      setRefreshing(false);
+    } catch (error) {
+      console.error('Error fetching chats:', error);
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [user]);
 
+  // Screen focus listener: Re-sync instantaneously whenever returning to ChatList
+  useFocusEffect(
+    useCallback(() => {
+      fetchChats(false);
+    }, [fetchChats])
+  );
+
+  const handleRefresh = useCallback(() => {
+    fetchChats(true);
+  }, [fetchChats]);
+
+  // Real-time WebSocket listener: immediately re-fetch when message or chat event occurs
   useWebSocket('chats', user?.uid || '', () => {
-    if (!user) return;
-    api.chats.getAll().then(res => {
-      if (res.success && Array.isArray(res.data) && res.data.length > 0) {
-        handleRefresh();
-      }
-    }).catch(() => {});
+    fetchChats(false);
   }, !!user?.uid);
 
   const filteredRooms = chatRooms.filter((room) => {
