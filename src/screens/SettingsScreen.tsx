@@ -99,6 +99,7 @@ export default function SettingsScreen({ navigation }: any) {
 
   const { currentZone, userZones, switchZone, refreshZones, joinZone } = useZone();
   const { profile: contextProfile, refreshProfile, signOut } = useUser();
+  const isHQ = isHQGroup(currentZone?.id);
   const [refreshing, setRefreshing] = useState(false);
   const [songsCount, setSongsCount] = useState(0);
   const [favoritesCount, setFavoritesCount] = useState(0);
@@ -221,7 +222,7 @@ export default function SettingsScreen({ navigation }: any) {
   };
 
   const handleGeofencedClockIn = async () => {
-    if (!currentUser) return;
+    if (!currentUser || clockingIn) return;
     setClockingIn(true);
     try {
       const docId = currentZone?.id
@@ -724,7 +725,7 @@ export default function SettingsScreen({ navigation }: any) {
             )}
           </View>
         )}
-          {!isEditing && (
+          {!isEditing && !isHQ && (
             <View style={[s.section, expanded.subgroups && s.sectionExpanded]}>
               <TouchableOpacity style={s.sectionHeader} onPress={() => toggleSection('subgroups')} activeOpacity={0.7}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

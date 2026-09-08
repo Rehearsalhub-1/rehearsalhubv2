@@ -7,45 +7,6 @@ export const isExpoGo =
   (Constants as any).appOwnership === 'expo';
 
 // ==========================================
-// 1. OneSignal Safe Wrapper
-// ==========================================
-let rawOneSignal: any = null;
-if (!isExpoGo) {
-  try {
-    rawOneSignal = require('react-native-onesignal').OneSignal;
-  } catch (e) {
-    console.log('[SafeNative] OneSignal native module not available.');
-  }
-}
-
-export const SafeOneSignal = rawOneSignal || {
-  initialize: (appId: string) => {
-    console.log('[ExpoGo] OneSignal.initialize simulated with appId:', appId);
-  },
-  login: (externalId: string) => {
-    console.log('[ExpoGo] OneSignal.login simulated with id:', externalId);
-  },
-  logout: () => {
-    console.log('[ExpoGo] OneSignal.logout simulated');
-  },
-  Location: {
-    setShared: (shared: boolean) => {},
-  },
-  Notifications: {
-    requestPermission: async (fallbackToSettings?: boolean) => true,
-    addEventListener: (event: string, listener: (...args: any[]) => void) => {},
-    removeEventListener: (event: string, listener: (...args: any[]) => void) => {},
-  },
-  User: {
-    addTag: (key: string, value: string) => {},
-    removeTag: (key: string) => {},
-    addTags: (tags: Record<string, string>) => {},
-    removeTags: (keys: string[]) => {},
-    getTags: async () => ({}),
-  },
-};
-
-// ==========================================
 // 2. CallKeep Safe Wrapper
 // ==========================================
 let rawCallKeep: any = null;

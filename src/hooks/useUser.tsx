@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { SafeOneSignal as OneSignal } from '../lib/safeNativeModules';
 import { Zone, isHQGroup, getZoneByInvitationCode } from '../config/zones';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearCache, setV2TenantScope } from '../lib/apiClient';
@@ -312,9 +311,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
         persistCache();
 
-        try {
-          OneSignal?.login?.(uid);
-        } catch {}
+
 
         return true;
       }
@@ -458,7 +455,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
         isPremium: false,
       });
 
-      try { OneSignal.logout(); } catch {}
+
     } catch (e) {
       console.error('[useUserStore] Sign out error:', e);
     }

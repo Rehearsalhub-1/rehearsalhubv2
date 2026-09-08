@@ -23,8 +23,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { setupNotifications } from '../lib/notifications';
 import { SyncAvatar } from '../components/SyncAvatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUser, useUserStore } from '../hooks/useUser';
+import { useUser, useUserStore, useZone } from '../hooks/useUser';
 import { isHQAdmin, canAccessArchive, getHiddenFeatures, isZoneCoordinator } from '../config/roles';
+import { isHQGroup } from '../config/zones';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -160,6 +161,8 @@ export default function HomeScreen({ navigation }: any) {
 
   const [isSubGroupCoordinator, setIsSubGroupCoordinator] = useState(false);
   const { profile: contextProfile, signOut } = useUser();
+  const { currentZone } = useZone();
+  const isCurrentZoneHQ = isHQGroup(currentZone?.id);
   const userProfile = contextProfile?.raw || null;
   const user = useUserStore(s => s.user);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -522,16 +525,22 @@ export default function HomeScreen({ navigation }: any) {
                   return isZoneCoordinator(contextProfile) || isZoneCoordinator(userProfile as any) || contextProfile?.canAccessPreRehearsal === true || (userProfile as any)?.can_access_pre_rehearsal === true;
                 }
                 if (item.id === 'archives') {
-                  // Only hide if explicitly flagged; otherwise show to all signed-in users
                   if (hf.hideArchives) return false;
-                  return true;
+                  // Only HQ Admins or singers explicitly granted archive access by an admin can see Archives
+                  if (isHQAdmin(contextProfile)) return true;
+                  return canAccessArchive(contextProfile);
                 }
                 if (item.id === 'songs' && hf.hideMinisteredSongs) return false;
                 if (item.id === 'ongoing' && hf.hideOngoing) return false;
                 if (item.id === 'submit' && hf.hideSubmissions) return false;
                 if (item.id === 'studio' && hf.hideAudioLab) return false;
                 if (item.id === 'media' && hf.hideAudioLab) return false;
-                if (item.id === 'subgroups' && hf.hideSubgroups) return false;
+                if (item.id === 'subgroups') {
+                  if (hf.hideSubgroups) return false;
+                  // HQ has no separate churches
+                  if (isCurrentZoneHQ) return false;
+                  return true;
+                }
                 return true;
               });
 
