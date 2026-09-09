@@ -178,7 +178,7 @@ export default function CallScreen({ route, navigation }: any) {
       if (!isIncoming && !isGroupCall && status === 'connecting') {
         try {
           const { sound: newSound } = await Audio.Sound.createAsync(
-            require('../../assets/ringingtone/dial_tone.wav'),
+            require('../../assets/ringingtone/dial_tone.mp3'),
             { isLooping: true, volume: 0.6 }
           );
           dialSound = newSound;

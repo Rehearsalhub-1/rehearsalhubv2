@@ -79,9 +79,9 @@ const MENU_SECTIONS = [
 ];
 
 const CLOUD_ASSETS = [
-  require('../../assets/video/cloud3_min.webp'), // cloud 3 for first card
-  require('../../assets/video/cloud2_min.webp'), // cloud 2 for second card
-  require('../../assets/video/cloud4_min.webp'), // cloud 4 for third card (last card)
+  { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud3_min.webp' }, // cloud 3 for first card
+  { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud2_min.webp' }, // cloud 2 for second card
+  { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud4_min.webp' }, // cloud 4 for third card (last card)
 ];
 
 function LoopingOnceImage({ source, durationMs = 15800, style, contentPosition }: { source: any; durationMs?: number; style: any; contentPosition?: any }) {
