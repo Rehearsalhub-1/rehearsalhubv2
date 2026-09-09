@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Rehearsal Hub Portal",
-    "slug": "Rehearsal Hub Portal",
+    "slug": "rehearsal-hub-portal",
     "scheme": "rehearsalhub",
     "version": "2.1.1",
     "orientation": "portrait",
@@ -46,8 +46,6 @@
         "android.permission.WAKE_LOCK",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.USE_FULL_SCREEN_INTENT",
-        "android.permission.MANAGE_OWN_CALLS",
-        "android.permission.READ_PHONE_STATE",
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
       ],
@@ -110,15 +108,15 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "8d220f21-f2b2-44f5-bfcd-668fc0877172"
+        "projectId": "e98f38ac-ca86-4999-aa48-083199465371"
       }
     },
-    "owner": "rickson01",
+    "owner": "hub11",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/8d220f21-f2b2-44f5-bfcd-668fc0877172",
+      "url": "https://u.expo.dev/e98f38ac-ca86-4999-aa48-083199465371",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     }

@@ -20,18 +20,16 @@ const pendingCalls = new Map<string, {
 export const IncomingCallManager = {
   setup: () => {
     try {
+      // CallKeep is only used for Apple CallKit integration on iOS.
+      // On Android, incoming calls use Notifee full-screen notifications and LiveKit WebRTC,
+      // completely eliminating the scary Android Telecom "make and manage phone calls / phone accounts" dialog.
+      if (Platform.OS !== 'ios') return;
       if (!RNCallKeep?.setup) return;
+
       RNCallKeep.setup({
         ios: {
           appName: 'RehearsalHub',
           includesCallsInRecents: false,
-        },
-        android: {
-          alertTitle: 'Permissions required',
-          alertDescription: 'This application needs to access your phone accounts',
-          cancelButton: 'Cancel',
-          okButton: 'ok',
-          additionalPermissions: [],
         },
       }).catch(console.warn);
 

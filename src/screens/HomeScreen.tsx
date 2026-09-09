@@ -23,7 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { setupNotifications } from '../lib/notifications';
 import { SyncAvatar } from '../components/SyncAvatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUser, useUserStore, useZone } from '../hooks/useUser';
+import { useUser, useUserStore, useZone, useChurch } from '../hooks/useUser';
 import { isHQAdmin, canAccessArchive, getHiddenFeatures, isZoneCoordinator } from '../config/roles';
 import { isHQGroup } from '../config/zones';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
@@ -162,6 +162,7 @@ export default function HomeScreen({ navigation }: any) {
   const [isSubGroupCoordinator, setIsSubGroupCoordinator] = useState(false);
   const { profile: contextProfile, signOut } = useUser();
   const { currentZone } = useZone();
+  const { currentChurch } = useChurch();
   const isCurrentZoneHQ = isHQGroup(currentZone?.id);
   const userProfile = contextProfile?.raw || null;
   const user = useUserStore(s => s.user);
@@ -575,7 +576,12 @@ export default function HomeScreen({ navigation }: any) {
                     navigation.navigate('ChatRooms', { card: { source: CLOUD_ASSETS[2] } });
                   } else if (item.id === 'subgroups') {
                     toggleSidebar();
-                    navigation.navigate('Rehearsal', { mode: 'subgroup', scope: 'subgroup', resetState: true });
+                    navigation.navigate('Rehearsal', { 
+                      mode: 'subgroup', 
+                      scope: 'subgroup', 
+                      subgroupId: currentChurch?.id, 
+                      resetState: true 
+                    });
                   } else if (item.id === 'links') {
                     toggleSidebar();
                     navigation.navigate('Links');

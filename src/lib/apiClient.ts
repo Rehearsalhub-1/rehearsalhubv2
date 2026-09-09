@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const BASE_URL = (process.env.EXPO_PUBLIC_BACKEND_URL ?? '')
+const BASE_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://rehearsalhub-api-production-6a17.up.railway.app')
   .replace(/\/+$/, '')
   .replace(/\/api$/, '');
 
@@ -123,10 +123,11 @@ async function refreshSession(): Promise<string> {
 interface V2TenantScope {
   zoneId: string | null;
   zoneCode: string | null;
-  scope: 'global' | 'zone';
+  churchId?: string | null;
+  scope: 'global' | 'zone' | 'church';
 }
 
-let _v2TenantScope: V2TenantScope = { zoneId: null, zoneCode: null, scope: 'global' };
+let _v2TenantScope: V2TenantScope = { zoneId: null, zoneCode: null, churchId: null, scope: 'global' };
 
 export function setV2TenantScope(scope: V2TenantScope): void {
   _v2TenantScope = scope;
@@ -169,6 +170,9 @@ async function request<T>(
   }
   if (scope.zoneCode) {
     headers['x-zone-code'] = scope.zoneCode;
+  }
+  if (scope.churchId) {
+    headers['x-church-id'] = scope.churchId;
   }
   if (scope.scope) {
     headers['x-scope'] = scope.scope;

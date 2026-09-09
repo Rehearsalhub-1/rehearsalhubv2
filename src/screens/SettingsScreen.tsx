@@ -19,7 +19,7 @@ import * as Location from 'expo-location';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 import { uploadImageToCloudinary } from '../lib/cloudinary';
-import { useUser, useZone, useUserStore } from '../hooks/useUser';
+import { useUser, useZone, useChurch, useUserStore } from '../hooks/useUser';
 import { isHQGroup } from '../config/zones';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -98,6 +98,7 @@ export default function SettingsScreen({ navigation }: any) {
   });
 
   const { currentZone, userZones, switchZone, refreshZones, joinZone } = useZone();
+  const { currentChurch, switchChurch } = useChurch();
   const { profile: contextProfile, refreshProfile, signOut } = useUser();
   const isHQ = isHQGroup(currentZone?.id);
   const [refreshing, setRefreshing] = useState(false);
@@ -377,24 +378,14 @@ export default function SettingsScreen({ navigation }: any) {
     finally { setUploadingAvatar(false); }
   };
 
-  const handleSubgroupRequest = async () => {
-    if (!subgroupRequest.trim() || !currentUser) return;
-    setSubmittingSubgroup(true);
-    try {
-      await api.subgroups.requestJoin({
-        name: subgroupRequest.trim(),
-        churchName: subgroupRequest.trim(),
-        userId: currentUser?.uid || "",
-        userName: [profile.firstName, profile.lastName].filter(Boolean).join(' '),
-        createdAt: new Date().toISOString(),
-      });
-      setSubgroupRequest('');
-      Alert.alert('Request Submitted', 'Your church request has been sent to the coordinators for approval.');
-      await loadSubgroups();
-    } catch (e) {
-      Alert.alert('Error', 'Failed to submit church request.');
-    } finally {
-      setSubmittingSubgroup(false);
+  const handleSwitchChurch = async (church: any) => {
+    if (!currentUser) return;
+    const success = await switchChurch(church);
+    if (success) {
+      setProfile(p => ({ ...p, church: church.name }));
+      showToast(`Switched to ${church.name}`);
+    } else {
+      Alert.alert('Error', 'Failed to switch church.');
     }
   };
 
@@ -737,62 +728,53 @@ export default function SettingsScreen({ navigation }: any) {
               {expanded.subgroups && (
                 <View style={s.sectionContent}>
                   {userSubgroups.length > 0 ? (
-                    userSubgroups.map((sg, idx) => (
-                      <View key={idx} style={s.zoneCard}>
-                        <View style={s.zoneInfo}>
-                          <View style={[s.zoneIconWrap, { backgroundColor: 'rgba(56,189,248,0.1)' }]}>
-                            <Ionicons name="people" size={20} color="#38BDF8" />
+                    userSubgroups.map((sg, idx) => {
+                      const isActive = currentChurch?.id === sg.id || (!currentChurch && idx === 0 && sg.status === 'active');
+                      return (
+                        <View key={idx} style={s.zoneCard}>
+                          <View style={s.zoneInfo}>
+                            <View style={[s.zoneIconWrap, { backgroundColor: 'rgba(56,189,248,0.1)' }]}>
+                              <Ionicons name="people" size={20} color="#38BDF8" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.zoneName}>{sg.name}</Text>
+                              <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                                {sg.type ? sg.type.charAt(0).toUpperCase() + sg.type.slice(1) : 'Church Choir'}
+                                {sg.role ? ` · ${sg.role}` : ''}
+                                {sg.status === 'pending' ? ' · Pending' : ''}
+                              </Text>
+                              {isActive && <Text style={[s.zoneActiveBadge, { color: '#38BDF8' }]}>ACTIVE CHURCH</Text>}
+                            </View>
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={s.zoneName}>{sg.name}</Text>
-                            <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-                              {sg.type ? sg.type.charAt(0).toUpperCase() + sg.type.slice(1) : 'Group'}
-                              {sg.status === 'pending' ? ' · Pending' : sg.status === 'active' ? ' · Active' : ''}
-                            </Text>
+                          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                            {!isActive && sg.status !== 'pending' && (
+                              <TouchableOpacity 
+                                style={s.zoneSwitchBtn} 
+                                onPress={() => handleSwitchChurch(sg)} 
+                                activeOpacity={0.7}
+                              >
+                                <Text style={s.zoneSwitchBtnTxt}>Switch</Text>
+                              </TouchableOpacity>
+                            )}
+                            {sg.status === 'pending' && (
+                              <View style={[s.zoneSwitchBtn, { backgroundColor: 'rgba(251,191,36,0.15)' }]}>
+                                <Text style={{ color: '#FBBF24', fontWeight: '700', fontSize: 11 }}>PENDING</Text>
+                              </View>
+                            )}
                           </View>
                         </View>
-                        <View style={[
-                          s.zoneSwitchBtn,
-                          { backgroundColor: sg.status === 'active' ? 'rgba(52,211,153,0.15)' : 'rgba(251,191,36,0.15)' }
-                        ]}>
-                          <Text style={{ color: sg.status === 'active' ? '#34D399' : '#FBBF24', fontWeight: '700', fontSize: 11 }}>
-                            {sg.status === 'active' ? 'ACTIVE' : 'PENDING'}
-                          </Text>
-                        </View>
-                      </View>
-                    ))
+                      );
+                    })
                   ) : (
                     <View style={s.subgroupEmpty}>
                       <View style={s.subgroupEmptyIcon}>
                         <Ionicons name="information" size={24} color={T.textSecondary} />
                       </View>
-                      <Text style={s.subgroupEmptyTxt}>You haven't joined any churches yet.</Text>
+                      <Text style={s.subgroupEmptyTxt}>
+                        You haven't been added to any churches yet. Your Zone Admin will assign you.
+                      </Text>
                     </View>
                   )}
-                  <View style={s.requestSubgroupWrap}>
-                    <Text style={s.requestSubgroupTitle}>Request to join a church</Text>
-                    <View style={s.requestInputRow}>
-                      <TextInput
-                        style={s.requestInput}
-                        placeholder="e.g. Christ Embassy Airport City, CE Cape Town..."
-                        placeholderTextColor={T.inputPlaceholder}
-                        value={subgroupRequest}
-                        onChangeText={setSubgroupRequest}
-                      />
-                      <TouchableOpacity 
-                        style={[s.requestBtn, !subgroupRequest.trim() && { opacity: 0.5 }]} 
-                        onPress={handleSubgroupRequest}
-                        disabled={!subgroupRequest.trim() || submittingSubgroup}
-                        activeOpacity={0.8}
-                      >
-                        {submittingSubgroup ? (
-                          <ActivityIndicator size="small" color={theme.colors.textPrimary} />
-                        ) : (
-                          <Text style={s.requestBtnTxt}>Request</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
                 </View>
               )}
             </View>

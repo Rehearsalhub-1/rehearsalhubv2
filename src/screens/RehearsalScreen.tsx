@@ -31,7 +31,7 @@ import Constants from 'expo-constants';
 import Svg, { Path } from 'react-native-svg';
 import { ZONES, getZoneByInvitationCode, isHQGroup } from '../config/zones';
 import { useZone } from '../hooks/useZone';
-import { useUserStore } from '../hooks/useUser';
+import { useUserStore, useChurch } from '../hooks/useUser';
 import { canAccessArchive, canAccessPreRehearsal, getHiddenFeatures, isHQAdmin } from '../config/roles';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import TrackOptionsModal from '../components/TrackOptionsModal';
@@ -245,6 +245,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const [isLoading, setIsLoading] = useState(true);
   const [activeZone, setActiveZone] = useState<any>(null);
   const { currentZone: contextZone, isHQ: contextIsHQ, zoneVersion, isLoading: isZoneLoading } = useZone();
+  const { currentChurch } = useChurch();
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
@@ -635,8 +636,13 @@ export default function RehearsalScreen({ navigation, route }: any) {
               setAvailablePrograms(subgroupPages);
             }
 
-            if (route?.params?.subgroupId) {
-              selectedRehearsal = subgroupPages.find((p: any) => p.subGroupId === route.params.subgroupId) || subgroupPages[0] || null;
+            const targetSgId = route?.params?.subgroupId || currentChurch?.id;
+            if (targetSgId) {
+              selectedRehearsal = subgroupPages.find((p: any) => (p.subGroupId === targetSgId || p.sub_group_id === targetSgId) && p.category === 'ongoing')
+                || subgroupPages.find((p: any) => p.subGroupId === targetSgId || p.sub_group_id === targetSgId)
+                || subgroupPages.find((p: any) => p.category === 'ongoing')
+                || subgroupPages[0]
+                || null;
             } else {
               const ongoing = subgroupPages.find((p: any) => p.category === 'ongoing');
               selectedRehearsal = ongoing || subgroupPages[0] || null;

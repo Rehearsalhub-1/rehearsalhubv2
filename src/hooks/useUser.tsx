@@ -71,6 +71,11 @@ interface UserStore {
   subscription: { status: string; expiresAt: string | null } | null;
   isPremium: boolean;
 
+  currentChurch: { id: string; name: string; type?: string; status?: string; role?: string } | null;
+  userChurches: Array<{ id: string; name: string; type?: string; status?: string; role?: string }>;
+  switchChurch: (church: { id: string; name: string; type?: string; status?: string; role?: string } | null) => Promise<boolean>;
+  loadUserChurches: () => Promise<void>;
+
   switchZone: (zone: Zone) => Promise<boolean>;
   joinZone: (code: string) => Promise<{ success: boolean; message: string }>;
   refreshZones: () => Promise<void>;
@@ -228,6 +233,8 @@ export const useUserStore = create<UserStore>((set, get) => ({
   zoneVersion: 0,
   subscription: null,
   isPremium: false,
+  currentChurch: null,
+  userChurches: [],
 
   bootstrap: async () => {
     try {
@@ -350,6 +357,54 @@ export const useUserStore = create<UserStore>((set, get) => ({
     } catch (e) {
       console.error('[useUserStore] Failed to switch zone:', e);
       return false;
+    }
+  },
+
+  switchChurch: async (church) => {
+    const { currentZone } = get();
+    try {
+      set({ currentChurch: church });
+      const { setV2TenantScope } = require('../lib/apiClient');
+      setV2TenantScope({
+        zoneId: currentZone?.id || null,
+        zoneCode: currentZone?.invitationCode || null,
+        churchId: church?.id || null,
+        scope: church ? 'church' : 'zone',
+      });
+      if (church?.id) {
+        AsyncStorage.setItem('active_church_id', church.id).catch(() => {});
+      } else {
+        AsyncStorage.removeItem('active_church_id').catch(() => {});
+      }
+      return true;
+    } catch (e) {
+      console.error('[useUserStore] Failed to switch church:', e);
+      return false;
+    }
+  },
+
+  loadUserChurches: async () => {
+    try {
+      const { apiClient } = require('../lib/apiClient');
+      const res = await apiClient.get('/subgroups/mine');
+      if (res && res.data) {
+        const churches = Array.isArray(res.data) ? res.data : [];
+        const savedChurchId = await AsyncStorage.getItem('active_church_id').catch(() => null);
+        let active = churches.find((c: any) => c.id === savedChurchId) || churches[0] || null;
+        set({ userChurches: churches, currentChurch: active });
+        if (active) {
+          const { currentZone } = get();
+          const { setV2TenantScope } = require('../lib/apiClient');
+          setV2TenantScope({
+            zoneId: currentZone?.id || null,
+            zoneCode: currentZone?.invitationCode || null,
+            churchId: active.id,
+            scope: 'church',
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[useUserStore] loadUserChurches error:', e);
     }
   },
 
@@ -478,6 +533,15 @@ export function useZone() {
     switchZone: s.switchZone,
     refreshZones: s.refreshZones,
     joinZone: s.joinZone,
+  })));
+}
+
+export function useChurch() {
+  return useUserStore(useShallow(s => ({
+    currentChurch: s.currentChurch,
+    userChurches: s.userChurches,
+    switchChurch: s.switchChurch,
+    loadUserChurches: s.loadUserChurches,
   })));
 }
 
