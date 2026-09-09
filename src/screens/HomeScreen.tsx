@@ -655,9 +655,13 @@ export default function HomeScreen({ navigation }: any) {
                       || "Rehearsal Hub User"}
                   </Text>
                   <Text style={styles.userRole}>
-                    {contextProfile?.administration === 'Boss' || userProfile?.administration === 'Boss'
-                      ? 'Central Admin' 
-                      : (contextProfile?.role === 'boss' || userProfile?.role === 'boss' ? 'Zone Admin' : 'Member Account')}
+                    {contextProfile?.role === 'hq_admin' || userProfile?.role === 'hq_admin' || contextProfile?.hasHqAccess || userProfile?.hasHqAccess
+                      ? 'HQ Admin' 
+                      : (contextProfile?.role === 'zone_admin' || userProfile?.role === 'zone_admin' || contextProfile?.role === 'boss' || userProfile?.role === 'boss' || contextProfile?.administration === 'Boss' || userProfile?.administration === 'Boss'
+                          ? 'Zone Admin'
+                          : (contextProfile?.role === 'church_coordinator' || userProfile?.role === 'church_coordinator' || contextProfile?.role === 'church_admin'
+                              ? 'Church Coordinator'
+                              : 'Member Account'))}
                   </Text>
                 </View>
                 <Ionicons name="log-out-outline" size={20} color={theme.colors.textMuted} style={{ marginRight: 8 }} />

@@ -56,7 +56,7 @@ export default function ArchiveScreen({ navigation }: any) {
           <Ionicons name="lock-closed" size={80} color={theme.colors.accent} style={{ marginBottom: 24 }} />
           <Text style={{ color: theme.colors.textPrimary, fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 12 }}>Access Restricted</Text>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 }}>
-            You do not have permission to access the Archives. Please contact a Central Administrator if you believe this is an error.
+            You do not have permission to access the Archives. Please contact an HQ Administrator or your Zonal Coordinator if you believe this is an error.
           </Text>
           <TouchableOpacity 
             style={{ backgroundColor: theme.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 }}
