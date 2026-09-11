@@ -55,6 +55,8 @@ export const api = {
   songs: {
     getAll: (params?: string) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/songs${params ? `?${params}` : ''}`),
+    getActiveSongs: (zoneId?: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(`/songs/active${zoneId ? `?zoneId=${encodeURIComponent(zoneId)}` : ''}`),
     getById: (songId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/songs/${songId}`),
     getMaster: () =>

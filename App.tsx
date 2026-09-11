@@ -58,6 +58,7 @@ import { ensureCacheSchema } from './src/lib/ensureCacheSchema';
 import { debugSessionLog, flushDebugSessionLogs } from './src/lib/debugSessionLog';
 import { IncomingCallManager } from './src/lib/IncomingCallManager';
 import { useOTAUpdates } from './src/hooks/useOTAUpdates';
+import GlobalLiveSongWidget from './src/components/GlobalLiveSongWidget';
 
 const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/+$/, '');
 
@@ -200,6 +201,7 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <NavigationContainer theme={NavTheme} ref={navigationRef} linking={linking}>
           <AppNavigator initialRoute={initialRoute} />
+          <GlobalLiveSongWidget />
         </NavigationContainer>
         <OfflineBanner />
         <SessionResumeBanner />

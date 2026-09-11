@@ -45,6 +45,7 @@ import { SongScheduleSheet } from '../components/SongScheduleSheet';
 import { api, clearCache } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useProgramStore } from '../stores/programStore';
+import { useLiveSongStore } from '../stores/liveSongStore';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
@@ -447,7 +448,6 @@ export default function RehearsalScreen({ navigation, route }: any) {
   }, [isLoading]);
 
   const shimmerOpacity = shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.65] }); // tracks if we've ever shown cached/real data
-  const [showActiveSongsModal, setShowActiveSongsModal] = useState(false);
   const [selectedOptionsTrack, setSelectedOptionsTrack] = useState<any>(null);
   const [showTrackOptions, setShowTrackOptions] = useState(false);
   const [shareTrack, setShareTrack] = useState<any>(null);
@@ -1133,6 +1133,12 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
   const activeSongs = useMemo(() => programSongs.filter((song: any) => song.isActive), [programSongs]);
 
+  useEffect(() => {
+    if (activeSongs.length > 0) {
+      useLiveSongStore.getState().setActiveSongs(activeSongs);
+    }
+  }, [activeSongs]);
+
   const categoryHeardCount = useMemo(() => programSongs.filter((track: any) => {
     return songBelongsToCategory(track, selectedCategory || '') && track.status === 'heard';
   }).length, [programSongs, selectedCategory]);
@@ -1771,77 +1777,6 @@ export default function RehearsalScreen({ navigation, route }: any) {
         </TouchableOpacity>
 
       </View>
-
-      {}
-      {activeSongs.length > 0 && !(isSelectionMode || showProgramSwitcher || showActiveSongsModal || showCategoriesDropdown || showTrackOptions || showShareSheet || showScheduleSheet) &&
-      <TouchableOpacity
-        style={[styles.floatingLiveWidget, (activeTrack && !hideMiniPlayer) && { bottom: 136 + 75 }]}
-        activeOpacity={0.9}
-        onPress={() => {
-          if (activeSongs.length === 1) {
-            const liveSong = activeSongs[0];
-            play(liveSong, programSongs, false);
-            navigation.navigate('Player', { activeTrack: liveSong, zoneId: activeZone?.id, queue: programSongs });
-          } else {
-            setShowActiveSongsModal(true);
-          }
-        }}>
-        
-          <View style={styles.liveWidgetGradient}>
-            <View style={styles.liveIndicatorRing}>
-              <View style={styles.liveDot} />
-            </View>
-            <View style={styles.liveWidgetInfo}>
-              <Text style={styles.liveTextSmall}>LIVE NOW</Text>
-              <Text style={styles.liveTextTitle} numberOfLines={1}>
-                {activeSongs.length === 1 ? activeSongs[0].title : `${activeSongs.length} Active Songs`}
-              </Text>
-            </View>
-            <Ionicons name="pulse" size={20} color="#22c55e" style={styles.livePulseIcon} />
-          </View>
-        </TouchableOpacity>
-      }
-
-      {}
-      <Modal
-        visible={showActiveSongsModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowActiveSongsModal(false)}>
-        
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Live Rehearsal Sessions</Text>
-              <TouchableOpacity onPress={() => setShowActiveSongsModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalList}>
-              {activeSongs.map((song: any, index: number) =>
-              <TouchableOpacity
-                key={song.id || `live-${index}`}
-                style={styles.modalListItem}
-                onPress={() => {
-                  setShowActiveSongsModal(false);
-                  play(song, programSongs, false);
-                  navigation.navigate('Player', { activeTrack: song, zoneId: activeZone?.id, queue: programSongs });
-                }}>
-                
-                  <View style={styles.modalItemBadge}>
-                    <Text style={styles.modalItemBadgeText}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.modalItemInfo}>
-                    <Text style={styles.modalItemTitle}>{song.title}</Text>
-                    <Text style={styles.modalItemSubtitle}>{song.category}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
 
       {}
       <Modal

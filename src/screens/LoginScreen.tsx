@@ -153,17 +153,22 @@ export default function LoginScreen({ route, navigation }: any) {
         const tokenMatch = result.url.match(/(?:access_token|accessToken|token)=([^&#]+)/);
         if (tokenMatch && tokenMatch[1]) {
           accessToken = decodeURIComponent(tokenMatch[1]);
-        } else {
-          try {
-            const cleanUrl = result.url.replace('#', '?');
-            const urlObj = new URL(cleanUrl);
+        }
+        let kcUserId = '';
+        let kcEmail = '';
+        try {
+          const cleanUrl = result.url.replace('#', '?');
+          const urlObj = new URL(cleanUrl);
+          if (!accessToken) {
             accessToken =
               urlObj.searchParams.get('access_token') ||
               urlObj.searchParams.get('accessToken') ||
               urlObj.searchParams.get('token') ||
               '';
-          } catch {}
-        }
+          }
+          kcUserId = urlObj.searchParams.get('user_id') || urlObj.searchParams.get('userId') || urlObj.searchParams.get('kingschat_id') || '';
+          kcEmail = urlObj.searchParams.get('email') || '';
+        } catch {}
 
         if (!accessToken) {
           Alert.alert('Authentication Failed', 'Failed to retrieve access token from KingsChat.');
@@ -171,7 +176,11 @@ export default function LoginScreen({ route, navigation }: any) {
           return;
         }
 
-        const res = await api.auth.kingschatLogin({ accessToken });
+        const res = await api.auth.kingschatLogin({
+          accessToken,
+          kingschatUserId: kcUserId || undefined,
+          email: kcEmail || undefined,
+        });
 
         if (res.success && res.data) {
           const userId = res.data.user?.id || (res.data as any)?.userId || '';

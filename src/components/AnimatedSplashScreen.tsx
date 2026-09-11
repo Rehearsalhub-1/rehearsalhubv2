@@ -14,35 +14,48 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
   const opacity = useRef(new Animated.Value(1)).current;
   const [isFinished, setIsFinished] = useState(false);
   const [isMuted, setIsMuted] = useState(true); // Muted by default
+  const hasStartedRef = useRef(false);
+  const mountTimeRef = useRef(Date.now());
 
-  const player = useVideoPlayer(require('../../assets/splash_new.mp4'), player => {
-    player.loop = false;
-    player.muted = true;
-    if (typeof player.play === 'function') player.play();
+  const player = useVideoPlayer(require('../../assets/splash_new.mp4'), p => {
+    p.loop = false;
+    p.muted = true;
+    try {
+      p.play();
+    } catch {}
   });
 
   useEffect(() => {
     if (player) {
       player.muted = isMuted;
       try {
-        if (typeof player.play === 'function') player.play();
+        player.play();
       } catch (e) {
         console.warn('Error playing splash video:', e);
       }
     }
   }, [isMuted, player]);
 
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    if (isPlaying) {
+      hasStartedRef.current = true;
+    }
+  });
+
   useEventListener(player, 'playToEnd', () => {
-    setIsFinished(true);
+    const elapsed = (Date.now() - mountTimeRef.current) / 1000;
+    if (hasStartedRef.current || elapsed > 3 || (player && player.currentTime > 2)) {
+      setIsFinished(true);
+    }
   });
 
   useEventListener(player, 'statusChange', ({ status, error }) => {
     if (status === 'error') {
       console.warn('Splash video error:', error);
-      setIsFinished(true);
+      setTimeout(() => setIsFinished(true), 2000);
     } else if (status === 'readyToPlay') {
       try {
-        if (typeof player.play === 'function') player.play();
+        player.play();
       } catch (e) {
         console.warn('Error starting splash player:', e);
       }
@@ -50,9 +63,10 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
   });
 
   useEffect(() => {
+    // 10 second safety timer (matches splash_new.mp4 duration)
     const fallbackTimer = setTimeout(() => {
       setIsFinished(true);
-    }, 10000);
+    }, 10500);
     return () => clearTimeout(fallbackTimer);
   }, []);
 
@@ -107,10 +121,13 @@ const getStyles = (theme: any) => {
   const T = theme.colors;
   return StyleSheet.create({
   container: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#000000',
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    zIndex: 9999,
   },
   muteButton: {
     position: 'absolute',
