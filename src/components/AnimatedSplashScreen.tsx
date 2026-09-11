@@ -18,14 +18,14 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
   const player = useVideoPlayer(require('../../assets/splash_new.mp4'), player => {
     player.loop = false;
     player.muted = true;
-    player.play();
+    if (typeof player.play === 'function') player.play();
   });
 
   useEffect(() => {
     if (player) {
       player.muted = isMuted;
       try {
-        player.play();
+        if (typeof player.play === 'function') player.play();
       } catch (e) {
         console.warn('Error playing splash video:', e);
       }
@@ -40,13 +40,19 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
     if (status === 'error') {
       console.warn('Splash video error:', error);
       setIsFinished(true);
+    } else if (status === 'readyToPlay') {
+      try {
+        if (typeof player.play === 'function') player.play();
+      } catch (e) {
+        console.warn('Error starting splash player:', e);
+      }
     }
   });
 
   useEffect(() => {
     const fallbackTimer = setTimeout(() => {
       setIsFinished(true);
-    }, 8000);
+    }, 10000);
     return () => clearTimeout(fallbackTimer);
   }, []);
 
@@ -73,7 +79,7 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
       <TouchableOpacity 
         style={styles.skipButton} 
         onPress={() => {
-          player.pause();
+          if (typeof player.pause === 'function') player.pause();
           player.muted = true;
           setIsFinished(true);
         }}

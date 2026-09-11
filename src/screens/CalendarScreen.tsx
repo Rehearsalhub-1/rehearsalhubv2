@@ -14,6 +14,7 @@ import { BlurView } from 'expo-blur';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { useUserStore } from '../hooks/useUser';
 import { useZone } from '../hooks/useZone';
+import { useWebSocket } from '../hooks/useWebSocket';
 import * as Location from 'expo-location';
 
 LocaleConfig.locales['en'] = {
@@ -139,7 +140,8 @@ const getRealTraffic = async (lat: number, lon: number) => {
     overallColor:  hasHeavy ? '#ef4444'   : hasMod ? '#f59e0b'     : '#4ade80',
     routes
   };
-};
+};
+
 
 interface CalendarEvent {
   id: string;
@@ -154,6 +156,12 @@ interface CalendarEvent {
   zoneId: string;
   isGlobal?: boolean;
   createdBy: string;
+  target_audience?: string;
+  target_user_id?: string;
+  target_group?: string;
+  dateString: string;
+  hasSpecificTime?: boolean;
+  timeDisplay?: string;
 }
 
 interface BirthdayUser {
@@ -205,11 +213,14 @@ export default function CalendarScreen({ route, navigation }: any) {
       { day: 'WED', icon: 'partly-sunny', temp: 27 },
     ],
   });
-  const [traffic,        setTraffic]        = useState(getLiveTraffic('Sunny', 'ASESE BASE'));
+  const [traffic, setTraffic] = useState(getLiveTraffic('Sunny', 'ASESE BASE'));
+  const [trafficAvailable, setTrafficAvailable] = useState(false);
   const [weatherLoading, setWeatherLoading] = useState(true);
-  const [lastUpdated,    setLastUpdated]    = useState('Just now');
+  const [liveInfoAvailable, setLiveInfoAvailable] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState('Just now');
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [calendarRefreshVersion, setCalendarRefreshVersion] = useState(0);
   const [eventsLoading, setEventsLoading] = useState(false);
   const [birthdays, setBirthdays] = useState<BirthdayUser[]>([]);
   const [birthdaysLoading, setBirthdaysLoading] = useState(true);
@@ -231,43 +242,107 @@ export default function CalendarScreen({ route, navigation }: any) {
 
     const fetchEvents = async () => {
       try {
-        const res = await api.events.getUpcoming(userZoneId).catch(() => null);
+        const [resEvents, resPrograms] = await Promise.all([
+          api.events.getUpcoming(userZoneId).catch(() => null),
+          api.programs.getAll(userZoneId).catch(() => null),
+        ]);
         if (!isMounted) return;
 
         let rawEvents: any[] = [];
-        if (Array.isArray(res)) {
-          rawEvents = res;
-        } else if (res && typeof res === 'object') {
-          if (Array.isArray(res.data)) rawEvents = res.data;
-          else if (Array.isArray(res.items)) rawEvents = res.items;
+        if (Array.isArray(resEvents)) rawEvents.push(...resEvents);
+        else if (resEvents && typeof resEvents === 'object') {
+          if (Array.isArray(resEvents.data)) rawEvents.push(...resEvents.data);
+          else if (Array.isArray(resEvents.items)) rawEvents.push(...resEvents.items);
         }
 
-        const all = rawEvents.map((data: any) => {
+        // Add real ministry programs from database
+        if (Array.isArray(resPrograms)) rawEvents.push(...resPrograms);
+        else if (resPrograms && typeof resPrograms === 'object') {
+          if (Array.isArray(resPrograms.data)) rawEvents.push(...resPrograms.data);
+          else if (Array.isArray(resPrograms.items)) rawEvents.push(...resPrograms.items);
+        }
+
+        const seenIds = new Set<string>();
+        const all: CalendarEvent[] = [];
+
+        for (const data of rawEvents) {
+          if (!data) continue;
+          const evId = data.id || `ev_${Math.random().toString(36).slice(2, 7)}`;
+          if (seenIds.has(evId)) continue;
+          seenIds.add(evId);
+
+          const rawDateStr = String(data.date || data.event_start_date || data.startDate || data.programDate || data.program_date || '');
+          let dateStr = '';
+          let hasSpecificTime = false;
+          let startTimeFormatted = '';
+
+          if (rawDateStr) {
+            if (rawDateStr.includes('T')) {
+              dateStr = rawDateStr.split('T')[0];
+              const timePart = rawDateStr.split('T')[1];
+              if (timePart && !timePart.startsWith('00:00:00')) {
+                const parsed = new Date(rawDateStr);
+                if (!isNaN(parsed.getTime())) {
+                  hasSpecificTime = true;
+                  startTimeFormatted = formatEventTime(parsed);
+                }
+              }
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(rawDateStr.trim())) {
+              dateStr = rawDateStr.trim();
+            } else {
+              const parsed = new Date(rawDateStr);
+              if (!isNaN(parsed.getTime())) {
+                dateStr = parsed.toISOString().split('T')[0];
+              }
+            }
+          }
+
+          // If no date was specified, fall back to created date without stamping the current time
+          if (!dateStr && (data.createdAt || data.created_at)) {
+            const parsed = new Date(data.createdAt || data.created_at);
+            if (!isNaN(parsed.getTime())) {
+              dateStr = parsed.toISOString().split('T')[0];
+            }
+          }
+
+          if (!dateStr) continue; // Skip items with no ascertainable program date
+
           let startDate = new Date();
-          if (data.date) {
-            startDate = new Date(data.date);
-          } else if (data.event_start_date) {
-            startDate = new Date(data.event_start_date);
-          } else if (data.createdAt || data.created_at) {
-            startDate = new Date(data.createdAt || data.created_at);
-          }
-          if (isNaN(startDate.getTime())) startDate = new Date();
-
-          let endDate = startDate;
-          if (data.endDate || data.event_end_date) {
-            const parsedEnd = new Date(data.endDate || data.event_end_date);
-            if (!isNaN(parsedEnd.getTime())) endDate = parsedEnd;
+          const dateParts = dateStr.split('-').map(Number);
+          if (dateParts.length === 3) {
+            startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0);
           }
 
-          const cat = data.type || data.category || 'rehearsal';
-          const eventTitle = data.title || data.name || data.eventName || data.event_name || data.summary || data.programName || data.program || data.subject || (data.description ? data.description.slice(0, 35) : '') || 'Ministry Event';
-          return {
-            id: data.id || `ev_${Math.random().toString(36).slice(2, 7)}`,
+          // Time display logic
+          let timeDisplay = 'All Day • Scheduled';
+          if (data.time || data.startTime) {
+            hasSpecificTime = true;
+            timeDisplay = String(data.time || data.startTime);
+            if (data.endTime) timeDisplay += ` - ${data.endTime}`;
+          } else if (hasSpecificTime && startTimeFormatted) {
+            timeDisplay = startTimeFormatted;
+          }
+
+          const cat = (data.type || data.category || 'rehearsal').toLowerCase();
+          const eventTitle =
+            data.title ||
+            data.name ||
+            data.eventName ||
+            data.event_name ||
+            data.summary ||
+            data.programName ||
+            data.program ||
+            data.subject ||
+            (data.description ? data.description.slice(0, 35) : '') ||
+            'Ministry Program';
+
+          all.push({
+            id: evId,
             title: eventTitle,
             description: data.description || data.message || '',
             start: startDate,
-            end: endDate,
-            allDay: true,
+            end: startDate,
+            allDay: !hasSpecificTime,
             color: getEventColors(theme)[cat] || theme.colors.accent,
             location: data.location || '',
             type: cat,
@@ -277,10 +352,13 @@ export default function CalendarScreen({ route, navigation }: any) {
             target_audience: data.target_audience,
             target_user_id: data.target_user_id,
             target_group: data.target_group,
-          } as CalendarEvent;
-        });
+            dateString: dateStr,
+            hasSpecificTime,
+            timeDisplay,
+          });
+        }
 
-        all.sort((a, b) => a.start.getTime() - b.start.getTime());
+        all.sort((a, b) => a.dateString.localeCompare(b.dateString));
         setEvents(all);
       } catch (err) {
         console.error('Calendar fetch error:', err);
@@ -291,7 +369,11 @@ export default function CalendarScreen({ route, navigation }: any) {
 
     fetchEvents();
     return () => { isMounted = false; };
-  }, [userZoneId]);
+  }, [userZoneId, calendarRefreshVersion]);
+
+  useWebSocket('programs', 'all', () => {
+    setCalendarRefreshVersion(version => version + 1);
+  }, Boolean(userZoneId));
   useEffect(() => {
     if (!userZoneId) return;
     
@@ -383,7 +465,10 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
     };
   }, [userZoneId]);
 
+  const SHOW_WEATHER_AND_TRAFFIC = false;
+
   useEffect(() => {
+    if (!SHOW_WEATHER_AND_TRAFFIC) return;
     let active = true;
     (async () => {
       try {
@@ -428,14 +513,15 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
         let trafficData;
         try {
           trafficData = await getRealTraffic(lat, lon);
-
+          if (active) setTrafficAvailable(true);
         } catch (err) {
-          console.warn('[CalendarScreen] Failed to load live Google traffic, using simulation fallback:', err);
-          trafficData = getLiveTraffic(cw.condition, base);
+          console.warn('[CalendarScreen] Live traffic unavailable:', err);
+          if (active) setTrafficAvailable(false);
+          return;
         }
         setTraffic(trafficData);
       } catch (err) {
-
+        if (active) setLiveInfoAvailable(false);
       } finally {
         if (active) setWeatherLoading(false);
       }
@@ -447,6 +533,9 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
   const monthLabel = month.toLocaleString('default', { month: 'long' });
   const yearLabel  = month.getFullYear();
 
+  const monthStart = React.useMemo(() => new Date(month.getFullYear(), month.getMonth(), 1), [month]);
+  const monthEnd = React.useMemo(() => new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999), [month]);
+
   const shiftMonth = (d: number) => {
 
     const n = new Date(month);
@@ -454,21 +543,22 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
     setMonth(n);
   };
 
+  const visibleEvents = React.useMemo(() => {
+    return events.filter(ev => {
+      if (!ev.dateString) return false;
+      const date = new Date(`${ev.dateString}T12:00:00`);
+      return !Number.isNaN(date.getTime()) && date >= monthStart && date <= monthEnd;
+    });
+  }, [events, monthStart, monthEnd]);
+
   const markedDates = React.useMemo(() => {
     const marks: any = {};
-    events.forEach(event => {
-      let current = new Date(event.start);
-      current.setHours(0, 0, 0, 0);
-      
-      const end = new Date(event.end);
-      end.setHours(23, 59, 59, 999);
-
-      while (current <= end) {
-        const dateStr = current.toISOString().split('T')[0];
+    visibleEvents.forEach(event => {
+      const dateStr = event.dateString;
+      if (dateStr) {
         if (!marks[dateStr]) {
           marks[dateStr] = { marked: true, dotColor: event.color || theme.colors.accent };
         }
-        current.setDate(current.getDate() + 1);
       }
     });
     if (!marks[today]) {
@@ -484,34 +574,18 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
     };
 
     return marks;
-  }, [events, selected, today, theme.colors.accent]);
+  }, [visibleEvents, selected, today, theme.colors.accent]);
 
   const selectedDateEvents = React.useMemo(() => {
-    return events.filter(ev => {
-      const selDate = new Date(selected);
-      selDate.setHours(12, 0, 0, 0); // Use noon to avoid timezone shift edge cases
-      
-      const start = new Date(ev.start);
-      start.setHours(0, 0, 0, 0);
-      
-      const end = new Date(ev.end);
-      end.setHours(23, 59, 59, 999);
-
-      return selDate >= start && selDate <= end;
-    });
-  }, [events, selected]);
+    return visibleEvents.filter(ev => ev.dateString === selected);
+  }, [visibleEvents, selected]);
 
   const upcomingEvents = React.useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return events
-      .filter(ev => {
-        const end = new Date(ev.end);
-        return end.getTime() >= now.getTime();
-      })
-      .sort((a, b) => a.start.getTime() - b.start.getTime())
-      .slice(0, 5);
-  }, [events]);
+    return visibleEvents
+      .filter(ev => ev.dateString >= today)
+      .sort((a, b) => a.dateString.localeCompare(b.dateString))
+      .slice(0, 6);
+  }, [visibleEvents, today]);
 
   return (
     <View style={s.root}>
@@ -658,13 +732,13 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
                         key={ev.id}
                         style={s.eventCard}
                         onPress={() => {
-                          setSelected(ev.start.toISOString().split('T')[0]);
+                          setSelected(ev.dateString);
                         }}
                       >
                         <View style={[s.eventStripe, { backgroundColor: ev.color }]} />
                         <View style={s.eventBody}>
                           <Text style={s.eventTime}>
-                            {ev.start.toLocaleDateString([], { month: 'short', day: 'numeric' })} · {formatEventTime(ev.start)}
+                            {ev.start.toLocaleDateString([], { month: 'short', day: 'numeric' })} · {ev.timeDisplay || 'Scheduled'}
                           </Text>
                           <Text style={s.eventTitle}>{ev.title}</Text>
                           {ev.description ? <Text style={s.eventDesc} numberOfLines={2}>{ev.description}</Text> : null}
@@ -682,7 +756,9 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
                 <View key={ev.id} style={s.eventCard}>
                   <View style={[s.eventStripe, { backgroundColor: ev.color }]} />
                   <View style={s.eventBody}>
-                    <Text style={s.eventTime}>{formatEventTime(ev.start)} - {formatEventTime(ev.end)}</Text>
+                    <Text style={s.eventTime}>
+                      {ev.timeDisplay || (ev.hasSpecificTime ? `${formatEventTime(ev.start)} - ${formatEventTime(ev.end)}` : 'All Day Program')}
+                    </Text>
                     <Text style={s.eventTitle}>{ev.title}</Text>
                     {ev.description ? <Text style={s.eventDesc} numberOfLines={2}>{ev.description}</Text> : null}
                     {ev.location ? (
@@ -699,57 +775,61 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
               ))
             )}
           </View>
-          <View style={s.section}>
-            <Text style={s.sectionLabel}>WEATHER · {locationName}</Text>
-            <View style={s.infoCard}>
-              {weatherLoading ? (
-                <Text style={s.mutedText}>Fetching weather...</Text>
-              ) : (
-                <>
-                  <View style={s.weatherMain}>
-                    <View style={s.weatherLeft}>
-                      <Ionicons name={weather.icon as any} size={44} color={weather.color} />
-                      <View style={{ marginLeft: 14 }}>
-                        <Text style={s.tempText}>{weather.temp}°C</Text>
-                        <Text style={s.condText}>{weather.condition}</Text>
+          {SHOW_WEATHER_AND_TRAFFIC && liveInfoAvailable && trafficAvailable && (
+            <>
+              <View style={s.section}>
+                <Text style={s.sectionLabel}>WEATHER · {locationName}</Text>
+                <View style={s.infoCard}>
+                  {weatherLoading ? (
+                    <Text style={s.mutedText}>Fetching weather...</Text>
+                  ) : (
+                    <>
+                      <View style={s.weatherMain}>
+                        <View style={s.weatherLeft}>
+                          <Ionicons name={weather.icon as any} size={44} color={weather.color} />
+                          <View style={{ marginLeft: 14 }}>
+                            <Text style={s.tempText}>{weather.temp}°C</Text>
+                            <Text style={s.condText}>{weather.condition}</Text>
+                          </View>
+                        </View>
+                        <Text style={s.updatedText}>{lastUpdated}</Text>
                       </View>
-                    </View>
-                    <Text style={s.updatedText}>{lastUpdated}</Text>
-                  </View>
-                  <View style={s.divider} />
-                  <View style={s.forecastRow}>
-                    {weather.forecast.map((f, i) => (
-                      <View key={i} style={s.forecastItem}>
-                        <Text style={s.fcDay}>{f.day}</Text>
-                        <Ionicons name={f.icon as any} size={18} color={theme.colors.textSecondary} />
-                        <Text style={s.fcTemp}>{f.temp}°</Text>
+                      <View style={s.divider} />
+                      <View style={s.forecastRow}>
+                        {weather.forecast.map((f, i) => (
+                          <View key={i} style={s.forecastItem}>
+                            <Text style={s.fcDay}>{f.day}</Text>
+                            <Ionicons name={f.icon as any} size={18} color={theme.colors.textSecondary} />
+                            <Text style={s.fcTemp}>{f.temp}°</Text>
+                          </View>
+                        ))}
                       </View>
-                    ))}
-                  </View>
-                </>
-              )}
-            </View>
-          </View>
-          <View style={s.section}>
-            <View style={s.sectionHeader}>
-              <Text style={s.sectionLabel}>TRAFFIC · {trafficLocation}</Text>
-              <View style={[s.statusBadge, { backgroundColor: traffic.overallColor + '22' }]}>
-                <View style={[s.statusDot, { backgroundColor: traffic.overallColor }]} />
-                <Text style={[s.statusText, { color: traffic.overallColor }]}>{traffic.overallStatus}</Text>
-              </View>
-            </View>
-            <View style={s.infoCard}>
-              {traffic.routes.map((r, i) => (
-                <View key={i} style={[s.trafficRow, i < traffic.routes.length - 1 && s.trafficRowBorder]}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.routeLabel}>{r.label}</Text>
-                    <Text style={[s.routeStatus, { color: r.color }]}>{r.text}</Text>
-                  </View>
-                  <Ionicons name={r.icon as any} size={20} color={r.color} />
+                    </>
+                  )}
                 </View>
-              ))}
-            </View>
-          </View>
+              </View>
+              <View style={s.section}>
+                <View style={s.sectionHeader}>
+                  <Text style={s.sectionLabel}>TRAFFIC · {trafficLocation}</Text>
+                  <View style={[s.statusBadge, { backgroundColor: traffic.overallColor + '22' }]}> 
+                    <View style={[s.statusDot, { backgroundColor: traffic.overallColor }]} />
+                    <Text style={[s.statusText, { color: traffic.overallColor }]}>{traffic.overallStatus}</Text>
+                  </View>
+                </View>
+                <View style={s.infoCard}>
+                  {traffic.routes.map((r, i) => (
+                    <View key={i} style={[s.trafficRow, i < traffic.routes.length - 1 && s.trafficRowBorder]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.routeLabel}>{r.label}</Text>
+                        <Text style={[s.routeStatus, { color: r.color }]}>{r.text}</Text>
+                      </View>
+                      <Ionicons name={r.icon as any} size={20} color={r.color} />
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </>
+          )}
 
         </ScrollView>
       </SafeAreaView>

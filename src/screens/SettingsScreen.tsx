@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Alert, TextInput, ActivityIndicator, Animated, Dimensions, LayoutAnimation, Platform, UIManager, Modal, RefreshControl, Linking
+  Switch, Alert, TextInput, ActivityIndicator, Animated, Dimensions, LayoutAnimation, Platform, UIManager, Modal, RefreshControl, Linking, KeyboardAvoidingView
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useFocusEffect } from '@react-navigation/native';
@@ -1000,7 +1000,7 @@ export default function SettingsScreen({ navigation }: any) {
               <View style={s.sectionContent}>
                 <TouchableOpacity
                   style={[s.row, { paddingVertical: 14 }]}
-                  onPress={() => WebBrowser.openBrowserAsync('https://rehearsalhub.net/privacy')}
+                  onPress={() => WebBrowser.openBrowserAsync('https://lovelworldsingersrehearsalhub.org/privacy')}
                   activeOpacity={0.7}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
@@ -1012,7 +1012,7 @@ export default function SettingsScreen({ navigation }: any) {
 
                 <TouchableOpacity
                   style={[s.row, { paddingVertical: 14 }]}
-                  onPress={() => WebBrowser.openBrowserAsync('https://rehearsalhub.net/terms')}
+                  onPress={() => WebBrowser.openBrowserAsync('https://lovelworldsingersrehearsalhub.org/terms')}
                   activeOpacity={0.7}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
@@ -1077,6 +1077,10 @@ export default function SettingsScreen({ navigation }: any) {
         animationType="fade"
         onRequestClose={() => setDeleteModalVisible(false)}
       >
+        <KeyboardAvoidingView
+          behavior='padding'
+          style={{ flex: 1 }}
+        >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <View style={{ backgroundColor: T.bottomSheetBackground || T.backgroundDark, borderRadius: 20, padding: 24, width: '100%', borderWidth: 1, borderColor: T.bottomTabBorder }}>
             <Text style={{ color: T.textPrimary, fontSize: 18, fontWeight: '800', marginBottom: 8 }}>Delete Account</Text>
@@ -1109,6 +1113,7 @@ export default function SettingsScreen({ navigation }: any) {
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

@@ -384,7 +384,7 @@ export default function LexiconScreen({ navigation }: any) {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoid}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior='padding'
           keyboardVerticalOffset={0}
         >
           <View style={styles.header}>

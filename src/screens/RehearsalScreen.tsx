@@ -27,7 +27,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { sendPushNotification, sendLocalNotification } from '../lib/notifications';
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import Constants from 'expo-constants';
+
+const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
 import Svg, { Path } from 'react-native-svg';
 import { ZONES, getZoneByInvitationCode, isHQGroup } from '../config/zones';
 import { useZone } from '../hooks/useZone';
@@ -81,15 +84,12 @@ const isSongHeard = (s: any): boolean => {
   return false;
 };
 
-const getTrackImage = (track: any, index: number) => {
-
+const getTrackImage = (track: any, _index?: number) => {
   if (track.image && typeof track.image === 'string' && track.image.startsWith('http')) return track.image;
-  if (track.imageUrl) return track.imageUrl;
-  if (track.artworkUrl) return track.artworkUrl;
-  if (track.coverImage) return track.coverImage;
-  if (track.image && typeof track.image !== 'string') return track.image; // Local require
-
-  return require('../../assets/banner/praisenight28.jpg');
+  if (track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http')) return track.imageUrl;
+  if (track.artworkUrl && typeof track.artworkUrl === 'string' && track.artworkUrl.startsWith('http')) return track.artworkUrl;
+  if (track.coverImage && typeof track.coverImage === 'string' && track.coverImage.startsWith('http')) return track.coverImage;
+  return null;
 };
 
 const getRehearsalCount = (song: any): number => {
@@ -262,6 +262,12 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const [bgColor, setBgColor] = useState(theme.colors.background);
   const [miniPlayerBg, setMiniPlayerBg] = useState(theme.colors.backgroundSecondary);
   const [playerModalBg, setPlayerModalBg] = useState(theme.colors.backgroundDark);
+
+  const placeholderVideoPlayer = useVideoPlayer(TRACK_PLACEHOLDER_VIDEO, player => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
 
   const [activeTab, setActiveTab] = useState<'heard' | 'unheard'>('unheard');
   const [mainTab, setMainTab] = useState<'home' | 'audiolab' | 'more'>('audiolab');
@@ -843,8 +849,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
             drummer: song.drummer || '',
             leadGuitarist: song.leadGuitarist || '',
             createdAt: song.createdAt ? typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString() : new Date().toISOString(),
-            imageUrl: song.imageUrl || '',
-            image: getTrackImage(song, index),
+            imageUrl: song.imageUrl || getTrackImage(song) || '',
+            image: (song.imageUrl || getTrackImage(song)) ? { uri: song.imageUrl || getTrackImage(song) } : null,
             zoneId: resolvedZoneId,
             collectionName: (selectedRehearsal.scope === 'subgroup' || selectedRehearsal.subGroupId)
                ? 'subgroup_songs'
@@ -1558,11 +1564,20 @@ export default function RehearsalScreen({ navigation, route }: any) {
                       {String(index + 1).padStart(2, '0')}
                     </Text>
                   )}
-                  <View style={{ position: 'relative' }}>
-                    <Image source={track.image} style={styles.trackImage} contentFit="cover" cachePolicy="disk" />
+                  <View style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26', marginRight: 12 }}>
+                    {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
+                      <Image source={{ uri: track.imageUrl }} style={styles.trackImage} contentFit="cover" cachePolicy="disk" />
+                    ) : (
+                      <VideoView
+                        player={placeholderVideoPlayer}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                        nativeControls={false}
+                      />
+                    )}
                     {!hasAudio && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="volume-mute" size={18} color="rgba(255,255,255,0.8)" />
+                        <Ionicons name="volume-mute" size={16} color="rgba(255,255,255,0.8)" />
                       </View>
                     )}
                   </View>

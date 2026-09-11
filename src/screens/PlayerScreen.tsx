@@ -28,7 +28,10 @@ import { DoodleLayer } from '../components/DoodleLayer';
 import { MiniDoodleCanvas } from '../components/MiniDoodleCanvas';
 
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import Constants from 'expo-constants';
+
+const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -445,6 +448,7 @@ export default function PlayerScreen({ route, navigation }: any) {
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [liveSong, setLiveSong] = useState<any>(null);
+  const [mediaMode, setMediaMode] = useState<'video' | 'art'>('video');
 
   const showToast = useCallback((text: string, icon?: string) => {
     const id = Date.now();
@@ -560,6 +564,21 @@ export default function PlayerScreen({ route, navigation }: any) {
     adjustLoopPointA,
     adjustLoopPointB,
   } = useTrackPlayer();
+
+  const placeholderVideoPlayer = useVideoPlayer(TRACK_PLACEHOLDER_VIDEO, player => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
+
+  useEffect(() => {
+    if (!placeholderVideoPlayer) return;
+    if (isPlaying) {
+      placeholderVideoPlayer.play();
+    } else {
+      placeholderVideoPlayer.pause();
+    }
+  }, [isPlaying, placeholderVideoPlayer]);
 
   // Sync activeTrack metadata automatically when TrackPlayer advances to next/prev song
   useEffect(() => {
@@ -720,29 +739,76 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (!newPlaylistName.trim()) return;
     setIsCreatingPlaylist(true);
     try {
-      await api.playlists.create({ name: newPlaylistName.trim() });
-      const res = await api.playlists.getAll();
-      if (res?.data) setPlaylists(res.data);
+      const res = await api.playlists.create({
+        name: newPlaylistName.trim(),
+        songIds: activeTrack?.id ? [String(activeTrack.id)] : []
+      });
+      if (res?.success && res.data) {
+        const newPl = {
+          ...res.data,
+          name: res.data.title || res.data.name || newPlaylistName.trim(),
+          title: res.data.title || res.data.name || newPlaylistName.trim(),
+          songs: res.data.songIds || res.data.songs || (activeTrack?.id ? [String(activeTrack.id)] : []),
+          songIds: res.data.songIds || (activeTrack?.id ? [String(activeTrack.id)] : []),
+        };
+        setPlaylists(prev => [newPl, ...prev.filter((p: any) => p.id !== newPl.id)]);
+        showToast('Playlist created & saved to DB!', 'checkmark-circle');
+      }
       setNewPlaylistName('');
-    } catch {}
-    setIsCreatingPlaylist(false);
+    } catch {
+      Alert.alert('Error', 'Failed to create playlist. Please try again.');
+    } finally {
+      setIsCreatingPlaylist(false);
+    }
   };
 
   const handleAddToPlaylist = async (playlistId: string) => {
     if (!activeTrack?.id) return;
     try {
-      await api.playlists.addSong(playlistId, activeTrack.id);
-      Alert.alert('Success', 'Added to playlist');
-      setShowPlaylistModal(false);
-    } catch {}
+      await api.playlists.addSong(playlistId, String(activeTrack.id));
+      showToast('Added to playlist!', 'checkmark-circle');
+      setPlaylists(prev => prev.map(p => {
+        if (p.id === playlistId) {
+          const currentSongs = p.songs || p.songIds || [];
+          return {
+            ...p,
+            songs: [...currentSongs, String(activeTrack.id)],
+            songIds: [...currentSongs, String(activeTrack.id)],
+          };
+        }
+        return p;
+      }));
+      setTimeout(() => setShowPlaylistModal(false), 350);
+    } catch {
+      Alert.alert('Error', 'Failed to add song to playlist');
+    }
   };
 
-  useEffect(() => {
+  const loadUserPlaylists = useCallback(() => {
     if (!user) return;
     api.playlists.getAll().then(res => {
-      if (res?.success && Array.isArray(res.data)) setPlaylists(res.data);
+      if (res?.success && Array.isArray(res.data)) {
+        const shaped = res.data.map((pl: any) => ({
+          ...pl,
+          name: pl.title || pl.name || 'Playlist',
+          title: pl.title || pl.name || 'Playlist',
+          songs: pl.songIds || pl.songs || [],
+          songIds: pl.songIds || [],
+        }));
+        setPlaylists(shaped);
+      }
     }).catch(() => {});
   }, [user]);
+
+  useEffect(() => {
+    loadUserPlaylists();
+  }, [loadUserPlaylists]);
+
+  useEffect(() => {
+    if (showPlaylistModal) {
+      loadUserPlaylists();
+    }
+  }, [showPlaylistModal, loadUserPlaylists]);
 
   const toggleFavorite = async () => {
     if (!activeTrack?.id) return;
@@ -1044,12 +1110,22 @@ export default function PlayerScreen({ route, navigation }: any) {
               style={StyleSheet.absoluteFill}
               onPress={handleArtPress}
             >
-              <Image
-                source={activeTrack.imageUrl ? { uri: activeTrack.imageUrl } : activeTrack.image}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                cachePolicy="disk"
-                blurRadius={8} />
+              {mediaMode === 'art' && (activeTrack?.imageUrl && typeof activeTrack.imageUrl === 'string' && activeTrack.imageUrl.startsWith('http')) ? (
+                <Image
+                  source={{ uri: activeTrack.imageUrl }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  cachePolicy="disk"
+                  blurRadius={8}
+                />
+              ) : (
+                <VideoView
+                  player={placeholderVideoPlayer}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+              )}
               
               <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
 
@@ -1779,21 +1855,6 @@ export default function PlayerScreen({ route, navigation }: any) {
               </TouchableOpacity>
             )}
 
-            {/* Share Song */}
-            <TouchableOpacity style={styles.optionItem} onPress={() => {
-              setShowOptionsModal(false);
-              handleShare();
-            }}>
-              <View style={styles.optionIconBox}>
-                <Ionicons name="share-social-outline" size={22} color={theme.colors.textPrimary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.optionItemText}>Share Song</Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>Share link with song info</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-
             {/* Download for Offline Playback */}
             {activeTrack?.audioUrl && (
               <TouchableOpacity style={styles.optionItem} onPress={handleToggleOfflineDownload} disabled={isDownloadingOffline}>
@@ -1834,18 +1895,6 @@ export default function PlayerScreen({ route, navigation }: any) {
                   {sleepTimerRemaining !== null ? `${Math.ceil(sleepTimerRemaining / 60)} mins remaining` : 'Off'}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-
-            {/* Forward to Chat */}
-            <TouchableOpacity style={styles.optionItem} onPress={() => {
-              setShowOptionsModal(false);
-              setTimeout(() => setShowShareSheet(true), 300);
-            }}>
-              <View style={styles.optionIconBox}>
-                <Ionicons name="chatbubbles-outline" size={22} color={theme.colors.textPrimary} />
-              </View>
-              <Text style={styles.optionItemText}>Forward to Chat</Text>
               <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
 
@@ -2080,7 +2129,8 @@ export default function PlayerScreen({ route, navigation }: any) {
                 <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 20 }}>No playlists yet.</Text>
               ) : (
                 playlists.map(pl => {
-                  const inPlaylist = pl.songs?.includes(String(activeTrack.id));
+                  const songList = (pl.songs || pl.songIds || []).map((s: any) => String(s?.id || s));
+                  const inPlaylist = activeTrack?.id ? songList.includes(String(activeTrack.id)) : false;
                   return (
                     <TouchableOpacity
                       key={pl.id}
@@ -2091,8 +2141,8 @@ export default function PlayerScreen({ route, navigation }: any) {
                         <Ionicons name="musical-notes-outline" size={24} color={theme.colors.textPrimary} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.playlistItemName}>{pl.name}</Text>
-                        <Text style={styles.playlistItemCount}>{(pl.songs || []).length} songs</Text>
+                        <Text style={styles.playlistItemName}>{pl.name || pl.title || 'Untitled'}</Text>
+                        <Text style={styles.playlistItemCount}>{songList.length} {songList.length === 1 ? 'song' : 'songs'}</Text>
                       </View>
                       {inPlaylist && <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />}
                     </TouchableOpacity>

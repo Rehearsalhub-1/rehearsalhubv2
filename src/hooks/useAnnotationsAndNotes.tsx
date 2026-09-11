@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, PanResponder, Modal, TextInput, ActivityIndicator, Alert, Dimensions, ScrollView, Keyboard } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Text, PanResponder, Modal, TextInput, ActivityIndicator, Alert, Dimensions, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../lib/apiClient';
 import { useTheme } from '../context/ThemeContext';
@@ -104,6 +104,10 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
 
   const notesModalElement = (
     <Modal visible={showNotesModal} transparent={false} animationType="slide" onRequestClose={() => setShowNotesModal(false)}>
+      <KeyboardAvoidingView
+        behavior='padding'
+        style={{ flex: 1 }}
+      >
       <View style={{ flex: 1, backgroundColor: theme.colors.backgroundDark }}>
         <View style={{
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -174,6 +178,7 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
 
         <View style={{ height: insets.bottom + 16 }} />
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 

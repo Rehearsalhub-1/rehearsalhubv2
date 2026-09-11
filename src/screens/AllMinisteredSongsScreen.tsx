@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ScrollView,
   Dimensions, TextInput, Modal, Pressable, ActivityIndicator,
-  FlatList, Platform, RefreshControl, Alert
+  FlatList, Platform, RefreshControl, Alert, KeyboardAvoidingView
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { DoodleBackground } from '../components/DoodleBackground';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import { BlurView } from 'expo-blur';
 import TrackOptionsModal from '../components/TrackOptionsModal';
 import { isHQGroup } from '../config/zones';
@@ -24,13 +25,12 @@ import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer'
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
 
-
-const getTrackImage = (track: any, index: number) => {
+const getTrackImage = (track: any) => {
   if (track.image && typeof track.image === 'string' && track.image.startsWith('http')) return track.image;
-  if (track.imageUrl) return track.imageUrl;
-  if (track.image && typeof track.image !== 'string') return track.image; // Local require
-  return require('../../assets/banner/praisenight28.jpg');
+  if (track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http')) return track.imageUrl;
+  return null;
 };
 
 const getRehearsalCount = (song: any): number => {
@@ -70,6 +70,12 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
   
   const { currentTrack: activeTrack, isPlaying, play, togglePlayback } = useTrackPlayer();
   const { currentZone, isLoading: isZoneLoading, zoneVersion } = useZone();
+
+  const placeholderVideoPlayer = useVideoPlayer(TRACK_PLACEHOLDER_VIDEO, player => {
+    player.loop = true;
+    player.muted = true;
+    player.play();
+  });
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
@@ -243,8 +249,8 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             drummer: song.drummer || '',
             leadGuitarist: song.leadGuitarist || '',
             createdAt: song.createdAt ? (typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString()) : new Date().toISOString(),
-            imageUrl: song.imageUrl || progBanner || '',
-            image: progBanner ? { uri: progBanner } : getTrackImage(song, index),
+            imageUrl: song.imageUrl || progBanner || getTrackImage(song) || '',
+            image: (song.imageUrl || progBanner || getTrackImage(song)) ? { uri: song.imageUrl || progBanner || getTrackImage(song) } : null,
             zoneId: resolvedZoneId,
             collectionName: isHQ ? 'praise_night_songs' : 'zone_songs'
           };
@@ -467,16 +473,21 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           ListHeaderComponent={
             <>
           <View style={s.heroBanner}>
-            <Image source={require('../../assets/image/home1.jpg')} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+            <Image
+              source={require('../../assets/image/home1.jpg')}
+              style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+              contentFit="cover"
+              transition={200}
+            />
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.85)']}
-              locations={[0, 0.5, 1]}
-              style={StyleSheet.absoluteFillObject}
+              colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(11,11,16,0.92)']}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFill}
             />
             <View style={s.heroContent}>
               <View style={s.heroLogoRow}>
                 <Image source={require('../../assets/logo/logo.png')} style={s.heroLogo} contentFit="contain" />
-                <Text style={s.heroLogoText}>Official Repertoire</Text>
+                <Text style={s.heroLogoText}>Loveworld Singers</Text>
               </View>
               <Text style={s.heroTitle}>Ministered Songs</Text>
               <Text style={s.heroSub}>
@@ -699,11 +710,22 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 ) : (
                   <Text style={[s.trackIndex, isActiveTrack && { color: theme.colors.accent }]}>{String(index + 1).padStart(2, '0')}</Text>
                 )}
-                <View style={{ position: 'relative' }}>
-                  <Image source={track.image} style={s.trackArt} contentFit="cover" />
+                <View style={s.trackArtContainer}>
+                  {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
+                    <Image source={{ uri: track.imageUrl }} style={s.trackArt} contentFit="cover" />
+                  ) : (
+                    <View style={s.trackArtVideoWrap}>
+                      <VideoView
+                        player={placeholderVideoPlayer}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                        nativeControls={false}
+                      />
+                    </View>
+                  )}
                   {!hasAudio && (
-                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="volume-mute" size={18} color="rgba(255,255,255,0.8)" />
+                    <View style={s.noAudioOverlay}>
+                      <Ionicons name="volume-mute" size={16} color="rgba(255,255,255,0.85)" />
                     </View>
                   )}
                 </View>
@@ -851,6 +873,10 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         )}
       </SafeAreaView>
       <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
+        <KeyboardAvoidingView
+          behavior='padding'
+          style={{ flex: 1 }}
+        >
         <BlurView intensity={60} tint="dark" style={{ flex: 1, justifyContent: 'flex-end' }}>
           <Pressable style={{ flex: 1 }} onPress={() => setShowFilterModal(false)} />
           <View style={s.modal}>
@@ -956,6 +982,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             </View>
           </View>
         </BlurView>
+        </KeyboardAvoidingView>
       </Modal>
 
       <TrackOptionsModal 
@@ -1005,18 +1032,54 @@ const getStyles = (theme: any) => {
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { color: T.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
 
-  heroBanner: { width: SCREEN_WIDTH, height: SCREEN_WIDTH * 0.52, position: 'relative', marginBottom: 4 },
-  heroContent: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20 },
-  heroLogoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 },
-  heroLogo: { width: 22, height: 22, borderRadius: 11 },
-  heroLogoText: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
+  heroBanner: {
+    width: '100%',
+    height: Math.round(Math.min(SCREEN_WIDTH * 0.62, 260)),
+    position: 'relative',
+    overflow: 'hidden',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    marginBottom: 12,
+    backgroundColor: '#12111A',
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  heroLogoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  heroLogo: { width: 18, height: 18 },
+  heroLogoText: { color: '#ffffff', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
   heroTitle: { color: '#ffffff', fontSize: 26, fontWeight: '900', letterSpacing: -0.5, marginBottom: 2 },
-  heroSub: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '500', marginBottom: 16 },
-  heroStats: { flexDirection: 'row', alignItems: 'center', gap: 0 },
-  statItem: { alignItems: 'center', paddingHorizontal: 16 },
-  statNum: { color: '#ffffff', fontSize: 20, fontWeight: '900' },
-  statLbl: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '600', marginTop: 1 },
-  statDivider: { width: 1, height: 28, backgroundColor: 'rgba(255,255,255,0.2)' },
+  heroSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12.5, fontWeight: '500', marginBottom: 14 },
+  heroStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  statItem: { alignItems: 'center', paddingHorizontal: 12 },
+  statNum: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
+  statLbl: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', marginTop: 1, textTransform: 'uppercase', letterSpacing: 0.5 },
+  statDivider: { width: 1, height: 22, backgroundColor: 'rgba(255,255,255,0.15)' },
 
   searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12, gap: 10 },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: T.inputBackground, borderRadius: 12, paddingHorizontal: 12, height: 42, borderWidth: 1, borderColor: T.inputBorder },
@@ -1036,7 +1099,10 @@ const getStyles = (theme: any) => {
   trackList: { paddingHorizontal: 16, gap: 0 },
   trackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.divider },
   trackIndex: { color: T.textMuted, fontSize: 12, fontWeight: '700', width: 28, textAlign: 'center' },
-  trackArt: { width: 46, height: 46, borderRadius: 8, marginRight: 12 },
+  trackArtContainer: { width: 46, height: 46, borderRadius: 8, marginRight: 12, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26' },
+  trackArt: { width: 46, height: 46, borderRadius: 8 },
+  trackArtVideoWrap: { width: 46, height: 46, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C26' },
+  noAudioOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   trackInfo: { flex: 1, justifyContent: 'center' },
   trackTitle: { color: T.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 3 },
   trackMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },

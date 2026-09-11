@@ -51,7 +51,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef, navigate, reset } from './src/navigation/navigationService';
 import { OfflineBanner } from './src/components/OfflineBanner';
 import { AppUpdateChecker } from './src/components/AppUpdateChecker';
-import { initializeUserStore, useUserStore } from './src/hooks/useUser';
+import { useUserStore } from './src/hooks/useUser';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import SessionResumeBanner from './src/components/SessionResumeBanner';
 import { ensureCacheSchema } from './src/lib/ensureCacheSchema';
@@ -223,21 +223,16 @@ function App() {
         appState.current.match(/inactive|background/) &&
         nextState === 'active'
       ) {
-        // App came from background — skip re-initialization, restore state
-        console.log('[App] Returned from background — restoring state');
+        // App came from background — restore state if needed without aborting splash prematurely
         if (!initialRoute) setInitialRoute(useUserStore.getState().user ? 'Home' : 'Login');
         if (!appIsReady) setAppIsReady(true);
-        if (!animationFinished) setAnimationFinished(true);
       }
       appState.current = nextState;
     });
     return () => sub.remove();
-  }, [appIsReady, animationFinished, initialRoute]);
+  }, [appIsReady, initialRoute]);
 
   useEffect(() => {
-    // Initialize the Zustand user store (auth listener + profile snapshot)
-    initializeUserStore();
-
     async function prepare() {
       try {
         const flushed = await flushDebugSessionLogs();

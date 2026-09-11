@@ -2589,7 +2589,7 @@ export default function AudiolabScreen({ navigation }: any) {
         </Modal>
       )}
       <Modal visible={renamingTrackId !== null} transparent animationType="fade" onRequestClose={() => setRenamingTrackId(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: 32 }}>
+        <KeyboardAvoidingView behavior='padding' style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: 32 }}>
           <View style={{ backgroundColor: theme.colors.backgroundDark, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.colors.bottomTabBorder }}>
             <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700', marginBottom: 16 }}>Rename Track</Text>
             <TextInput

@@ -350,7 +350,7 @@ export default function HomeScreen({ navigation }: any) {
             <Image
               source={require('../../assets/logo/logo.png')}
               style={styles.headerLogo}
-              contentFit="cover" />
+              contentFit="contain" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -476,7 +476,11 @@ export default function HomeScreen({ navigation }: any) {
         pointerEvents={isSidebarOpen ? 'auto' : 'none'}
         style={[styles.backdrop, { opacity: backdropAnim }]}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={toggleSidebar} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onStartShouldSetResponder={() => true}
+          onPress={() => setIsSidebarOpen(false)}
+        />
       </Animated.View>
 
       {/* Slide-out Sidebar Drawer */}
@@ -858,7 +862,7 @@ const getStyles = (theme: any, insets?: any) => {
   logoContainer: {
     position: 'absolute',
     top: topInset,
-    right: 92,
+    right: 96,
     width: 34,
     height: 34,
     borderRadius: 17,

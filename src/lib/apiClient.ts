@@ -254,6 +254,10 @@ async function request<T>(
 
     if (method !== 'GET') {
       if (!res.ok || (json && json.success === false)) {
+        // Special case for auth flows that return structured codes with success: false (like NO_ACCOUNT, MULTIPLE_ACCOUNTS)
+        if (res.ok && (json?.code || path.includes('/auth/kingschat'))) {
+          return json as T;
+        }
         const errMsg = json?.error || json?.message || `Request failed (${res.status})`;
         console.warn(`[apiClient] ${method} ${path} failed:`, errMsg);
         const err = new Error(errMsg);

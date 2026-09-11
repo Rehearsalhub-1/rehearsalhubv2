@@ -74,7 +74,6 @@ export default function ChatSettingsScreen({ navigation }: any) {
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{(currentUser as any)?.displayName || (currentUser as any)?.name || "User" || 'My Account'}</Text>
               <Text style={styles.profileEmail}>{currentUser?.email || ''}</Text>
-              <Text style={styles.profileEdit}>Tap to edit profile</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={T.textMuted} />
           </TouchableOpacity>
@@ -91,19 +90,11 @@ export default function ChatSettingsScreen({ navigation }: any) {
               toggle toggleValue={readReceipts} onToggle={setReadReceipts} />
             <Row icon="pencil-outline" label="Typing indicator"
               toggle toggleValue={typingIndicator} onToggle={setTypingIndicator} />
-            <Row icon="eye-outline" label="Last seen" value="Everyone"
-              onPress={() => Alert.alert('Last Seen', 'Coming soon')} />
-            <Row icon="person-circle-outline" label="Profile photo" value="Everyone"
-              onPress={() => Alert.alert('Profile Photo', 'Coming soon')} />
           </View>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Chats</Text>
             <Row icon="cloud-download-outline" label="Media auto-download"
               toggle toggleValue={mediaAutoDownload} onToggle={setMediaAutoDownload} />
-            <Row icon="color-palette-outline" label="Chat wallpaper"
-              onPress={() => Alert.alert('Wallpaper', 'Coming soon')} />
-            <Row icon="archive-outline" label="Archived chats"
-              onPress={() => Alert.alert('Archived', 'Coming soon')} />
           </View>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Help</Text>

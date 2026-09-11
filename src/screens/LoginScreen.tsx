@@ -18,13 +18,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 import { Image } from 'expo-image';
 
 import { darkTheme } from '../constants/Colors';
 import { ZONES, Zone, getZoneByInvitationCode, isHQGroup } from '../config/zones';
-import { BiometricService } from '../lib/biometrics';
 import { api } from '../services/api';
 import { reinitializeUserStore, useUserStore } from '../hooks/useUser';
 
@@ -58,7 +56,6 @@ export default function LoginScreen({ route, navigation }: any) {
   const [isLogin, setIsLogin] = useState(route?.params?.mode !== 'signup');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
 
   // Form Fields
   const [firstName, setFirstName] = useState('');
@@ -68,11 +65,6 @@ export default function LoginScreen({ route, navigation }: any) {
   const [zoneCode, setZoneCode] = useState('');
   const [designation, setDesignation] = useState('Soprano');
   const [kingschatId, setKingschatId] = useState('');
-
-  // Biometrics
-  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
-  const [biometricsEnabled, setBiometricsEnabled] = useState(false);
-  const [biometricType, setBiometricType] = useState<'FaceID' | 'Fingerprint' | 'Biometrics'>('Biometrics');
 
   // Zone Picker Modal
   const [showZoneModal, setShowZoneModal] = useState(false);
@@ -91,8 +83,6 @@ export default function LoginScreen({ route, navigation }: any) {
   const [dbZones, setDbZones] = useState<any[]>([]);
 
   useEffect(() => {
-    checkRememberedCredentials();
-    checkBiometrics();
     loadZones();
   }, []);
 
@@ -115,68 +105,6 @@ export default function LoginScreen({ route, navigation }: any) {
         setDbZones(res.data);
       }
     } catch {}
-  };
-
-  const checkRememberedCredentials = async () => {
-    try {
-      const enabled = await SecureStore.getItemAsync('remember_me_enabled');
-      if (enabled === 'true') {
-        const savedEmail = await SecureStore.getItemAsync('remembered_email');
-        const savedPassword = await SecureStore.getItemAsync('remembered_password');
-        if (savedEmail) {
-          setEmail(savedEmail);
-          setRememberMe(true);
-        }
-        if (savedPassword) {
-          setPassword(savedPassword);
-        }
-      }
-    } catch {}
-  };
-
-  const checkBiometrics = async () => {
-    try {
-      const isSupported = await BiometricService.isHardwareSupported();
-      if (isSupported) {
-        setBiometricsAvailable(true);
-        const type = await BiometricService.getBiometricType();
-        setBiometricType(type);
-
-        const savedCreds = await BiometricService.getCredentials();
-        if (savedCreds) {
-          setBiometricsEnabled(true);
-          setEmail(savedCreds.email);
-          setPassword('••••••••••••');
-        }
-      }
-    } catch {}
-  };
-
-  const handleBiometricAuth = async () => {
-    try {
-      setLoading(true);
-      const creds = await BiometricService.getCredentials();
-      if (!creds || !creds.email || !creds.password) {
-        Alert.alert('Biometrics', 'No saved credentials found. Please sign in with your password first.');
-        setLoading(false);
-        return;
-      }
-
-      const res = await api.auth.login(creds.email, creds.password);
-
-      if (res.success && res.data) {
-        const userId = res.data.user?.id || (res.data as any)?.userId || '';
-        await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
-        await useUserStore.getState().bootstrap();
-        navigation.replace('Home');
-      } else {
-        Alert.alert('Authentication Failed', sanitizeError(res.error || 'Invalid credentials'));
-      }
-    } catch (err: any) {
-      Alert.alert('Biometrics Error', err?.message || 'Biometric authentication failed');
-    } finally {
-      setLoading(false);
-    }
   };
 
   // Multi-Account Chooser State
@@ -307,32 +235,8 @@ export default function LoginScreen({ route, navigation }: any) {
         const userId = res.data.user?.id || (res.data as any)?.userId || '';
         await api.auth.storeTokens(res.data.accessToken, res.data.refreshToken, userId);
 
-        if (rememberMe) {
-          await SecureStore.setItemAsync('remember_me_enabled', 'true');
-          await SecureStore.setItemAsync('remembered_email', email.trim());
-          await SecureStore.setItemAsync('remembered_password', password);
-        }
-
         await useUserStore.getState().bootstrap();
-
-        if (biometricsAvailable && !biometricsEnabled) {
-          Alert.alert(
-            'Enable Biometrics',
-            `Would you like to enable ${biometricType === 'FaceID' ? 'Face ID' : 'Fingerprint'} for faster sign in?`,
-            [
-              { text: 'No Thanks', onPress: () => navigation.replace('Home') },
-              {
-                text: 'Enable',
-                onPress: async () => {
-                  await BiometricService.saveCredentials(email.trim(), password);
-                  navigation.replace('Home');
-                },
-              },
-            ]
-          );
-        } else {
-          navigation.replace('Home');
-        }
+        navigation.replace('Home');
       } catch (err: any) {
         Alert.alert('Sign In Error', sanitizeError(err?.message || 'Failed to sign in'));
       } finally {
@@ -742,21 +646,6 @@ export default function LoginScreen({ route, navigation }: any) {
 
               {/* Action Buttons */}
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                {isLogin && biometricsAvailable && (
-                  <TouchableOpacity
-                    style={styles.biometricButton}
-                    onPress={handleBiometricAuth}
-                    disabled={loading}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name={biometricType === 'FaceID' ? 'scan-outline' : 'finger-print-outline'}
-                      size={24}
-                      color={darkTheme.colors.accent}
-                    />
-                  </TouchableOpacity>
-                )}
-
                 <TouchableOpacity
                   style={[styles.primaryButton, { flex: 1 }]}
                   onPress={handleSubmit}
@@ -792,7 +681,7 @@ export default function LoginScreen({ route, navigation }: any) {
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior='padding'
         >
           <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowZoneModal(false); }}>
             <View style={styles.modalBackdrop}>
@@ -993,7 +882,7 @@ export default function LoginScreen({ route, navigation }: any) {
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior='padding'
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -1376,16 +1265,6 @@ function getStyles() {
       color: '#fff',
       fontSize: 14,
       fontWeight: '800',
-    },
-    biometricButton: {
-      width: 50,
-      height: 50,
-      borderRadius: 16,
-      backgroundColor: 'rgba(147, 51, 234, 0.15)',
-      borderWidth: 1,
-      borderColor: 'rgba(147, 51, 234, 0.3)',
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     modalBackdrop: {
       flex: 1,

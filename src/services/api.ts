@@ -118,11 +118,16 @@ export const api = {
   // ── Playlists ────────────────────────────────────────────────────────────
   playlists: {
     getAll: () =>
-      apiClient.get<{ success: boolean; data: any[] }>('/playlists'),
+      apiClient.get<{ success: boolean; data: any[] }>('/playlists/me').catch(() =>
+        apiClient.get<{ success: boolean; data: any[] }>('/playlists')
+      ),
     getById: (playlistId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/playlists/${playlistId}`),
-    create: (data: { name: string; description?: string; isPublic?: boolean }) =>
-      apiClient.post<{ success: boolean; data: any }>('/playlists', data),
+    create: (data: { name: string; title?: string; description?: string; isPublic?: boolean; songIds?: string[] }) =>
+      apiClient.post<{ success: boolean; data: any }>('/playlists', {
+        ...data,
+        title: data.title || data.name,
+      }),
     update: (playlistId: string, data: Record<string, any>) =>
       apiClient.patch<{ success: boolean; data: any }>(`/playlists/${playlistId}`, data),
     delete: (playlistId: string) =>
@@ -131,6 +136,18 @@ export const api = {
       apiClient.post<{ success: boolean }>(`/playlists/${playlistId}/songs`, { songId }),
     removeSong: (playlistId: string, songId: string) =>
       apiClient.delete<{ success: boolean }>(`/playlists/${playlistId}/songs/${songId}`),
+  },
+
+  // ── Media & Videos ───────────────────────────────────────────────────────
+  media: {
+    getAll: (zoneId?: string, limit = 100, search = '') =>
+      apiClient.get<{ success: boolean; data: any[] }>(
+        `/media?type=video${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}&limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`
+      ),
+    getCategories: () =>
+      apiClient.get<{ success: boolean; data: any[] }>('/media/categories'),
+    getById: (id: string) =>
+      apiClient.get<{ success: boolean; data: any }>(`/media/${id}`),
   },
 
   // ── Chats & Messages ─────────────────────────────────────────────────────
@@ -257,14 +274,6 @@ export const api = {
   settings: {
     get: (docId: string) =>
       apiClient.get<{ success: boolean; data: any }>(`/settings/${docId}`),
-  },
-
-  // ── Media Library ────────────────────────────────────────────────────────
-  media: {
-    getAll: (zoneId?: string, limit = 50, type?: string) =>
-      apiClient.get<any>(`/media?limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}${type ? `&type=${encodeURIComponent(type)}` : ''}`),
-    getCategories: () =>
-      apiClient.get<any>('/media/categories'),
   },
 
   // ── Lexicon & AI ─────────────────────────────────────────────────────────

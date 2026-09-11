@@ -2265,7 +2265,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     );
   };
   const renderMessage = ({ item: msg, index }: { item: ChatMessage; index: number }) => {
-    if (!msg) return null;
+    if (!msg || msg.isSystem) return null;
     const ts = (msg.timestampObj && typeof msg.timestampObj.getTime === 'function' && !isNaN(msg.timestampObj.getTime()))
       ? msg.timestampObj
       : ((msg as any).createdAt ? new Date((msg as any).createdAt) : new Date());
@@ -2320,13 +2320,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           leftThreshold={40}
         >
           <React.Fragment>
-        {msg.isSystem ? (
-          <View style={styles.systemWrap}>
-            <View style={[styles.systemPill, { backgroundColor: APP_THEME.datePill }]}>
-              <Text style={[styles.systemText, { color: APP_THEME.secondaryText }]}>{msg.text}</Text>
-            </View>
-          </View>
-        ) : (
+        {msg.isSystem ? null : (
           <>
             {reactionEntries.length > 0 && (
               <View style={[styles.reactionPillRow, msg.isMe ? { justifyContent:'flex-end', paddingRight:8 } : { justifyContent:'flex-start', paddingLeft: isGroup ? 42 : 8 }]}>
