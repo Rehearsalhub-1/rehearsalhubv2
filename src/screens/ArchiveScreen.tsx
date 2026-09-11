@@ -102,25 +102,6 @@ export default function ArchiveScreen({ navigation }: any) {
           api.programs.getAll(isHQ ? undefined : resolvedZoneId).catch(() => null),
         ]);
 
-        // Fallback: If zone-scoped query returned empty or failed, fetch global programs
-        if (!programsResult?.success || !Array.isArray(programsResult.data) || programsResult.data.length === 0) {
-          try {
-            const fallbackProgs = await api.programs.getAll().catch(() => null);
-            if (fallbackProgs?.success && Array.isArray(fallbackProgs.data) && fallbackProgs.data.length > 0) {
-              programsResult = fallbackProgs;
-            }
-          } catch {}
-        }
-
-        // Fallback: If categories returned empty or failed, fetch global page categories
-        if (!categoriesResult?.success || !Array.isArray(categoriesResult.data) || categoriesResult.data.length === 0) {
-          try {
-            const fallbackCats = await api.categories.getPage().catch(() => null);
-            if (fallbackCats?.success && Array.isArray(fallbackCats.data) && fallbackCats.data.length > 0) {
-              categoriesResult = fallbackCats;
-            }
-          } catch {}
-        }
 
         let fetchedCategories: any[] = categoriesResult?.success && Array.isArray(categoriesResult.data) ? categoriesResult.data : [];
         let allPrograms: any[] = [];

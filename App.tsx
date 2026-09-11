@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { View, StyleSheet, LogBox, Alert, AppState, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, LogBox, Alert, AppState } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Sentry from '@sentry/react-native';
@@ -37,7 +37,7 @@ if (typeof (global as any).ErrorUtils !== 'undefined') {
 enableScreens(true);
 enableFreeze(false);
 
-LogBox.ignoreLogs(['expo-av is deprecated', 'Method moveAsync']);
+LogBox.ignoreLogs(['Method moveAsync']);
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -196,7 +196,6 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
     <SafeAreaProvider style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <StatusBar 
         style={themeName === 'dark' ? 'light' : 'dark'} 
-        backgroundColor={themeName === 'dark' ? theme.colors.background : '#ffffff'} 
       />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
         <NavigationContainer theme={NavTheme} ref={navigationRef} linking={linking}>
@@ -276,36 +275,25 @@ function App() {
     prepare();
   }, []);
 
+  // Hide the native splash screen immediately so our custom video splash is visible
   useEffect(() => {
-    if (appIsReady && animationFinished) {
-      SplashScreen.hideAsync().catch(() => {});
-      debugSessionLog('H5', 'App.tsx:splash:hide', 'Splash hide requested', {
-        appIsReady,
-        animationFinished,
-      });
-    }
-  }, [appIsReady, animationFinished]);
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   const onLayoutRootView = useCallback(async () => {
-    // This can stay as a fallback, but the useEffect above guarantees it hides.
-    if (appIsReady) {
-      await SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [appIsReady]);
-
-  if (!appIsReady || !initialRoute) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#0a0a0a', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#6c5ce7" />
-      </View>
-    );
-  }
+    // Fallback in case the immediate useEffect didn't fire yet
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        {/* Render AppContent immediately so it loads in the background */}
-        <AppContent initialRoute={initialRoute} />
+        {/* Render AppContent only when ready; show a black background while bootstrapping */}
+        {appIsReady && initialRoute ? (
+          <AppContent initialRoute={initialRoute} />
+        ) : (
+          <View style={{ flex: 1, backgroundColor: '#0a0a0a' }} />
+        )}
 
         {/* Overlay the Splash Screen on top until it finishes */}
         {!animationFinished && (

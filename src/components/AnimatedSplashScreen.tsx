@@ -13,31 +13,45 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
   const styles = getStyles(theme);
   const opacity = useRef(new Animated.Value(1)).current;
   const [isFinished, setIsFinished] = useState(false);
-  const [isMuted, setIsMuted] = useState(false); // Add mute state
+  const [isMuted, setIsMuted] = useState(true); // Muted by default
 
   const player = useVideoPlayer(require('../../assets/splash_new.mp4'), player => {
     player.loop = false;
-    player.muted = isMuted;
+    player.muted = true;
     player.play();
-  });
+  });
+
   useEffect(() => {
     if (player) {
       player.muted = isMuted;
+      try {
+        player.play();
+      } catch (e) {
+        console.warn('Error playing splash video:', e);
+      }
     }
   }, [isMuted, player]);
 
   useEventListener(player, 'playToEnd', () => {
     setIsFinished(true);
-  });
+  });
+
+  useEventListener(player, 'statusChange', ({ status, error }) => {
+    if (status === 'error') {
+      console.warn('Splash video error:', error);
+      setIsFinished(true);
+    }
+  });
+
   useEffect(() => {
     const fallbackTimer = setTimeout(() => {
       setIsFinished(true);
-    }, 10000);
+    }, 8000);
     return () => clearTimeout(fallbackTimer);
   }, []);
 
   useEffect(() => {
-    if (isFinished) {
+    if (isFinished) {
       Animated.timing(opacity, {
         toValue: 0,
         duration: 400,
@@ -53,7 +67,7 @@ export default function AnimatedSplashScreen({ onAnimationFinish }: {onAnimation
       <VideoView 
         style={StyleSheet.absoluteFillObject} 
         player={player} 
-        contentFit="contain"
+        contentFit="cover"
         nativeControls={false}
       />
       <TouchableOpacity 
@@ -88,7 +102,7 @@ const getStyles = (theme: any) => {
   return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#000000',
     alignItems: 'center',
     justifyContent: 'center'
   },

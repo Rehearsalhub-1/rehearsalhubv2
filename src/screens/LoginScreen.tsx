@@ -764,7 +764,7 @@ export default function LoginScreen({ route, navigation }: any) {
                   activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={[darkTheme.colors.accent, darkTheme.colors.accentBright]}
+                    colors={['#8b5cf6', '#a855f7', '#c084fc']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={StyleSheet.absoluteFillObject}
@@ -1366,7 +1366,7 @@ function getStyles() {
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: darkTheme.colors.accent,
+      shadowColor: '#a855f7',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.3,
       shadowRadius: 8,

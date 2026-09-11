@@ -1,23 +1,29 @@
-const { withProjectBuildGradle } = require('@expo/config-plugins');
+/**
+ * Sets the Kotlin JVM target to 17 to avoid "Kotlin/JVM target compatibility" warnings
+ * when building with Gradle + React Native 0.76+.
+ */
 
-module.exports = function withKotlinJvmTarget(config) {
-  return withProjectBuildGradle(config, (config) => {
-    let buildGradle = config.modResults.contents;
-    
-    // Check if the subprojects Kotlin compiler configuration is already added
-    if (!buildGradle.includes('jvmTarget = "17"')) {
-      buildGradle += `
-
-subprojects {
-  tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-    kotlinOptions {
-      jvmTarget = "17"
-    }
-  }
+let withAppBuildGradle;
+try {
+  // Try the root node_modules first
+  ({ withAppBuildGradle } = require('@expo/config-plugins'));
+} catch {
+  // Fall back to expo's own bundled copy
+  ({ withAppBuildGradle } = require('expo/node_modules/@expo/config-plugins'));
 }
-`;
-      config.modResults.contents = buildGradle;
+
+const withKotlinJvmTarget = (config) => {
+  return withAppBuildGradle(config, (config) => {
+    const gradle = config.modResults.contents;
+    if (!gradle.includes('kotlinOptions')) {
+      config.modResults.contents = gradle.replace(
+        /compileOptions\s*\{[^}]*\}/,
+        (match) =>
+          match + '\n    kotlinOptions {\n        jvmTarget = "17"\n    }'
+      );
     }
     return config;
   });
 };
+
+module.exports = withKotlinJvmTarget;

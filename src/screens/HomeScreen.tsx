@@ -13,7 +13,8 @@ import {
   ScrollView,
   StatusBar as RNStatusBar,
   AppState,
-  Alert } from
+  Alert,
+  Easing } from
 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
@@ -73,7 +74,11 @@ const MENU_SECTIONS = [
   { id: 'media', title: 'Media', icon: 'images' },
   { id: 'chat', title: 'Chat Rooms', icon: 'chatbubbles' },
   { id: 'links', title: 'Links', icon: 'link' }]
-
+},
+{
+  header: 'LIBRARY',
+  items: [
+  { id: 'playlists', title: 'Your Playlists', icon: 'albums' }]
 },
 
 ];
@@ -141,8 +146,8 @@ const INITIAL_CARDS = [
 
 export default function HomeScreen({ navigation }: any) {
   const { theme } = useTheme();
-  const styles = useMemo(() => getStyles(theme), [theme]);
   const insets = useSafeAreaInsets();
+  const styles = useMemo(() => getStyles(theme, insets), [theme, insets]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [cards, setCards] = useState([
@@ -261,35 +266,30 @@ export default function HomeScreen({ navigation }: any) {
   }, [user?.uid, isFocused]);
 
   const toggleSidebar = () => {
+    const nextState = !isSidebarOpen;
+    const toValue = nextState ? 0 : -SIDEBAR_WIDTH;
+    const backdropToValue = nextState ? 1 : 0;
 
-    const toValue = isSidebarOpen ? -SIDEBAR_WIDTH : 0;
-    const backdropToValue = isSidebarOpen ? 0 : 1;
-
-    setIsSidebarOpen(!isSidebarOpen);
+    setIsSidebarOpen(nextState);
 
     Animated.parallel([
-    Animated.spring(sidebarAnim, {
-      toValue,
-      damping: 40,
-      stiffness: 200,
-      useNativeDriver: true
-    }),
-    Animated.timing(backdropAnim, {
-      toValue: backdropToValue,
-      duration: 300,
-      useNativeDriver: true
-    })]
-    ).start();
+      Animated.timing(sidebarAnim, {
+        toValue,
+        duration: 260,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: backdropToValue,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const mainScale = sidebarAnim.interpolate({
     inputRange: [-SIDEBAR_WIDTH, 0],
     outputRange: [1, 0.94]
-  });
-
-  const mainRadius = sidebarAnim.interpolate({
-    inputRange: [-SIDEBAR_WIDTH, 0],
-    outputRange: [0, 32]
   });
 
   return (
@@ -328,54 +328,58 @@ export default function HomeScreen({ navigation }: any) {
         styles.mainContent,
         {
           transform: [{ scale: mainScale }],
-          borderRadius: mainRadius,
+          borderRadius: isSidebarOpen ? 24 : 0,
           overflow: 'hidden'
         }]
         }>
         
+        {/* Pinned Top Navigation Bar - Stays fixed and always visible */}
+        <View style={styles.fixedHeaderRow} pointerEvents="box-none">
+          <TouchableOpacity
+            style={styles.menuTextLink}
+            activeOpacity={0.7}
+            hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
+            onPress={toggleSidebar}>
+            <Ionicons name="menu-outline" size={26} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.logoContainer}
+            activeOpacity={0.7}
+            onPress={toggleSidebar}>
+            <Image
+              source={require('../../assets/logo/logo.png')}
+              style={styles.headerLogo}
+              contentFit="cover" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.notificationHeaderIcon}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Notifications')}>
+            <Ionicons name="notifications-outline" size={22} color={theme.colors.textPrimary} />
+            {unreadCount > 0 && <View style={styles.notificationDot} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.profileHeaderIcon}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('Settings')}>
+            <SyncAvatar 
+              userId={user?.uid}
+              initialAvatar={contextProfile?.avatar}
+              fallbackName={contextProfile?.firstName || userProfile?.first_name || "Me"}
+              size={28}
+              bgColor="rgba(255,255,255,0.08)"
+            />
+          </TouchableOpacity>
+        </View>
+
         <ScrollView
           style={styles.mainScrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.mainScrollContent}>
           
-            <TouchableOpacity
-              style={styles.menuTextLink}
-              activeOpacity={0.7}
-              onPress={toggleSidebar}>
-              <Ionicons name="menu-outline" size={24} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.logoContainer}
-              activeOpacity={0.7}
-              onPress={toggleSidebar}>
-              <Image
-                source={require('../../assets/logo/logo.png')}
-                style={styles.headerLogo}
-                contentFit="cover" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.notificationHeaderIcon}
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('Notifications')}>
-              <Ionicons name="notifications-outline" size={22} color={theme.colors.textPrimary} />
-              {unreadCount > 0 && <View style={styles.notificationDot} />}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.profileHeaderIcon}
-              activeOpacity={0.7}
-              onPress={() => navigation.navigate('Settings')}>
-              <SyncAvatar 
-                userId={user?.uid}
-                initialAvatar={contextProfile?.avatar}
-                fallbackName={contextProfile?.firstName || userProfile?.first_name || "Me"}
-                size={28}
-                bgColor="rgba(255,255,255,0.08)"
-              />
-            </TouchableOpacity>
-
             <Animated.View style={[styles.searchBarWrapper, { transform: [{ scale: searchPressAnim }] }]}>
               <BlurView intensity={30} tint="light" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
                 <Pressable
@@ -467,25 +471,21 @@ export default function HomeScreen({ navigation }: any) {
 
       </Animated.View>
 
-      {}
+      {/* Darkened Backdrop Overlay */}
       <Animated.View
-        style={[
-        styles.backdrop,
-        {
-          opacity: backdropAnim,
-          pointerEvents: isSidebarOpen ? 'auto' : 'none'
-        }]
-        }>
-        
+        pointerEvents={isSidebarOpen ? 'auto' : 'none'}
+        style={[styles.backdrop, { opacity: backdropAnim }]}
+      >
         <Pressable style={StyleSheet.absoluteFill} onPress={toggleSidebar} />
       </Animated.View>
 
-      {}
+      {/* Slide-out Sidebar Drawer */}
       <Animated.View
         style={[
-        styles.sidebar,
-        { transform: [{ translateX: sidebarAnim }] }]
-        }>
+          styles.sidebar,
+          { transform: [{ translateX: sidebarAnim }] }
+        ]}
+      >
         
         <View style={styles.sidebarSolidBg}>
           <LinearGradient
@@ -600,6 +600,9 @@ export default function HomeScreen({ navigation }: any) {
                   } else if (item.id === 'media') {
                     toggleSidebar();
                     navigation.navigate('Media');
+                  } else if (item.id === 'playlists') {
+                    toggleSidebar();
+                    navigation.navigate('Playlists');
                   }
                 }}>
                 
@@ -674,12 +677,14 @@ export default function HomeScreen({ navigation }: any) {
 
 }
 
-const getStyles = (theme: any) => {
+const getStyles = (theme: any, insets?: any) => {
   const T = theme.colors;
+  const topInset = Math.max(54, (insets?.top || 0) + 14);
   return StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background
+    backgroundColor: theme.colors.background,
+    overflow: 'hidden'
   },
   mainContent: {
     flex: 1
@@ -688,7 +693,7 @@ const getStyles = (theme: any) => {
     flex: 1
   },
   mainScrollContent: {
-    paddingTop: 110,
+    paddingTop: topInset + 44,
     alignItems: 'center',
     paddingBottom: 120
   },
@@ -704,21 +709,24 @@ const getStyles = (theme: any) => {
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 40
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    zIndex: 100,
+    elevation: 100,
   },
   sidebar: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
+    height: '100%',
     width: SIDEBAR_WIDTH,
-    zIndex: 60,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 15, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 30,
-    elevation: 40
+    zIndex: 999,
+    elevation: 999,
+    backgroundColor: theme.colors.background,
+    shadowColor: '#000',
+    shadowOffset: { width: 12, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 25,
   },
   sidebarEdgeHighlight: {
     position: 'absolute',
@@ -729,18 +737,22 @@ const getStyles = (theme: any) => {
     zIndex: 10,
     borderLeftWidth: 1,
     borderLeftColor: theme.colors.textMuted,
-    backgroundColor: 'rgba(0,0,0,0.3)'
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   sidebarSolidBg: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: theme.colors.background
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    backgroundColor: theme.colors.background,
   },
   sidebarContent: {
-    flex: 1
+    flex: 1,
+    width: '100%',
   },
   sidebarScrollContent: {
-    paddingTop: 80,
-    paddingHorizontal: 28
+    paddingTop: Math.max(70, (insets?.top || 0) + 24),
+    paddingHorizontal: 28,
+    paddingBottom: 140,
   },
   sidebarHeader: {
     marginBottom: 40
@@ -825,25 +837,33 @@ const getStyles = (theme: any) => {
     fontSize: 12,
     fontWeight: '500'
   },
+  fixedHeaderRow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: topInset + 40,
+    zIndex: 25,
+  },
   menuTextLink: {
     position: 'absolute',
-    top: 67,
+    top: topInset,
     left: 20,
-    zIndex: 10,
-    width: 28,
-    height: 28,
+    zIndex: 30,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center'
   },
   logoContainer: {
     position: 'absolute',
-    top: 67,
+    top: topInset,
     right: 92,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     overflow: 'hidden',
-    zIndex: 10,
+    zIndex: 30,
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -853,22 +873,22 @@ const getStyles = (theme: any) => {
   },
   notificationHeaderIcon: {
     position: 'absolute',
-    top: 67,
+    top: topInset,
     right: 56,
     zIndex: 10,
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   profileHeaderIcon: {
     position: 'absolute',
-    top: 67,
+    top: topInset,
     right: 20,
     zIndex: 10,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center'

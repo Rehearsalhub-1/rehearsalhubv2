@@ -42,7 +42,6 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   const [commentMode, setCommentMode] = useState<'at_once' | 'each'>('at_once');
   const [note, setNote] = useState('');
   const [eachNotes, setEachNotes] = useState<Record<string, string>>({});
@@ -133,25 +132,6 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
     }
   };
 
-  const handleImportToRepertoire = async () => {
-    if (tracksToAdd.length === 0) return;
-    setIsImporting(true);
-    try {
-      const songIds = tracksToAdd.map((t: any) => t.id);
-      const res = await apiClient.post<{ success: boolean; message?: string }>('/songs/import-from-ministered', { songIds });
-      if (res?.success) {
-        Alert.alert('Imported', res.message || `${songIds.length} song(s) imported to repertoire.`);
-        handleFullClose();
-      } else {
-        Alert.alert('Notice', 'Could not import songs.');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to import songs.');
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   return (
     <>
       <Modal visible={visible && !showPlaylistModal} transparent animationType="fade" onRequestClose={onClose}>
@@ -171,20 +151,6 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
                 <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
               </TouchableOpacity>
             </View>
-
-            <TouchableOpacity style={styles.optionItem} onPress={handleImportToRepertoire} disabled={isImporting}>
-              <View style={[styles.optionIconBox, { backgroundColor: 'rgba(192,132,252,0.15)' }]}>
-                {isImporting ? (
-                  <ActivityIndicator size="small" color={theme.colors.accent} />
-                ) : (
-                  <Ionicons name="download-outline" size={22} color={theme.colors.accent} />
-                )}
-              </View>
-              <Text style={[styles.optionItemText, { color: theme.colors.accent, fontWeight: '600' }]}>
-                {isImporting ? 'Importing…' : 'Import to Repertoire'}
-              </Text>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
 
             <TouchableOpacity style={styles.optionItem} onPress={() => {
               onClose();

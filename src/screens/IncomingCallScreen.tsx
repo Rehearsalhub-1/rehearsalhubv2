@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Vibration } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { api } from '../services/api';
@@ -58,8 +59,10 @@ export default function IncomingCallScreen() {
     });
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }]}>
       <View style={styles.topSection}>
         <Text style={styles.title}>Incoming {callType === 'video' ? 'Video' : 'Voice'} Call</Text>
         
@@ -90,7 +93,7 @@ export default function IncomingCallScreen() {
           <Text style={styles.buttonText}>Answer</Text>
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -99,7 +102,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1E1E1E',
     justifyContent: 'space-between',
-    paddingVertical: 80,
   },
   topSection: {
     alignItems: 'center',

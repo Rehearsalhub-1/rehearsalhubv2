@@ -680,18 +680,17 @@ export default function RehearsalScreen({ navigation, route }: any) {
             };
 
             const zonePages = !isHQ && zoneResult ? processPages(zoneResult) : [];
-            const hqPages = hqResult ? processPages(hqResult) : [];
-            const allAvailable = [...zonePages, ...hqPages];
-            if (active && allAvailable.length > 0) {
+            const hqPages = isHQ && hqResult ? processPages(hqResult) : [];
+            const allAvailable = isHQ ? hqPages : zonePages;
+            if (active) {
               setAvailablePrograms(allAvailable);
             }
 
             const targetCategory = (route?.params?.categoryFilter || 'ongoing').toLowerCase().trim();
 
-            // Pick programs matching target category ('ongoing', 'pre-rehearsal', etc.)
-            const zoneMatch = zonePages.find((p: any) => (p.category || '').toLowerCase().trim() === targetCategory);
-            const hqMatch = hqPages.find((p: any) => (p.category || '').toLowerCase().trim() === targetCategory);
-            selectedRehearsal = zoneMatch || hqMatch || null;
+            // Strictly pick program matching target category from this zone only — NO HQ fallback!
+            const activePages = isHQ ? hqPages : zonePages;
+            selectedRehearsal = activePages.find((p: any) => (p.category || '').toLowerCase().trim() === targetCategory) || null;
           } catch (rehearsalError) {
             console.error('[RehearsalScreen] Rehearsals fetch error:', rehearsalError);
             isRehearsalFetchSuccessful = false;

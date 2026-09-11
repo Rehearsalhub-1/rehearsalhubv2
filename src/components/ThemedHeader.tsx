@@ -23,7 +23,7 @@ export default function ThemedHeader({ children, style }: ThemedHeaderProps) {
   }
   return (
     <View style={[styles.wrapper, style]}>
-      <StatusBar style="light" backgroundColor="#5b21b6" />
+      <StatusBar style="light" />
       <LinearGradient
         colors={theme.gradients.header as any}
         start={{ x: 0, y: 0 }}

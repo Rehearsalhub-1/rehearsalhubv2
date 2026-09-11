@@ -19,7 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import { AudioModule, setAudioModeAsync, AudioRecorder, RecordingPresets } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
@@ -102,7 +102,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
   const { isPlaying, isLoading: isTrackPlayerBuffering, play: tpPlay, pause: tpPause } = useTrackPlayer();
   const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const [takes, setTakes] = useState<any[]>([]);
   const [showTakesModal, setShowTakesModal] = useState(false);
   const [reviewTake, setReviewTake] = useState<any>(null);
@@ -117,21 +117,17 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [seekDisplayValue, setSeekDisplayValue] = useState(0);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
 
-  const soundRef = useRef<Audio.Sound | null>(null);
   const bgWasPlayingRef = useRef(false);
   const TAKES_DIR = FileSystem.documentDirectory + 'karaoke_takes/';
 
   useEffect(() => {
     const initAudioAndTakes = async () => {
       try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false, // Changed to false to prevent battery drain
-          playThroughEarpieceAndroid: false,
-          interruptionModeIOS: InterruptionModeIOS.MixWithOthers,
-          shouldDuckAndroid: false,
-          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+        await setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          interruptionMode: 'mixWithOthers',
         });
       } catch (e) {
         console.error('Failed to init audio mode:', e);
@@ -149,16 +145,15 @@ export default function KaraokeScreen({ route, navigation }: any) {
 
     return () => {
       if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => { });
+        recordingRef.current.stop().catch(() => { });
         recordingRef.current = null;
       }
       (global as any).isReviewPlaying = false;
       (global as any).isRecording = false;
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false, // Changed to false to prevent battery drain
-        playThroughEarpieceAndroid: false,
+      setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
       }).catch(() => { });
     };
   }, []);
@@ -204,8 +199,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
     }
   };
   const [recordStartPos, setRecordStartPos] = useState(0);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const reviewSoundRef = useRef<Audio.Sound | null>(null);
+  const recordingRef = useRef<AudioRecorder | null>(null);
   const [isBouncing, setIsBouncing] = useState(false);
   const waveformAnim = useRef(new Animated.Value(0)).current;
   const [isLooping, setIsLooping] = useState(false);
@@ -450,7 +444,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
 
   const startRecording = async () => {
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (permission.status !== 'granted') {
         Alert.alert('Permission Denied', 'Microphone permission is required to record takes.');
         return;
@@ -458,46 +452,21 @@ export default function KaraokeScreen({ route, navigation }: any) {
       setRecordStartPos(position);
       const initStartTime = Date.now();
 
-      const createRecordingPromise = (async () => {
-        try {
-          const unprocessedOptions = {
-            ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-            android: {
-              ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-              audioSource: 9, // AndroidAudioSource.UNPROCESSED (Raw mic, no AEC)
-            }
-          };
-          return await Audio.Recording.createAsync(unprocessedOptions);
-        } catch (e) {
-          const micOptions = {
-            ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-            android: {
-              ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-              audioSource: 1, // AndroidAudioSource.MIC
-            }
-          };
-          return await Audio.Recording.createAsync(micOptions);
-        }
-      })();
+      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync();
+      rec.record();
 
-      const [recResult] = await Promise.all([
-        createRecordingPromise,
-        tpPlay().catch(err => {
-          console.warn('TrackPlayer play failed in startRecording:', err);
-        })
-      ]);
+      await tpPlay().catch(err => {
+        console.warn('TrackPlayer play failed in startRecording:', err);
+      });
 
       const initLatencyMs = Date.now() - initStartTime;
       recordLatencyRef.current = initLatencyMs;
 
-      if (recResult && recResult.recording) {
-        setRecording(recResult.recording);
-        recordingRef.current = recResult.recording;
-        setIsRecording(true);
-        (global as any).isRecording = true;
-      } else {
-        throw new Error('Recording object was not created successfully.');
-      }
+      setRecording(rec);
+      recordingRef.current = rec;
+      setIsRecording(true);
+      (global as any).isRecording = true;
     } catch (err) {
       (global as any).isRecording = false;
       console.error('Failed to start recording', err);
@@ -510,8 +479,8 @@ export default function KaraokeScreen({ route, navigation }: any) {
     try {
       setIsRecording(false);
       (global as any).isRecording = false;
-      await recording.stopAndUnloadAsync();
-      const rawUri = recording.getURI();
+      await recording.stop();
+      const rawUri = recording.uri;
       setRecording(null);
       recordingRef.current = null;
 
@@ -546,7 +515,8 @@ export default function KaraokeScreen({ route, navigation }: any) {
             } as any);
 
             const token = await getAccessToken();
-            const res = await fetch(`${(process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/api\/?$/, '')}/audio/mix-karaoke`, {
+            const backendUrl = (process.env.EXPO_PUBLIC_BACKEND_URL || 'https://rehearsalhub-api-production-6a17.up.railway.app').replace(/\/api\/?$/, '');
+            const res = await fetch(`${backendUrl}/audio/mix-karaoke`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -559,17 +529,32 @@ export default function KaraokeScreen({ route, navigation }: any) {
             const blob = await res.blob();
             const reader = new FileReader();
             reader.onload = async () => {
-              const base64data = (reader.result as string).split(',')[1];
-              await FileSystem.writeAsStringAsync(finalPath, base64data, { encoding: FileSystem.EncodingType.Base64 });
+              try {
+                const base64data = (reader.result as string).split(',')[1];
+                await FileSystem.writeAsStringAsync(finalPath, base64data, { encoding: FileSystem.EncodingType.Base64 });
+                setIsBouncing(false);
+                Alert.alert('Recording Saved', `Take ${takeNum} has been saved and perfectly mixed!`);
+                loadTakes();
+              } catch (writeErr) {
+                console.error('Failed to write mixed take file:', writeErr);
+                setIsBouncing(false);
+                await FileSystem.moveAsync({ from: rawUri, to: finalPath }).catch(() => {});
+                Alert.alert('Recording Saved', `Take ${takeNum} saved (Vocals only)`);
+                loadTakes();
+              }
+            };
+            reader.onerror = async (readErr) => {
+              console.error('FileReader error:', readErr);
               setIsBouncing(false);
-              Alert.alert('Recording Saved', `Take ${takeNum} has been saved and perfectly mixed!`);
+              await FileSystem.moveAsync({ from: rawUri, to: finalPath }).catch(() => {});
+              Alert.alert('Recording Saved', `Take ${takeNum} saved (Vocals only)`);
               loadTakes();
             };
             reader.readAsDataURL(blob);
           } catch (e) {
             console.error('Server mix failed:', e);
             setIsBouncing(false);
-            await FileSystem.moveAsync({ from: rawUri, to: finalPath });
+            await FileSystem.moveAsync({ from: rawUri, to: finalPath }).catch(() => {});
             Alert.alert('Recording Saved', `Take ${takeNum} saved (Vocals only)`);
             loadTakes();
           }
@@ -590,9 +575,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [shareTake, setShareTake] = useState<any | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [lastViewedTakeCount, setLastViewedTakeCount] = useState(0);
-  useTrackPlayerEvents([Event.PlaybackQueueEnded], async () => {
+  useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event: any) => {
     if (showTakesModal) {
-      await stopReviewTake();
+      if (event.type === Event.PlaybackQueueEnded || (event.type === Event.PlaybackState && (event.state === State.Stopped || event.state === State.Ended))) {
+        await stopReviewTake();
+      }
     }
   });
 
@@ -900,7 +887,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
           </View>
         )}
       </SafeAreaView>
-      <Modal visible={showSongPicker} animationType="slide" transparent={true}>
+      <Modal visible={showSongPicker} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => setShowSongPicker(false)}>
         <View style={styles.bottomSheetWrapper}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowSongPicker(false)} />
           <View style={styles.bottomSheet}>
@@ -971,7 +958,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
           </View>
         </View>
       </Modal>
-      <Modal visible={showTrackPicker} animationType="slide" transparent={true}>
+      <Modal visible={showTrackPicker} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={() => setShowTrackPicker(false)}>
         <View style={styles.bottomSheetWrapper}>
           <TouchableOpacity style={{ flex: 1 }} onPress={() => setShowTrackPicker(false)} />
           <View style={[styles.bottomSheet, { height: '55%' }]}>
@@ -1031,7 +1018,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
           </View>
         </View>
       </Modal>
-      <Modal visible={showTakesModal} animationType="slide" transparent={true}>
+      <Modal visible={showTakesModal} animationType="slide" transparent={true} statusBarTranslucent={true} onRequestClose={closeTakesModal}>
         <View style={styles.bottomSheetWrapper}>
           <TouchableOpacity style={{ flex: 1 }} onPress={closeTakesModal} />
           <View style={[styles.bottomSheet, { height: '70%' }]}>
@@ -1076,21 +1063,45 @@ export default function KaraokeScreen({ route, navigation }: any) {
                     const isExpanded = expandedTakeId === take.id;
                     const isReviewing = isSelected && isReviewPlaying;
                     const takeSizeMB = (take.size / (1024 * 1024)).toFixed(2);
+                    const formattedDate = new Date(take.createdAt > 1e11 ? take.createdAt : take.createdAt * 1000).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    });
                     return (
                       <View key={take.id} style={{ marginBottom: 12 }}>
                         <TouchableOpacity 
                           style={[styles.takeRow, isExpanded && { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 8 }]}
                           activeOpacity={0.7}
-                          onPress={() => setExpandedTakeId(isExpanded ? null : take.id)}
+                          onPress={() => {
+                            if (!isExpanded) {
+                              setExpandedTakeId(take.id);
+                              playReviewTake(take);
+                            } else {
+                              setExpandedTakeId(null);
+                            }
+                          }}
                         >
-                          <View style={styles.takePlayBtn}>
-                            <Ionicons name="mic-outline" size={20} color={theme.colors.background} />
-                          </View>
+                          <TouchableOpacity 
+                            style={[styles.takePlayBtn, isReviewing && { backgroundColor: theme.colors.accent }]}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              if (isReviewing) {
+                                stopReviewTake();
+                              } else {
+                                setExpandedTakeId(take.id);
+                                playReviewTake(take);
+                              }
+                            }}
+                          >
+                            <Ionicons name={isReviewing ? "pause" : "play"} size={18} color={isReviewing ? '#ffffff' : theme.colors.background} />
+                          </TouchableOpacity>
 
                           <View style={{ flex: 1, marginLeft: 12 }}>
                             <Text style={styles.takeTitle} numberOfLines={1}>{take.name}</Text>
                             <Text style={styles.takeSub}>
-                              {new Date(take.createdAt * 1000).toLocaleString()} • {takeSizeMB} MB
+                              {formattedDate} • {takeSizeMB} MB
                             </Text>
                           </View>
 

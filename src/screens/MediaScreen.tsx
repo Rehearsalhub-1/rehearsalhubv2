@@ -107,7 +107,7 @@ function VideoPlayerInner({
       statusBarTranslucent={true}
     >
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        <StatusBar style="light" backgroundColor="#000000" />
+        <StatusBar style="light" />
         {/* Top bar */}
         <SafeAreaView
           edges={['top']}

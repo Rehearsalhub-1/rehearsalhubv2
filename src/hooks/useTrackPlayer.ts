@@ -11,9 +11,7 @@ import {
   isExpoGo,
 } from '../lib/safeNativeModules';
 import type { Track } from 'react-native-track-player';
-import Constants from 'expo-constants';
 import { Image, Platform, Alert } from 'react-native';
-import { Audio } from 'expo-av';
 import { setWasPlayingIntentionally } from '../../service';
 
 

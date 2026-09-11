@@ -11,7 +11,12 @@ import {
   ScrollView,
   FlatList,
   Dimensions,
-  AppState
+  AppState,
+  Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -64,6 +69,9 @@ export default function PlaylistsScreen({ navigation, route }: any) {
   const [sharePlaylist, setSharePlaylist] = useState<any>(null);
   const [resolvedTracksCache, setResolvedTracksCache] = useState<Record<string, any>>(TRACKS_DB);
   const [isLoadingTracks, setIsLoadingTracks] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPlaylistNameInput, setNewPlaylistNameInput] = useState('');
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
   
   const { currentTrack, play } = useTrackPlayer();
   const user = useUserStore(s => s.user);
@@ -497,8 +505,10 @@ export default function PlaylistsScreen({ navigation, route }: any) {
           </TouchableOpacity>
           <Text style={styles.libraryTitle}>Your Playlists</Text>
         </View>
-        <TouchableOpacity>
-          <Ionicons name="search" size={24} color={theme.colors.textPrimary} />
+        <TouchableOpacity
+          onPress={() => setShowCreateModal(true)}
+        >
+          <Ionicons name="add-circle-outline" size={28} color={theme.colors.accent} />
         </TouchableOpacity>
       </View>
 
@@ -575,9 +585,76 @@ export default function PlaylistsScreen({ navigation, route }: any) {
         playlist={sharePlaylist}
         onClose={() => { setShowShareSheet(false); setShareTrack(null); setSharePlaylist(null); }}
       />
+      {/* Create Playlist Modal */}
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setShowCreateModal(false); setNewPlaylistNameInput(''); }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', paddingHorizontal: 28 }}
+        >
+          <View style={{ backgroundColor: '#1a1025', borderRadius: 20, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 6 }}>New Playlist</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginBottom: 18 }}>Give your playlist a name</Text>
+            <TextInput
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.07)',
+                borderRadius: 12,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                fontSize: 15,
+                color: '#fff',
+                borderWidth: 1,
+                borderColor: 'rgba(255,255,255,0.12)',
+                marginBottom: 20,
+              }}
+              placeholder="e.g. Sunday Favourites"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              value={newPlaylistNameInput}
+              onChangeText={setNewPlaylistNameInput}
+              autoFocus
+              returnKeyType="done"
+            />
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.07)', alignItems: 'center' }}
+                onPress={() => { setShowCreateModal(false); setNewPlaylistNameInput(''); }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#7c3aed', alignItems: 'center', opacity: isCreatingPlaylist ? 0.6 : 1 }}
+                disabled={isCreatingPlaylist || !newPlaylistNameInput.trim()}
+                onPress={async () => {
+                  if (!newPlaylistNameInput.trim()) return;
+                  setIsCreatingPlaylist(true);
+                  try {
+                    const res = await api.playlists.create({ name: newPlaylistNameInput.trim() });
+                    if (res?.success && res.data) {
+                      setPlaylists(prev => [res.data, ...prev]);
+                    }
+                    setShowCreateModal(false);
+                    setNewPlaylistNameInput('');
+                  } catch {
+                    Alert.alert('Error', 'Failed to create playlist. Please try again.');
+                  } finally {
+                    setIsCreatingPlaylist(false);
+                  }
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{isCreatingPlaylist ? 'Creating...' : 'Create'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
+
 
 const getStyles = (theme: any) => {
   const T = theme.colors;

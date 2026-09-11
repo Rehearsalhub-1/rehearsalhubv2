@@ -23,7 +23,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import { Audio } from 'expo-av';
+import { AudioModule, setAudioModeAsync, AudioPlayer, AudioRecorder, createAudioPlayer, RecordingPresets } from 'expo-audio';
 import Slider from '@react-native-community/slider';
 import { SafeTrackPlayer as TrackPlayer, SafeCapability as Capability } from '../lib/safeNativeModules';
 import Constants from 'expo-constants';
@@ -228,11 +228,12 @@ export default function AudiolabScreen({ navigation }: any) {
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [muteAll, setMuteAll] = useState(false);
   const [monitorEnabled, setMonitorEnabled] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingRef = useRef<AudioRecorder | null>(null);
   const recordingPeaksRef = useRef<number[]>([]);
   const [liveMeterLevel, setLiveMeterLevel] = useState(0); // 0-1 normalized live level
-  const soundObjsRef = useRef<{ [trackId: string]: Audio.Sound }>({});
+  const soundObjsRef = useRef<{ [trackId: string]: AudioPlayer }>({});
   const soundTimeoutsRef = useRef<any[]>([]);
   const playTimeRef = useRef<number>(0);
   const recordStartTimeRef = useRef<number>(0);
@@ -282,12 +283,11 @@ export default function AudiolabScreen({ navigation }: any) {
         
         let duration = 20000; // fallback
         try {
-          const { sound } = await Audio.Sound.createAsync({ uri: file.uri });
-          const status = await sound.getStatusAsync();
-          if (status.isLoaded && status.durationMillis) {
-            duration = status.durationMillis;
+          const player = createAudioPlayer({ uri: file.uri });
+          if (player.duration) {
+            duration = Math.round(player.duration * 1000);
           }
-          await sound.unloadAsync();
+          player.remove();
         } catch (e) {
 
         }
@@ -396,6 +396,72 @@ export default function AudiolabScreen({ navigation }: any) {
     }
   };
 
+  const uploadTake = async () => {
+    const activeTracks = tracks.filter(t => t.uri && !t.mute);
+    if (activeTracks.length === 0) {
+      showToast('No active tracks to upload. Record something first!');
+      return;
+    }
+    setActiveModal(null);
+    setIsUploading(true);
+    showToast('Preparing upload...');
+    try {
+      // Step 1: bounce all tracks server-side to a single audio blob
+      const formData = new FormData();
+      const volumes: number[] = [];
+      for (let i = 0; i < activeTracks.length; i++) {
+        const track = activeTracks[i];
+        if (track.uri) {
+          const uri = track.uri.startsWith('file://') ? track.uri : `file://${track.uri}`;
+          formData.append(`track${i}`, { uri, name: `track${i}.m4a`, type: 'audio/m4a' } as any);
+          volumes.push(track.volume);
+        }
+      }
+      formData.append('volumes', JSON.stringify(volumes));
+      const token = await getAccessToken();
+      const bounceRes = await fetch(`${(process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/api\/?$/, '')}/audio/bounce`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      if (!bounceRes.ok) throw new Error('Bounce failed');
+
+      // Step 2: convert bounced blob to base64 and write to temp file
+      const blob = await bounceRes.blob();
+      const reader = new FileReader();
+      const base64: string = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const tempPath = `${FileSystem.cacheDirectory}audiolab_take_${Date.now()}.m4a`;
+      await FileSystem.writeAsStringAsync(tempPath, base64, { encoding: FileSystem.EncodingType.Base64 });
+
+      // Step 3: upload the bounced file to R2 via POST /upload
+      const uploadForm = new FormData();
+      uploadForm.append('file', {
+        uri: tempPath,
+        name: `take_${Date.now()}.m4a`,
+        type: 'audio/mp4',
+      } as any);
+      uploadForm.append('folder', 'audiolab/takes');
+      const uploadRes = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL ?? ''}/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: uploadForm,
+      });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const uploadData = await uploadRes.json();
+      showToast(`Take uploaded ✓`);
+      console.log('[AudioLab] Take uploaded to R2:', uploadData?.data?.url);
+    } catch (err) {
+      console.error('[AudioLab] Upload take error:', err);
+      showToast('Upload failed — please try again');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleTapTempo = () => {
 
     const now = Date.now();
@@ -434,11 +500,10 @@ export default function AudiolabScreen({ navigation }: any) {
       if (playTimerInterval.current) clearInterval(playTimerInterval.current);
       if (tunerInterval.current) clearInterval(tunerInterval.current);
 
-      Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false, // Changed to false to prevent battery drain
-        playThroughEarpieceAndroid: false,
+      setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
       }).catch(() => {});
     };
   }, []);
@@ -702,13 +767,12 @@ export default function AudiolabScreen({ navigation }: any) {
         }
       } catch {}
 
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false, // Changed to false to prevent battery drain
-
-        playThroughEarpieceAndroid: !monitorEnabled,
+      await AudioModule.requestRecordingPermissionsAsync();
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: !monitorEnabled,
       });
 
       if (countIn !== 'Off') {
@@ -750,49 +814,34 @@ export default function AudiolabScreen({ navigation }: any) {
         }
       ]);
 
-      let recordingObj: Audio.Recording;
-      try {
-        const unprocessedOptions = {
-          ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-          android: {
-            ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-            audioSource: 9, // AndroidAudioSource.UNPROCESSED (Raw mic, no AEC)
-          }
-        };
-        const { recording } = await Audio.Recording.createAsync(unprocessedOptions);
-        recordingObj = recording;
-      } catch (e) {
+      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync();
+      rec.record();
 
-        const micOptions = {
-          ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-          android: {
-            ...Audio.RecordingOptionsPresets.HIGH_QUALITY.android,
-            audioSource: 1, // AndroidAudioSource.MIC
-          }
-        };
-        const { recording } = await Audio.Recording.createAsync(micOptions);
-        recordingObj = recording;
-      }
-
-      recordingObj.setProgressUpdateInterval(50);
-      recordingObj.setOnRecordingStatusUpdate((status) => {
-        if (status.metering !== undefined) {
-
-          const normalized = Math.max(0, Math.min(1, (status.metering + 90) / 90));
-          const mappedHeight = Math.max(3, Math.floor(normalized * 52));
-          recordingPeaksRef.current.push(mappedHeight);
-          setLiveMeterLevel(normalized);
-
-          const elapsed = status.durationMillis || (recordingPeaksRef.current.length * 50);
-          setTracks(prev => prev.map(t => t.id === newTrackId ? {
-            ...t,
-            duration: elapsed,
-            peaks: [...recordingPeaksRef.current]
-          } : t));
+      const meterInterval = setInterval(() => {
+        if (!recordingRef.current) {
+          clearInterval(meterInterval);
+          return;
         }
-      });
+        try {
+          const status = rec.getStatus();
+          if (status.metering !== undefined) {
+            const normalized = Math.max(0, Math.min(1, (status.metering + 90) / 90));
+            const mappedHeight = Math.max(3, Math.floor(normalized * 52));
+            recordingPeaksRef.current.push(mappedHeight);
+            setLiveMeterLevel(normalized);
 
-      recordingRef.current = recordingObj;
+            const elapsed = status.durationMillis || (recordingPeaksRef.current.length * 50);
+            setTracks(prev => prev.map(t => t.id === newTrackId ? {
+              ...t,
+              duration: elapsed,
+              peaks: [...recordingPeaksRef.current]
+            } : t));
+          }
+        } catch {}
+      }, 50);
+
+      recordingRef.current = rec;
       recordStartTimeRef.current = playTimeRef.current;
       setIsRecording(true);
       
@@ -811,8 +860,10 @@ export default function AudiolabScreen({ navigation }: any) {
   const stopRecording = async () => {
     try {
       if (!recordingRef.current) return;
-      const status = await recordingRef.current.stopAndUnloadAsync();
-      const rawUri = recordingRef.current.getURI();
+      const rec = recordingRef.current;
+      const st = rec.getStatus();
+      await rec.stop();
+      const rawUri = rec.uri;
       recordingRef.current = null;
       setIsRecording(false);
       setLiveMeterLevel(0);
@@ -833,7 +884,7 @@ export default function AudiolabScreen({ navigation }: any) {
 
       if (rawUri && activeTrackId) {
         const capturedPeaks = [...recordingPeaksRef.current];
-        const recordedDurationMs = status.durationMillis || (capturedPeaks.length * 50);
+        const recordedDurationMs = st.durationMillis || (capturedPeaks.length * 50);
 
         setTracks(prev => prev.map(t => t.id === activeTrackId ? { 
           ...t, 
@@ -870,11 +921,11 @@ export default function AudiolabScreen({ navigation }: any) {
         }
       } catch {}
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: isRecordingSync,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false, // Changed to false to prevent battery drain
-        playThroughEarpieceAndroid: isRecordingSync ? !monitorEnabled : false,
+      await setAudioModeAsync({
+        allowsRecording: isRecordingSync,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: isRecordingSync ? !monitorEnabled : false,
       });
 
       await stopPlayback(false);
@@ -932,27 +983,27 @@ export default function AudiolabScreen({ navigation }: any) {
             else if (suffix === '_reverb') volumeVal = track.volume * 0.25;
             else if (suffix === '_delay') volumeVal = track.volume * 0.35;
 
-            const { sound } = await Audio.Sound.createAsync(
-              { uri: track.uri! },
-              { 
-                volume: volumeVal, 
-                shouldPlay: shouldPlayImmediately && suffix === '', // Play immediately if within range (FX triggers delayed)
-                isLooping: loopEnabled, 
-                positionMillis: offset 
-              }
-            );
-            soundObjsRef.current[`${track.id}${suffix}`] = sound;
-            return sound;
+            const player = createAudioPlayer({ uri: track.uri! });
+            player.volume = volumeVal;
+            player.loop = loopEnabled;
+            if (offset > 0) {
+              player.seekTo(offset / 1000);
+            }
+            if (shouldPlayImmediately && suffix === '') {
+              player.play();
+            }
+            soundObjsRef.current[`${track.id}${suffix}`] = player;
+            return player;
           };
 
           try {
             const mainSound = await loadSound();
 
             if (!shouldPlayImmediately) {
-              const timeoutId = setTimeout(async () => {
+              const timeoutId = setTimeout(() => {
                 try {
                   const s = soundObjsRef.current[track.id];
-                  if (s) await s.playAsync();
+                  if (s) s.play();
                 } catch {}
               }, delay);
               soundTimeoutsRef.current.push(timeoutId);
@@ -961,10 +1012,10 @@ export default function AudiolabScreen({ navigation }: any) {
             if (track.type === 'voice') {
               if (fxDoubler) {
                 await loadSound('_doubler');
-                const tId = setTimeout(async () => {
+                const tId = setTimeout(() => {
                   try {
                     const s = soundObjsRef.current[`${track.id}_doubler`];
-                    if (s) await s.playAsync();
+                    if (s) s.play();
                   } catch {}
                 }, delay + 30);
                 soundTimeoutsRef.current.push(tId);
@@ -972,10 +1023,10 @@ export default function AudiolabScreen({ navigation }: any) {
 
               if (fxReverb) {
                 await loadSound('_reverb');
-                const tId = setTimeout(async () => {
+                const tId = setTimeout(() => {
                   try {
                     const s = soundObjsRef.current[`${track.id}_reverb`];
-                    if (s) await s.playAsync();
+                    if (s) s.play();
                   } catch {}
                 }, delay + 85);
                 soundTimeoutsRef.current.push(tId);
@@ -983,10 +1034,10 @@ export default function AudiolabScreen({ navigation }: any) {
 
               if (fxDelay) {
                 await loadSound('_delay');
-                const tId = setTimeout(async () => {
+                const tId = setTimeout(() => {
                   try {
                     const s = soundObjsRef.current[`${track.id}_delay`];
-                    if (s) await s.playAsync();
+                    if (s) s.play();
                   } catch {}
                 }, delay + 320);
                 soundTimeoutsRef.current.push(tId);
@@ -1013,13 +1064,12 @@ export default function AudiolabScreen({ navigation }: any) {
       await TrackPlayer.pause();
     } catch {}
 
-    const promises = Object.values(soundObjsRef.current).map(async (sound) => {
+    Object.values(soundObjsRef.current).forEach((player) => {
       try {
-        await sound.stopAsync();
-        await sound.unloadAsync();
+        player.pause();
+        player.remove();
       } catch {}
     });
-    await Promise.all(promises);
     soundObjsRef.current = {};
     if (updateState) {
       setIsPlaying(false);
@@ -1104,7 +1154,7 @@ export default function AudiolabScreen({ navigation }: any) {
         const nextMute = !t.mute;
         const sound = soundObjsRef.current[id];
         if (sound) {
-          sound.setIsMutedAsync(nextMute);
+          sound.muted = nextMute;
         }
 
         if (t.type === 'backing') {
@@ -1120,10 +1170,10 @@ export default function AudiolabScreen({ navigation }: any) {
     setTracks(prev => {
       const nextTracks = prev.map(t => t.id === id ? { ...t, solo: !t.solo } : t);
       const isAnySolo = nextTracks.some(t => t.solo);
-      nextTracks.forEach(async (t) => {
+      nextTracks.forEach((t) => {
         const sound = soundObjsRef.current[t.id];
         if (sound) {
-          await sound.setVolumeAsync(isAnySolo ? (t.solo ? t.volume : 0) : t.volume);
+          sound.volume = isAnySolo ? (t.solo ? t.volume : 0) : t.volume;
         }
 
         if (t.type === 'backing') {
@@ -1146,7 +1196,7 @@ export default function AudiolabScreen({ navigation }: any) {
     const sound = soundObjsRef.current[id];
     if (sound) {
       try {
-        await sound.setVolumeAsync(val);
+        sound.volume = val;
       } catch {}
     }
   };
@@ -1378,7 +1428,7 @@ export default function AudiolabScreen({ navigation }: any) {
                     onPress={importAudioFile}
                   >
                     <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(52, 199, 89, 0.15)', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="cloud-upload" size={20} color="#34c759" />
+                      <Ionicons name="folder-open" size={20} color="#34c759" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 13 }}>Import Audio File</Text>
@@ -1727,11 +1777,11 @@ export default function AudiolabScreen({ navigation }: any) {
                     onValueChange={(val) => {
                       setMonitorEnabled(val);
                       showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
-                      Audio.setAudioModeAsync({
-                        allowsRecordingIOS: true,
-                        playsInSilentModeIOS: true,
-                        staysActiveInBackground: false, // Changed to false to prevent battery drain
-                        playThroughEarpieceAndroid: !val, // false = speaker, true = earpiece
+                      setAudioModeAsync({
+                        allowsRecording: true,
+                        playsInSilentMode: true,
+                        shouldPlayInBackground: false,
+                        shouldRouteThroughEarpiece: !val,
                       }).catch(() => {});
                     }}
                     trackColor={{ false: '#333', true: theme.colors.accent }}
@@ -1926,7 +1976,12 @@ export default function AudiolabScreen({ navigation }: any) {
                                   pushUndoSnapshot(tracks);
                                   setTracks(prev => prev.filter(t => t.id !== track.id));
                                   const sound = soundObjsRef.current[track.id];
-                                  if (sound) sound.unloadAsync();
+                                  if (sound) {
+                                    try {
+                                      sound.pause();
+                                      sound.remove();
+                                    } catch {}
+                                  }
                                   setActiveModal(null);
                                 },
                                 style: 'destructive'
@@ -2191,11 +2246,11 @@ export default function AudiolabScreen({ navigation }: any) {
                           setMonitorEnabled(val);
                           showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
                           try {
-                            await Audio.setAudioModeAsync({
-                              allowsRecordingIOS: true,
-                              playsInSilentModeIOS: true,
-                              staysActiveInBackground: false, // Changed to false to prevent battery drain
-                              playThroughEarpieceAndroid: !val,
+                            await setAudioModeAsync({
+                              allowsRecording: true,
+                              playsInSilentMode: true,
+                              shouldPlayInBackground: false,
+                              shouldRouteThroughEarpiece: !val,
                             });
                           } catch {}
                         }}
@@ -2410,21 +2465,13 @@ export default function AudiolabScreen({ navigation }: any) {
                 <View style={styles.modalSection}>
                   <View style={styles.modalCard}>
                     {[
-                      { title: 'WAV', desc: 'Lossless audio', icon: 'disc' },
-                      { title: 'M4A', desc: 'Compressed AAC audio', icon: 'musical-note' }
+                      { title: 'WAV', desc: 'Lossless audio — save to device', icon: 'disc' },
+                      { title: 'M4A', desc: 'Compressed AAC — save to device', icon: 'musical-note' }
                     ].map((exp, idx) =>
                       <TouchableOpacity
                         key={exp.title}
                         style={[styles.exportRow, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.colors.bottomTabBorder }]}
-                        onPress={() => {
-                          if (exp.title === 'Share Session') {
-                            Share.share({
-                              message: `Check out my Audiolab session — ${tracks.length} tracks.`,
-                            }).catch(() => {});
-                          } else {
-                            triggerExport(exp.title);
-                          }
-                        }}>
+                        onPress={() => triggerExport(exp.title)}>
                         <View style={styles.exportIconBox}>
                           <Ionicons name={exp.icon as any} size={22} color={theme.colors.accent} />
                         </View>
@@ -2436,6 +2483,35 @@ export default function AudiolabScreen({ navigation }: any) {
                       </TouchableOpacity>
                     )}
                   </View>
+
+                  {/* Upload Take to Server */}
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                      borderWidth: 1,
+                      borderColor: 'rgba(99, 102, 241, 0.3)',
+                      borderRadius: 14,
+                      padding: 16,
+                      marginTop: 12,
+                      gap: 14,
+                    }}
+                    onPress={uploadTake}
+                    disabled={isUploading}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(99,102,241,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+                      {isUploading
+                        ? <ActivityIndicator size="small" color="#6366f1" />
+                        : <Ionicons name="cloud-upload" size={22} color="#6366f1" />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Upload Take to Server</Text>
+                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>Mix and save this take to Rehearsal Hub cloud</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
                 </View>
               }
 

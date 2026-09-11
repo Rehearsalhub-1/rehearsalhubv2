@@ -12,7 +12,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, AudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sentry from '@sentry/react-native';
 import { SyncAvatar } from '../components/SyncAvatar';
@@ -143,25 +143,28 @@ export default function CallScreen({ route, navigation }: any) {
   });
 
   useEffect(() => {
-    let currentSound: Audio.Sound | null = null;
+    let currentSound: AudioPlayer | null = null;
 
-    const playRingtone = async () => {
+    const playRingtone = () => {
       if (status === 'ringing' && isIncoming) {
         try {
-          const { sound: newSound } = await Audio.Sound.createAsync(
-            require('../../assets/ringingtone/Calm Focus.mp3'),
-            { isLooping: true, volume: 1.0 }
+          const player = createAudioPlayer(
+            require('../../assets/ringingtone/Calm Focus.mp3')
           );
-          currentSound = newSound;
-          await newSound.playAsync();
+          player.loop = true;
+          player.volume = 1.0;
+          currentSound = player;
+          player.play();
         } catch (e) {}
       }
     };
 
-    const stop = async () => {
+    const stop = () => {
       if (currentSound) {
-        await currentSound.stopAsync().catch(() => {});
-        await currentSound.unloadAsync().catch(() => {});
+        try {
+          currentSound.pause();
+          currentSound.remove();
+        } catch {}
         currentSound = null;
       }
     };
@@ -172,25 +175,28 @@ export default function CallScreen({ route, navigation }: any) {
   }, [status, isIncoming]);
 
   useEffect(() => {
-    let dialSound: Audio.Sound | null = null;
+    let dialSound: AudioPlayer | null = null;
 
-    const playDialTone = async () => {
+    const playDialTone = () => {
       if (!isIncoming && !isGroupCall && status === 'connecting') {
         try {
-          const { sound: newSound } = await Audio.Sound.createAsync(
-            require('../../assets/ringingtone/dial_tone.mp3'),
-            { isLooping: true, volume: 0.6 }
+          const player = createAudioPlayer(
+            require('../../assets/ringingtone/dial_tone.mp3')
           );
-          dialSound = newSound;
-          await newSound.playAsync();
+          player.loop = true;
+          player.volume = 0.6;
+          dialSound = player;
+          player.play();
         } catch (e) {}
       }
     };
 
-    const stopDial = async () => {
+    const stopDial = () => {
       if (dialSound) {
-        await dialSound.stopAsync().catch(() => {});
-        await dialSound.unloadAsync().catch(() => {});
+        try {
+          dialSound.pause();
+          dialSound.remove();
+        } catch {}
         dialSound = null;
       }
     };
@@ -461,10 +467,10 @@ export default function CallScreen({ route, navigation }: any) {
     const nextVal = !speakerOn;
     setSpeakerOn(nextVal);
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        playThroughEarpieceAndroid: !nextVal,
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: !nextVal,
       });
     } catch (err) {
       console.error('Speaker toggle error', err);

@@ -1,6 +1,6 @@
 import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { optimizeAudio } from '../lib/mediaUtils';
+import { optimizeAudio, resolveSongAudioUrls } from '../lib/mediaUtils';
 import {
   StyleSheet,
   View,
@@ -2136,7 +2136,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                 )}
               </TouchableOpacity>
               {(() => {
-                const parts = activeTrack.audioUrls || activeTrack.audio_urls || {};
+                const parts = resolveSongAudioUrls(activeTrack);
                 const entries = Object.entries(parts).filter(([partName, url]) => (
                   url && typeof url === 'string' && partName.toLowerCase() !== 'full'
                 ));

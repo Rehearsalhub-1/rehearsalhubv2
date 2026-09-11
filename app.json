@@ -7,12 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -36,7 +30,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "package": "com.karaoke.rehearsalhubv2",
@@ -98,13 +91,11 @@
         }
       ],
       "./plugins/withKotlinJvmTarget",
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "lwsrhp",
-          "project": "rehearsal-hub-mobile"
-        }
-      ]
+      "expo-image",
+      "expo-sharing",
+      "expo-splash-screen",
+      "expo-status-bar",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

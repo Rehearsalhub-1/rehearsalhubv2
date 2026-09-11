@@ -20,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
 import { resolveMediaUrl } from '../lib/mediaUtils';
-import { Audio } from 'expo-av'; // kept for recording only — playback uses TrackPlayer
+import { AudioModule, setAudioModeAsync, AudioRecorder, RecordingPresets } from 'expo-audio'; // kept for recording only — playback uses TrackPlayer
 import {
   SafeTrackPlayer as TrackPlayer,
   SafeState as State,
@@ -63,7 +63,7 @@ function ChatVideoPlayerInner({ uri, onClose }: { uri: string; onClose: () => vo
   return (
     <Modal visible={Boolean(uri)} transparent={false} animationType="fade" onRequestClose={onClose} statusBarTranslucent={true}>
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        <StatusBar style="light" backgroundColor="#000000" />
+        <StatusBar style="light" />
         {/* Top Header */}
         <View style={{
           position: 'absolute',
@@ -685,7 +685,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     }
   };
 
-  const [recording, setRecording] = useState<Audio.Recording|null>(null);
+  const [recording, setRecording] = useState<AudioRecorder|null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recDuration, setRecDuration] = useState(0);
   const [playingId, setPlayingId] = useState<string|null>(null);
@@ -901,20 +901,19 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   }, []);
   const startRecording = async () => {
     try {
-      const { status } = await Audio.requestPermissionsAsync();
+      const { status } = await AudioModule.requestRecordingPermissionsAsync();
       if (status !== 'granted') { showToast('Microphone permission required'); return; }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       recordingMeteringRef.current = [];
-      const { recording: rec } = await Audio.Recording.createAsync({
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        isMeteringEnabled: true,
-      });
+      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync();
+      rec.record();
       setRecording(rec); setIsRecording(true); setRecDuration(0);
-      meteringIntervalRef.current = setInterval(async () => {
+      meteringIntervalRef.current = setInterval(() => {
         try {
-          const status = await rec.getStatusAsync();
-          if (status.isRecording && status.metering !== undefined) {
-            const normalized = Math.max(0, Math.min(1, (status.metering + 60) / 60));
+          const st = rec.getStatus();
+          if (st.isRecording && st.metering !== undefined) {
+            const normalized = Math.max(0, Math.min(1, (st.metering + 60) / 60));
             recordingMeteringRef.current.push(normalized);
             setLiveBars(prev => {
               const next = [...prev.slice(1), normalized];
@@ -930,14 +929,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!recording) return;
     if (meteringIntervalRef.current) { clearInterval(meteringIntervalRef.current); meteringIntervalRef.current = null; }
     setIsRecording(false);
-    await recording.stopAndUnloadAsync();
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      playThroughEarpieceAndroid: false,
+    await recording.stop();
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
     }).catch(() => {});
-    const uri = recording.getURI();
+    const uri = recording.uri;
     const capturedWaveform = [...recordingMeteringRef.current];
     recordingMeteringRef.current = [];
     setRecording(null);
@@ -950,12 +948,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!recording) return;
     if (meteringIntervalRef.current) { clearInterval(meteringIntervalRef.current); meteringIntervalRef.current = null; }
     setIsRecording(false);
-    await recording.stopAndUnloadAsync().catch(()=>{});
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-      playThroughEarpieceAndroid: false,
+    await recording.stop().catch(()=>{});
+    await setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
     }).catch(() => {});
     setRecording(null); setRecDuration(0); recordingMeteringRef.current = [];
     setLiveBars(new Array(40).fill(0));
@@ -1056,11 +1053,10 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   useEffect(() => {
     return () => {
       (async () => {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-          playThroughEarpieceAndroid: false,
+        await setAudioModeAsync({
+          allowsRecording: false,
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
         }).catch(() => {});
         
         if (playingIdRef.current) {
@@ -3315,9 +3311,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           </View>
         </Modal>
         <ChatVideoModal uri={videoViewerUri} onClose={() => setVideoViewerUri(null)} />
-        <Modal visible={imgViewerVisible} transparent animationType="fade" onRequestClose={() => setImgViewerVisible(false)}>
+        <Modal visible={imgViewerVisible} transparent={false} animationType="fade" statusBarTranslucent onRequestClose={() => setImgViewerVisible(false)}>
           <View style={{ flex: 1, backgroundColor: '#000000' }}>
-            <SafeAreaView style={{ flex: 1 }}>
+            <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
                 <TouchableOpacity
                   onPress={() => setImgViewerVisible(false)}
@@ -3361,9 +3357,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             </SafeAreaView>
           </View>
         </Modal>
-        <Modal visible={viewOnceVisible} transparent animationType="fade" onRequestClose={() => setViewOnceVisible(false)}>
+        <Modal visible={viewOnceVisible} transparent={false} animationType="fade" statusBarTranslucent onRequestClose={() => setViewOnceVisible(false)}>
           <View style={{ flex: 1, backgroundColor: '#000000' }}>
-            <SafeAreaView style={{ flex: 1 }}>
+            <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
                 <TouchableOpacity
                   onPress={() => setViewOnceVisible(false)}
@@ -3442,7 +3438,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           statusBarTranslucent={true}
         >
           <View style={{ flex: 1, backgroundColor: '#0B141A' }}>
-            <StatusBar style="light" backgroundColor="#0B141A" />
+            <StatusBar style="light" />
             <KeyboardAvoidingView
               style={{ flex: 1 }}
               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
