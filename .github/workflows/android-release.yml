@@ -25,10 +25,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Android SDK packages
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Install Android SDK build dependencies
+        run: |
+          sdkmanager "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;27.1.12297006"
+
       - name: Make Gradle wrapper executable
         working-directory: android
         run: chmod +x ./gradlew
 
+      - name: Clean native/generated folders
+        run: |
+          rm -rf android/.cxx android/.gradle android/app/build android/build
+
       - name: Build Android release
         working-directory: android
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
         run: ./gradlew app:assembleRelease -x lint -x test --stacktrace
