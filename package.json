@@ -75,6 +75,9 @@
   "private": true,
   "expo": {
     "doctor": {
+      "appConfigFieldsNotSyncedCheck": {
+        "enabled": false
+      },
       "reactNativeDirectoryCheck": {
         "exclude": [
           "react-native-track-player"
