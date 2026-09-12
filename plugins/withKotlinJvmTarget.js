@@ -5,11 +5,9 @@
 
 let withAppBuildGradle;
 try {
-  // Try the root node_modules first
-  ({ withAppBuildGradle } = require('@expo/config-plugins'));
+  ({ withAppBuildGradle } = require('expo/config-plugins'));
 } catch {
-  // Fall back to expo's own bundled copy
-  ({ withAppBuildGradle } = require('expo/node_modules/@expo/config-plugins'));
+  ({ withAppBuildGradle } = require('@expo/config-plugins'));
 }
 
 const withKotlinJvmTarget = (config) => {
