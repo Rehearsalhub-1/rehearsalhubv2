@@ -822,7 +822,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         const mappedSongs = dbSongs.map((song: any, index: number) => {
           const songAudioUrl = resolveSongAudioUrl(song);
           const resolvedAudioUrls = resolveSongAudioUrls(song);
-          const isLiveNow = song.isActive === true || String(song.isActive) === 'true' || song.isLive === true || song.status === 'live';
+          const isLiveNow = song.status === 'live' || song.isLive === true;
           return {
             id: song.id || `song-${index}`,
             title: song.title || 'Untitled Song',

@@ -163,7 +163,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
       const [songsResult, programsResult] = await Promise.all([
         api.songs.getMaster(),
-        api.programs.getAll()
+        api.programs.getMasterPrograms()
       ]);
       
       if (!isMountedRef.current) return;

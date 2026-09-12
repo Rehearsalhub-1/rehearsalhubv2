@@ -58,7 +58,6 @@ GoogleService-Info.plist
 
 # Generated native folders
 /ios
-/android
 
 # Android build cache
 android/.cxx/

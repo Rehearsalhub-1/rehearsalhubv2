@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../rehearsalhub-admin"
+		},
+		{
+			"path": "../../rehearsalhub-api"
+		}
+	],
+	"settings": {}
+}

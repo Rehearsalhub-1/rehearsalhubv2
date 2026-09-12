@@ -85,6 +85,8 @@ export const api = {
   programs: {
     getAll: (zoneId?: string, includeChurch = false) =>
       apiClient.get<any>(`/programs?${includeChurch ? 'includeChurch=true&' : ''}${zoneId ? `zoneId=${encodeURIComponent(zoneId)}` : ''}`),
+    getMasterPrograms: () =>
+      apiClient.get<any>('/programs?category=ministered'),
     getMemberRehearsals: () =>
       apiClient.get<{ success: boolean; data: any[] }>('/subgroups/member-rehearsals'),
   },

@@ -39,7 +39,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   setActiveSongs: (songs: LiveSong[]) => {
     set({
       activeSongs: Array.isArray(songs)
-        ? songs.filter((s) => s && (s.isActive === true || s.isLive === true || s.status === 'live'))
+        ? songs.filter((s) => s && (s.status === 'live' || s.isLive === true))
         : [],
     });
   },
@@ -80,7 +80,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
 
     // If explicit active / live
     const isLiveNow =
-      isActiveField === true || isLiveField === true || statusField === 'live';
+      isLiveField === true || statusField === 'live';
 
     if (isLiveNow) {
       set((state) => {
@@ -147,7 +147,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
       const res = await api.songs.getActiveSongs(zoneId);
       if (res?.success && Array.isArray(res.data)) {
         const liveOnly = res.data.filter(
-          (s: any) => s && (s.isActive === true || s.isLive === true || s.status === 'live')
+          (s: any) => s && (s.status === 'live' || s.isLive === true)
         );
         set({ activeSongs: liveOnly, isLoading: false });
       } else {
