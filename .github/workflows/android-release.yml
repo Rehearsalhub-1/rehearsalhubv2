@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Make Gradle wrapper executable
+        working-directory: android
+        run: chmod +x ./gradlew
+
       - name: Build Android release
         working-directory: android
         run: ./gradlew app:assembleRelease -x lint -x test --stacktrace
