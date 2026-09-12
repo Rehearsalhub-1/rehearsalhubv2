@@ -134,7 +134,9 @@ export default function ArchiveScreen({ navigation }: any) {
               name: cat.name || cat.title || 'Category',
               description: cat.description || `View recordings and sessions for ${cat.name || 'this category'}.`,
               programCount: `${progs.length} ${progs.length === 1 ? 'Program' : 'Programs'}`,
-              image: progs[0]?.bannerImage ? { uri: optimizeImage(progs[0].bannerImage, { width: 600, quality: 60 }) } : cat.image ? { uri: optimizeImage(cat.image, { width: 600, quality: 60 }) } : require('../../assets/image/home9.jpg'),
+              image: (cat.image || progs[0]?.bannerImage)
+                ? { uri: optimizeImage(cat.image || progs[0]?.bannerImage, { width: 600, quality: 60 }) }
+                : require('../../assets/image/home9.jpg'),
               programs: progs.map((p: any) => {
                 // Extract song count from all possible rawData fields
                 const raw = p.rawData || p.raw || {};
