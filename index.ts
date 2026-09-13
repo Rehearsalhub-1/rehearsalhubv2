@@ -11,8 +11,21 @@ console.log('[Entry] Registering services...');
 IncomingCallManager.setup();
 
 notifee.onBackgroundEvent(async ({ type, detail }: any) => {
-  if (type === 1 && detail?.pressAction?.id === 'default') {
-    // User tapped notification
+  const data = detail?.notification?.data || {};
+  // type 1 = PRESS, type 3 = ACTION_PRESS
+  if ((type === 1 || type === 3) && (data?.callId || data?.screen === 'IncomingCall')) {
+    // User tapped the incoming call notification while app was in background
+    // IncomingCallManager will have already shown the full-screen UI
+    // Just navigate to IncomingCall screen on app open
+    const { navigate } = require('./src/navigation/navigationService');
+    navigate('IncomingCall', {
+      callId: data.callId,
+      callerName: data.callerName || 'Unknown',
+      callerAvatar: data.callerAvatar || '',
+      roomId: data.chatId || data.callId,
+      callType: data.callType || 'voice',
+      notificationId: detail?.notification?.id,
+    });
   }
 });
 
