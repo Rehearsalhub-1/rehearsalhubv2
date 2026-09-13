@@ -534,7 +534,8 @@ export default function PlayerScreen({ route, navigation }: any) {
     setShowColorPalette,
     getMyColor,
     handleClearMyAnnotations,
-    setShowNotesModal
+    setShowNotesModal,
+    personalNote,
   } = useAnnotationsAndNotes(activeTrack?.id, activeTrack?.title, { isPlayer: true });
 
   const {
@@ -824,7 +825,7 @@ export default function PlayerScreen({ route, navigation }: any) {
     }
   };
 
-  const previewTabs = ['Lyrics', 'Comments', 'Conductor'];
+  const previewTabs = ['Lyrics', 'Notes', 'Comments', 'Conductor'];
 
   useEffect(() => {
     if (!activeTrack?.id) return;
@@ -1191,6 +1192,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                     const getTabIcon = (t: string) => {
                       switch(t) {
                         case 'Lyrics': return 'document-text-outline';
+                        case 'Notes': return 'reader-outline';
                         case 'Conductor': return 'musical-notes-outline';
                         case 'Solfa': return 'musical-note-outline';
                         case 'History': return 'time-outline';
@@ -1395,6 +1397,33 @@ export default function PlayerScreen({ route, navigation }: any) {
               </>
             );
           })()}
+
+          {activePreviewTab === 'Notes' && (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>My Personal Notes</Text>
+                {personalNote ? (
+                  <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 90 }} contentContainerStyle={{ flexGrow: 1 }}>
+                    <Text style={{ color: theme.colors.textPrimary, fontSize: 15, lineHeight: 24, fontWeight: '500' }}>
+                      {personalNote}
+                    </Text>
+                  </ScrollView>
+                ) : (
+                  <View style={{ minHeight: 80, justifyContent: 'center' }}>
+                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                      No personal notes yet. Tap the edit button to add your private notes.
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity
+                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16, marginTop: 4 }}
+                activeOpacity={0.8}
+                onPress={() => setShowNotesModal(true)}>
+                <Ionicons name="create-outline" size={22} color={theme.colors.accent} />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {activePreviewTab === 'Comments' && !fromAllSongs && (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>

@@ -40,7 +40,13 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
   }, []);
 
   useEffect(() => {
-    if (!trackId) return;
+    if (!trackId) {
+      setPersonalNote('');
+      setPersonalStrokes([]);
+      return;
+    }
+    setPersonalNote('');
+    setPersonalStrokes([]);
     let isMounted = true;
     const localNoteKey = `SONG_PERSONAL_NOTE_${trackId}`;
     const localStrokesKey = `SONG_PERSONAL_STROKES_${trackId}`;
@@ -238,6 +244,10 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
     selectedColor,
     setSelectedColor,
     getMyColor,
+    personalNote,
+    setPersonalNote,
+    personalStrokes,
+    setPersonalStrokes,
     showColorPalette,
     setShowColorPalette
   };

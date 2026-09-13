@@ -112,14 +112,16 @@ export default function LoginScreen({ route, navigation }: any) {
   const [savedKcToken, setSavedKcToken] = useState<string>('');
   const [accountSelectLoading, setAccountSelectLoading] = useState(false);
 
-  const handleSelectAccount = async (targetEmail: string) => {
+  const handleSelectAccount = async (targetUserId: string, targetEmail?: string | null) => {
     if (!savedKcToken) return;
     setAccountSelectLoading(true);
     try {
       const res = await api.auth.kingschatLogin({
         accessToken: savedKcToken,
-        selectedEmail: targetEmail,
-        email: targetEmail,
+        selectedUserId: targetUserId,
+        userId: targetUserId,
+        selectedEmail: targetEmail || undefined,
+        email: targetEmail || undefined,
       });
 
       if (res.success && res.data) {
@@ -997,11 +999,18 @@ export default function LoginScreen({ route, navigation }: any) {
                       ? 'Group Coordinator'
                       : 'Choir Member';
 
+                  const displaySubtitle =
+                    acc.email && !acc.email.includes('placeholder.rehearsalhub.com')
+                      ? acc.email
+                      : acc.phone
+                      ? `Phone: ${acc.phone}`
+                      : 'HQ Member';
+
                   return (
                     <TouchableOpacity
                       key={acc.id || idx}
                       disabled={accountSelectLoading}
-                      onPress={() => handleSelectAccount(acc.email)}
+                      onPress={() => handleSelectAccount(acc.id, acc.email)}
                       style={{
                         backgroundColor: 'rgba(255,255,255,0.06)',
                         borderWidth: 1,
@@ -1014,19 +1023,43 @@ export default function LoginScreen({ route, navigation }: any) {
                         justifyContent: 'space-between',
                       }}
                     >
-                      <View style={{ flex: 1, marginRight: 10 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                          <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{fullName}</Text>
-                          <View style={{ backgroundColor: 'rgba(168, 85, 247, 0.25)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                            <Text style={{ color: '#c084fc', fontSize: 10, fontWeight: '700' }}>{roleBadge}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 }}>
+                        {acc.avatarUrl ? (
+                          <Image
+                            source={{ uri: acc.avatarUrl }}
+                            style={{ width: 42, height: 42, borderRadius: 21, marginRight: 12, backgroundColor: 'rgba(255,255,255,0.1)' }}
+                          />
+                        ) : (
+                          <View
+                            style={{
+                              width: 42,
+                              height: 42,
+                              borderRadius: 21,
+                              backgroundColor: 'rgba(168, 85, 247, 0.2)',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginRight: 12,
+                            }}
+                          >
+                            <Ionicons name="person" size={20} color="#c084fc" />
                           </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }} numberOfLines={1}>
+                              {fullName}
+                            </Text>
+                            <View style={{ backgroundColor: 'rgba(168, 85, 247, 0.25)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                              <Text style={{ color: '#c084fc', fontSize: 10, fontWeight: '700' }}>{roleBadge}</Text>
+                            </View>
+                          </View>
+                          <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{displaySubtitle}</Text>
+                          {acc.zoneCode ? (
+                            <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>
+                              Zone: {acc.zoneCode}
+                            </Text>
+                          ) : null}
                         </View>
-                        <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>{acc.email}</Text>
-                        {acc.zoneCode ? (
-                          <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 }}>
-                            Zone: {acc.zoneCode}
-                          </Text>
-                        ) : null}
                       </View>
                       <Ionicons name="chevron-forward" size={18} color="#a855f7" />
                     </TouchableOpacity>
