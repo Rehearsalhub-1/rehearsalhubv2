@@ -20,8 +20,8 @@ import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
-
 import { DoodleBackground } from '../components/DoodleBackground';
+import { formatLyricsHtml, stripHtml } from '../utils/lyricsFormatter';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -143,7 +143,7 @@ export default function HistoryScreen({ route, navigation }: any) {
         return ["conductor's guide", 'conductor guide', 'conductor', 'solfas'].includes(type);
       }
       if (tabId === 'comments') {
-        return ['comments', 'comment', 'coordinator comments', 'pastor comments', 'director comment'].includes(type);
+        return ['comments', 'comment', 'rehearsal_comment', 'rehearsal comment', 'coordinator comments', 'pastor comments', 'director comment'].includes(type);
       }
       if (tabId === 'lyrics') {
         return ['lyrics', 'lyric'].includes(type);
@@ -175,57 +175,84 @@ export default function HistoryScreen({ route, navigation }: any) {
     ...theme.typography.htmlBase
   };
 
-  const parseMarkdown = (text: any) => {
-
-    if (!text) return '';
-    const str = typeof text === 'string' ? text : JSON.stringify(text);
-    return str
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<strong>$1</strong>');
-  };
-
   const renderHistoryContent = (entry: any) => {
+    const rawNewVal = entry?.new_value ?? entry?.newValue ?? '';
+    const rawOldVal = entry?.old_value ?? entry?.oldValue ?? '';
 
-    if (['song-details', 'personnel', 'music-details', 'metadata'].includes(entry.type)) {
+    // Check if the history entry contains structured metadata JSON
+    let newObj: Record<string, any> | null = null;
+    let oldObj: Record<string, any> | null = null;
+
+    if (typeof rawNewVal === 'string' && rawNewVal.trim().startsWith('{')) {
       try {
-        const newObj = JSON.parse(entry.new_value || '{}');
-        const oldObj = JSON.parse(entry.old_value || '{}');
-        
-        return (
-          <View style={{ marginTop: 8, gap: 12 }}>
-            {Object.keys(newObj || {}).map((key) => {
-              const val = newObj[key];
-              const oldVal = oldObj[key];
-              return (
-                <View key={key} style={styles.metadataRow}>
-                  <Text style={styles.metadataKey}>{key.replace(/([A-Z])/g, ' $1').toUpperCase()}:</Text>
-                  <View style={styles.metadataValueContainer}>
-                    {oldVal && oldVal !== val && (
-                      <>
-                        <Text style={styles.metadataOldValue} numberOfLines={1}>{String(oldVal)}</Text>
-                        <Ionicons name="arrow-forward" size={14} color={theme.colors.textMuted} style={{ marginHorizontal: 4 }} />
-                      </>
-                    )}
-                    <Text style={styles.metadataNewValue} numberOfLines={1}>{String(val || 'None')}</Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        );
-      } catch (e) {
+        const parsed = JSON.parse(rawNewVal);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          newObj = parsed;
+        }
+      } catch (e) {
+        newObj = null;
       }
+    } else if (rawNewVal && typeof rawNewVal === 'object' && !Array.isArray(rawNewVal)) {
+      newObj = rawNewVal;
     }
+
+    if (newObj) {
+      if (typeof rawOldVal === 'string' && rawOldVal.trim().startsWith('{')) {
+        try {
+          const parsedOld = JSON.parse(rawOldVal);
+          if (parsedOld && typeof parsedOld === 'object' && !Array.isArray(parsedOld)) {
+            oldObj = parsedOld;
+          }
+        } catch (e) {
+          oldObj = null;
+        }
+      } else if (rawOldVal && typeof rawOldVal === 'object' && !Array.isArray(rawOldVal)) {
+        oldObj = rawOldVal;
+      }
+
+      return (
+        <View style={{ marginTop: 8, gap: 12 }}>
+          {Object.keys(newObj).map((key) => {
+            const rawV = newObj![key];
+            const rawOldV = oldObj ? oldObj[key] : null;
+
+            // Strip any raw HTML tags (e.g. <div>, <b>) from metadata values so they never show raw tags in <Text>
+            const cleanVal = stripHtml(rawV !== undefined && rawV !== null ? String(rawV) : 'None');
+            const cleanOldVal = rawOldV !== undefined && rawOldV !== null ? stripHtml(String(rawOldV)) : null;
+
+            return (
+              <View key={key} style={styles.metadataRow}>
+                <Text style={styles.metadataKey}>{key.replace(/([A-Z])/g, ' $1').toUpperCase()}:</Text>
+                <View style={styles.metadataValueContainer}>
+                  {cleanOldVal && cleanOldVal !== cleanVal && (
+                    <>
+                      <Text style={styles.metadataOldValue} numberOfLines={1}>{cleanOldVal}</Text>
+                      <Ionicons name="arrow-forward" size={14} color={theme.colors.textMuted} style={{ marginHorizontal: 4 }} />
+                    </>
+                  )}
+                  <Text style={styles.metadataNewValue} numberOfLines={2}>{cleanVal || 'None'}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      );
+    }
+
+    // Otherwise, render formatted text/HTML (lyrics, conductor guide, comments)
+    const formattedHtml = formatLyricsHtml(rawNewVal);
 
     return (
       <RenderHtml
         contentWidth={SCREEN_WIDTH - 88}
-        source={{ html: parseMarkdown(entry.new_value || '') }}
+        source={{ html: formattedHtml || '<p>No content available</p>' }}
         baseStyle={htmlBaseStyle}
         tagsStyles={{
-          p: { marginBottom: 12 },
+          p: { marginBottom: 10, lineHeight: 22 },
+          div: { marginBottom: 6 },
           strong: { color: theme.colors.accent, fontWeight: '800' },
-          b: { color: theme.colors.accent, fontWeight: '800' }
+          b: { color: theme.colors.accent, fontWeight: '800' },
+          br: { height: 8 },
         }}
       />
     );

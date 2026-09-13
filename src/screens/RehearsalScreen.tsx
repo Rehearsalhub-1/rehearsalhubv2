@@ -1131,13 +1131,16 @@ export default function RehearsalScreen({ navigation, route }: any) {
     ? (programSongs.find((s: any) => String(s.id) === String(activeTrack.originalSongId)) || activeTrack)
     : (activeTrack || (programSongs.length > 0 ? programSongs[0] : fallbackTrack));
 
-  const activeSongs = useMemo(() => programSongs.filter((song: any) => song.isActive), [programSongs]);
+  const liveRehearsalSongs = useMemo(
+    () => programSongs.filter((song: any) => song && (song.isLive === true || song.status === 'live')),
+    [programSongs]
+  );
 
   useEffect(() => {
-    if (activeSongs.length > 0) {
-      useLiveSongStore.getState().setActiveSongs(activeSongs);
+    if (liveRehearsalSongs.length > 0) {
+      useLiveSongStore.getState().setActiveSongs(liveRehearsalSongs);
     }
-  }, [activeSongs]);
+  }, [liveRehearsalSongs]);
 
   const categoryHeardCount = useMemo(() => programSongs.filter((track: any) => {
     return songBelongsToCategory(track, selectedCategory || '') && track.status === 'heard';

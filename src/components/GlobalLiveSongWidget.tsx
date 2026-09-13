@@ -153,7 +153,8 @@ export default function GlobalLiveSongWidget() {
       : `${activeSongs.length} Songs Live`;
 
   // Dynamically elevate widget if a mini player is active
-  const bottomOffset = currentTrack
+  const hasMiniPlayer = Boolean(currentTrack?.id);
+  const bottomOffset = hasMiniPlayer
     ? Math.max(145, 135 + insets.bottom)
     : Math.max(90, 75 + insets.bottom);
 
@@ -175,6 +176,7 @@ export default function GlobalLiveSongWidget() {
           {/* Animated pulsing outer ring */}
           <View style={styles.indicatorWrapper}>
             <Animated.View
+              pointerEvents="none"
               style={[
                 styles.pulseRing,
                 {
@@ -304,6 +306,8 @@ const styles = StyleSheet.create({
     right: 16,
     borderRadius: 20,
     borderWidth: 1.5,
+    minHeight: 44,
+    justifyContent: 'center',
     shadowColor: '#22c55e',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -323,6 +327,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 9,
+    overflow: 'visible',
   },
   pulseRing: {
     position: 'absolute',

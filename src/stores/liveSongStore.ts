@@ -37,11 +37,24 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   isLoading: false,
 
   setActiveSongs: (songs: LiveSong[]) => {
-    set({
-      activeSongs: Array.isArray(songs)
-        ? songs.filter((s) => s && (s.status === 'live' || s.isLive === true))
-        : [],
-    });
+    const liveOnly = Array.isArray(songs)
+      ? songs.filter(
+          (s) =>
+            s &&
+            (s.status === 'live' ||
+              s.isLive === true ||
+              s.isActive === true ||
+              String(s.isActive) === 'true')
+        )
+      : [];
+
+    const current = get().activeSongs;
+    const currentSig = current.map((s) => `${s.id}-${s.title}`).join('|');
+    const newSig = liveOnly.map((s) => `${s.id}-${s.title}`).join('|');
+
+    if (currentSig !== newSig) {
+      set({ activeSongs: liveOnly });
+    }
   },
 
   removeSong: (songId: string) => {
