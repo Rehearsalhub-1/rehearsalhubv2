@@ -2292,7 +2292,7 @@ const getStyles = (theme: any, insets: any) => {
   },
   overlayContent: {
     flex: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingTop: 72,
     paddingBottom: 12,
     justifyContent: 'flex-end'
@@ -2330,7 +2330,7 @@ const getStyles = (theme: any, insets: any) => {
     alignItems: 'center'
   },
   tableCellLeft: {
-    flex: 1.1,
+    flex: 1.15,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2338,7 +2338,7 @@ const getStyles = (theme: any, insets: any) => {
     paddingRight: 6
   },
   tableCellRight: {
-    flex: 0.9,
+    flex: 0.85,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2347,14 +2347,15 @@ const getStyles = (theme: any, insets: any) => {
   },
   tableLabel: {
     color: 'rgba(255,255,255,0.65)',
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    marginRight: 5,
-    letterSpacing: 0.2
+    marginRight: 4,
+    letterSpacing: 0.2,
+    flexShrink: 0
   },
   tableValue: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     flexShrink: 1
   },
