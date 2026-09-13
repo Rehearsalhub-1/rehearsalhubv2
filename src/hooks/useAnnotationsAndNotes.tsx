@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, PanResponder, Modal, TextInput, ActivityIndicator, Alert, Dimensions, ScrollView, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiClient } from '../lib/apiClient';
 import { useTheme } from '../context/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,25 +34,47 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
   const [noteMode, setNoteMode] = useState<'text' | 'draw'>('text');
   const [isSavingNote, setIsSavingNote] = useState(false);
   useEffect(() => {
-    const user = useUserStore.getState().user;
-    if (!user) return;
     const profile = useUserStore.getState().profile;
     // Use centralized canUseAnnotations which respects hideAnnotations feature metric
     setIsPrivileged(canUseAnnotations(profile));
   }, []);
 
   useEffect(() => {
-    const user = useUserStore.getState().user;
-    if (!user || !trackId) return;
-    apiClient.get<{ success: boolean; data: any }>(`/songs/notes/${trackId}`).then(res => {
-      if (res?.success && res.data) {
-        setPersonalNote(res.data.notes || res.data.note || '');
-      } else {
-        setPersonalNote('');
+    if (!trackId) return;
+    let isMounted = true;
+    const localNoteKey = `SONG_PERSONAL_NOTE_${trackId}`;
+    const localStrokesKey = `SONG_PERSONAL_STROKES_${trackId}`;
+
+    // 1. Immediately read from AsyncStorage so user never waits and notes show instantly
+    AsyncStorage.getItem(localNoteKey).then(savedNote => {
+      if (savedNote !== null && isMounted) {
+        setPersonalNote(savedNote);
       }
-    }).catch(() => {
-      setPersonalNote('');
-    });
+    }).catch(() => {});
+
+    AsyncStorage.getItem(localStrokesKey).then(savedStrokes => {
+      if (savedStrokes && isMounted) {
+        try {
+          const parsed = JSON.parse(savedStrokes);
+          if (Array.isArray(parsed)) setPersonalStrokes(parsed);
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // 2. Sync from backend
+    apiClient.get<{ success: boolean; data: any }>(`/songs/notes/${trackId}`).then(res => {
+      if (res?.success && isMounted) {
+        const remoteNote = typeof res.data === 'string'
+          ? res.data
+          : (res.data?.notes ?? res.data?.note ?? '');
+        if (remoteNote) {
+          setPersonalNote(remoteNote);
+          AsyncStorage.setItem(localNoteKey, remoteNote).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+
+    return () => { isMounted = false; };
   }, [trackId]);
 
   const getMyColor = () => {
@@ -71,16 +94,35 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
   };
 
   const handleSaveNote = async () => {
-    const user = useUserStore.getState().user;
-    if (!user || !trackId) return;
+    if (!trackId) return;
     setIsSavingNote(true);
+    const localNoteKey = `SONG_PERSONAL_NOTE_${trackId}`;
+    const localStrokesKey = `SONG_PERSONAL_STROKES_${trackId}`;
+
     try {
+      // 1. Always save to local storage immediately
+      await AsyncStorage.setItem(localNoteKey, personalNote || '');
+      if (personalStrokes.length > 0) {
+        await AsyncStorage.setItem(localStrokesKey, JSON.stringify(personalStrokes));
+      } else {
+        await AsyncStorage.removeItem(localStrokesKey);
+      }
+
+      // 2. Sync to backend with fallback
       await apiClient.patch(`/songs/notes/${trackId}`, {
         notes: personalNote,
+        note: personalNote,
       });
+
       setShowNotesModal(false);
-    } catch {}
-    setIsSavingNote(false);
+      Alert.alert('Saved', 'Your notes have been saved.');
+    } catch (err: any) {
+      console.warn('[handleSaveNote saved locally]:', err?.message);
+      setShowNotesModal(false);
+      Alert.alert('Saved Offline', 'Notes saved to your device.');
+    } finally {
+      setIsSavingNote(false);
+    }
   };
 
   const isAnnotationModeRef = useRef(isAnnotationMode);

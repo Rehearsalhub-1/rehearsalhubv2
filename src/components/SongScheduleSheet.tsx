@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useZone } from '../hooks/useZone';
+import { useChurch } from '../hooks/useUser';
 import { isHQGroup } from '../config/zones';
 
 const { height: H } = Dimensions.get('window');
@@ -378,6 +379,7 @@ interface Props {
 export function SongScheduleSheet({ visible, onClose }: Props) {
   const { theme } = useTheme();
   const { currentZone } = useZone();
+  const { currentChurch } = useChurch();
   const insets = useSafeAreaInsets();
   
   const [activeTab, setActiveTab] = useState("schedule");
@@ -424,22 +426,30 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
     if (!currentZone?.id) return;
     
     const resolvedZoneId = isHQGroup(currentZone.id) ? 'zone-001' : currentZone.id;
-    const cacheKey = `SCHEDULE_CACHE_${resolvedZoneId}_${viewHistory}`;
+    const churchId = currentChurch?.id || '';
+    const cacheKey = `SCHEDULE_CACHE_${resolvedZoneId}_${churchId || 'zone'}_${viewHistory}`;
     let isMounted = true;
     const loadCache = async () => {
       try {
         const cachedStr = await AsyncStorage.getItem(cacheKey);
         if (cachedStr && isMounted) {
-          const fetched = JSON.parse(cachedStr);
+          const parsed = JSON.parse(cachedStr);
+          const fetched = Array.isArray(parsed)
+            ? parsed.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'))
+            : [];
           setPrograms(fetched);
-          setActiveProgramId((prev) => {
-            if (!prev || !fetched.find((f: any) => f.id === prev)) {
-              const currentProg = fetched.find((f: any) => f.isCurrent);
-              if (currentProg) return currentProg.id;
-              return fetched.length > 0 ? fetched[fetched.length - 1].id : null;
-            }
-            return prev;
-          });
+          if (fetched.length > 0) {
+            setActiveProgramId((prev) => {
+              if (!prev || !fetched.find((f: any) => f.id === prev)) {
+                const currentProg = fetched.find((f: any) => f.isCurrent);
+                if (currentProg) return currentProg.id;
+                return fetched[fetched.length - 1].id;
+              }
+              return prev;
+            });
+          } else {
+            setActiveProgramId(null);
+          }
           setLoading(false);
         } else {
           setLoading(true);
@@ -451,10 +461,12 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
     };
 
     loadCache();
-    apiClient.get<{ success: boolean; data: any[] }>('/schedules').then(res => {
+    const queryUrl = `/schedules?zoneId=${encodeURIComponent(resolvedZoneId)}&subGroupId=${encodeURIComponent(churchId)}&isArchived=${viewHistory}`;
+    apiClient.get<{ success: boolean; data: any[] }>(queryUrl).then(res => {
       if (res?.success && Array.isArray(res.data) && isMounted) {
-        const fetched = res.data;
+        const fetched = res.data.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'));
         setPrograms(fetched);
+        AsyncStorage.setItem(cacheKey, JSON.stringify(fetched)).catch(() => {});
         setActiveProgramId((prev) => {
           if (!prev || !fetched.find((f: any) => f.id === prev)) {
             const currentProg = fetched.find((f: any) => f.isCurrent);
@@ -468,7 +480,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
     }).catch(() => { if (isMounted) setLoading(false); });
 
     return () => { isMounted = false; };
-  }, [currentZone?.id, viewHistory]);
+  }, [currentZone?.id, currentChurch?.id, viewHistory]);
 
   const activeProgram = programs.find(p => p.id === activeProgramId) || null;
 
