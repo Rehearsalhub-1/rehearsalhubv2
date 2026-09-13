@@ -37,6 +37,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import Slider from '@react-native-community/slider';
 import RenderHtml from 'react-native-render-html';
+import { formatLyricsHtml } from '../utils/lyricsFormatter';
 import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import { SafeTrackPlayer as TrackPlayer } from '../lib/safeNativeModules';
 import { BlurView } from 'expo-blur';
@@ -863,11 +864,7 @@ export default function PlayerScreen({ route, navigation }: any) {
   };
 
   const parseMarkdown = (text: any) => {
-    if (!text) return '';
-    const str = typeof text === 'string' ? text : JSON.stringify(text);
-    return str
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<strong>$1</strong>');
+    return formatLyricsHtml(text);
   };
 
   const getParsedCommentsHtml = () => {

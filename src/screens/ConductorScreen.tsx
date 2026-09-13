@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
+import { formatLyricsHtml } from '../utils/lyricsFormatter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import Svg, { Path } from 'react-native-svg';
@@ -182,10 +183,11 @@ export default function ConductorScreen({ route, navigation }: any) {
             return activeTrack?.conductorGuide ? (
               <RenderHtml
                 contentWidth={SCREEN_WIDTH - 48}
-                source={{ html: parseMarkdown(activeTrack.conductorGuide) }}
+                source={{ html: formatLyricsHtml(activeTrack.conductorGuide) }}
                 baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                 tagsStyles={{
                   p: { marginBottom: 20 },
+                  div: { marginBottom: 14 },
                   strong: { color: theme.colors.accent, fontWeight: '800' },
                   b: { color: theme.colors.accent, fontWeight: '800' },
                   h1: { fontSize: 26, marginBottom: 16, fontWeight: '800' },

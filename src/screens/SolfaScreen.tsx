@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
+import { formatLyricsHtml } from '../utils/lyricsFormatter';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -134,10 +135,11 @@ export default function SolfaScreen({ route, navigation }: any) {
             return activeTrack?.solfa ? (
               <RenderHtml
                 contentWidth={SCREEN_WIDTH - 48}
-                source={{ html: parseMarkdown(activeTrack.solfa) }}
+                source={{ html: formatLyricsHtml(activeTrack.solfa) }}
                 baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                 tagsStyles={{
                   p: { marginBottom: 20 },
+                  div: { marginBottom: 14 },
                   strong: { color: theme.colors.accent, fontWeight: '800' },
                   b: { color: theme.colors.accent, fontWeight: '800' },
                   h1: { fontSize: 26, marginBottom: 16, fontWeight: '800' },
