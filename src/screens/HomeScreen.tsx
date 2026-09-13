@@ -265,26 +265,46 @@ export default function HomeScreen({ navigation }: any) {
     }).catch(() => {});
   }, [user?.uid, isFocused]);
 
-  const toggleSidebar = () => {
-    const nextState = !isSidebarOpen;
-    const toValue = nextState ? 0 : -SIDEBAR_WIDTH;
-    const backdropToValue = nextState ? 1 : 0;
-
-    setIsSidebarOpen(nextState);
-
+  const openSidebar = () => {
+    setIsSidebarOpen(true);
     Animated.parallel([
       Animated.timing(sidebarAnim, {
-        toValue,
+        toValue: 0,
         duration: 260,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
         useNativeDriver: true,
       }),
       Animated.timing(backdropAnim, {
-        toValue: backdropToValue,
+        toValue: 1,
         duration: 260,
         useNativeDriver: true,
       }),
     ]).start();
+  };
+
+  const closeSidebar = () => {
+    setIsSidebarOpen(false);
+    Animated.parallel([
+      Animated.timing(sidebarAnim, {
+        toValue: -SIDEBAR_WIDTH,
+        duration: 260,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const toggleSidebar = () => {
+    if (isSidebarOpen) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
   };
 
   const mainScale = sidebarAnim.interpolate({
@@ -478,8 +498,7 @@ export default function HomeScreen({ navigation }: any) {
       >
         <Pressable
           style={StyleSheet.absoluteFill}
-          onStartShouldSetResponder={() => true}
-          onPress={() => setIsSidebarOpen(false)}
+          onPress={closeSidebar}
         />
       </Animated.View>
 
@@ -515,9 +534,26 @@ export default function HomeScreen({ navigation }: any) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.sidebarScrollContent}>
             
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Loveworld Singers</Text>
-              <Text style={styles.sidebarSubtitle}>Rehearsal Hub Portal</Text>
+            <View style={[styles.sidebarHeader, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sidebarTitle}>Loveworld Singers</Text>
+                <Text style={styles.sidebarSubtitle}>Rehearsal Hub Portal</Text>
+              </View>
+              <TouchableOpacity
+                onPress={closeSidebar}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginLeft: 8,
+                }}
+              >
+                <Ionicons name="close" size={22} color="#ffffff" />
+              </TouchableOpacity>
             </View>
 
             {MENU_SECTIONS.map((section, sIndex) => {
@@ -560,26 +596,20 @@ export default function HomeScreen({ navigation }: any) {
                 style={item.id === 'songs' ? styles.activeMenuItem : styles.menuItem}
                 activeOpacity={0.6}
                 onPress={() => {
+                  closeSidebar();
                   if (item.id === 'ongoing') {
-                    toggleSidebar();
                     navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'ongoing' });
                   } else if (item.id === 'pre-rehearsal') {
-                    toggleSidebar();
                     navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'pre-rehearsal' });
                   } else if (item.id === 'archives') {
-                    toggleSidebar();
                     navigation.navigate('Archive');
                   } else if (item.id === 'studio') {
-                    toggleSidebar();
                     navigation.navigate('Audiolab');
                   } else if (item.id === 'songs') {
-                    toggleSidebar();
                     navigation.navigate('AllSongs');
                   } else if (item.id === 'chat') {
-                    toggleSidebar();
                     navigation.navigate('ChatRooms', { card: { source: CLOUD_ASSETS[2] } });
                   } else if (item.id === 'subgroups') {
-                    toggleSidebar();
                     navigation.navigate('Rehearsal', { 
                       mode: 'subgroup', 
                       scope: 'subgroup', 
@@ -587,25 +617,18 @@ export default function HomeScreen({ navigation }: any) {
                       resetState: true 
                     });
                   } else if (item.id === 'links') {
-                    toggleSidebar();
                     navigation.navigate('Links');
                   } else if (item.id === 'profile') {
-                    toggleSidebar();
                     navigation.navigate('Settings');
                   } else if (item.id === 'admin') {
-                    toggleSidebar();
                     Alert.alert('System Admin', 'Accessing Loveworld Singers Core Management Console...');
                   } else if (item.id === 'submit') {
-                    toggleSidebar();
                     navigation.navigate('SubmitSong');
                   } else if (item.id === 'lexicon') {
-                    toggleSidebar();
                     navigation.navigate('Lexicon');
                   } else if (item.id === 'media') {
-                    toggleSidebar();
                     navigation.navigate('Media');
                   } else if (item.id === 'playlists') {
-                    toggleSidebar();
                     navigation.navigate('Playlists');
                   }
                 }}>

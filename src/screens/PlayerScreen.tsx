@@ -1141,45 +1141,45 @@ export default function PlayerScreen({ route, navigation }: any) {
                   </View>
 
                   <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCell}>
+                    <View style={styles.tableCellLeft}>
                       <Text style={styles.tableLabel}>WRITER:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.writer?.split(',')[0]?.trim() || 'Unknown'}</ExpandableText>
                     </View>
-                    <View style={[styles.tableCell, { justifyContent: 'flex-end', flex: 0.8 }]}>
+                    <View style={styles.tableCellRight}>
                       <Text style={styles.tableLabel}>REHEARSALS:</Text>
                       <ExpandableText style={[styles.tableValue, { color: theme.colors.accent }]}>{`x${activeTrack.rehearsalCount ?? 0}`}</ExpandableText>
                     </View>
                   </View>
 
                   <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCell}>
+                    <View style={styles.tableCellLeft}>
                       <Text style={styles.tableLabel}>CONDUCTOR:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.conductor?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
-                    <View style={[styles.tableCell, { justifyContent: 'flex-end', flex: 0.8 }]}>
+                    <View style={styles.tableCellRight}>
                       <Text style={styles.tableLabel}>KEY:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.key || '—'}</ExpandableText>
                     </View>
                   </View>
 
                   <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCell}>
-                      <Text style={styles.tableLabel}>LEAD KEYBOARDIST:</Text>
+                    <View style={styles.tableCellLeft}>
+                      <Text style={styles.tableLabel}>KEYBOARD:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.leadKeyboardist?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
-                    <View style={[styles.tableCell, { justifyContent: 'flex-end', flex: 0.8 }]}>
+                    <View style={styles.tableCellRight}>
                       <Text style={styles.tableLabel}>TEMPO:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.tempo || '—'}</ExpandableText>
                     </View>
                   </View>
 
                   <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCell}>
+                    <View style={styles.tableCellLeft}>
                       <Text style={styles.tableLabel}>DRUMMER:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.drummer?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
-                    <View style={[styles.tableCell, { justifyContent: 'flex-end', flex: 1.2 }]}>
-                      <Text style={styles.tableLabel}>BASS GUITARIST:</Text>
+                    <View style={styles.tableCellRight}>
+                      <Text style={styles.tableLabel}>BASS GUITAR:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.leadGuitarist?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
                   </View>
@@ -2292,7 +2292,7 @@ const getStyles = (theme: any, insets: any) => {
   },
   overlayContent: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 72,
     paddingBottom: 12,
     justifyContent: 'flex-end'
@@ -2301,14 +2301,16 @@ const getStyles = (theme: any, insets: any) => {
     width: '100%',
     flex: 1,
     justifyContent: 'flex-end',
-    gap: 3
+    gap: 3,
+    overflow: 'hidden'
   },
   tableRowFull: {
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.3)',
-    paddingBottom: 6,
+    borderBottomColor: 'rgba(255,255,255,0.25)',
+    paddingBottom: 5,
+    paddingHorizontal: 2,
     marginBottom: 0
   },
   tableRowSplit: {
@@ -2316,24 +2318,43 @@ const getStyles = (theme: any, insets: any) => {
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.3)',
-    paddingBottom: 6,
+    borderBottomColor: 'rgba(255,255,255,0.25)',
+    paddingBottom: 5,
+    paddingHorizontal: 2,
     marginBottom: 0
   },
   tableCell: {
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center'
   },
+  tableCellLeft: {
+    flex: 1.1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+    paddingRight: 6
+  },
+  tableCellRight: {
+    flex: 0.9,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    overflow: 'hidden'
+  },
   tableLabel: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
     fontWeight: '800',
-    marginRight: 6
+    marginRight: 5,
+    letterSpacing: 0.2
   },
   tableValue: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     flexShrink: 1
   },
