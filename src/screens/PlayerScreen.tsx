@@ -1164,7 +1164,7 @@ export default function PlayerScreen({ route, navigation }: any) {
 
                   <View style={styles.tableRowSplit}>
                     <View style={styles.tableCellLeft}>
-                      <Text style={styles.tableLabel}>KEYBOARD:</Text>
+                      <Text style={styles.tableLabel}>LEAD KEYBOARDIST:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.leadKeyboardist?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
                     <View style={styles.tableCellRight}>
@@ -1178,8 +1178,8 @@ export default function PlayerScreen({ route, navigation }: any) {
                       <Text style={styles.tableLabel}>DRUMMER:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.drummer?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
-                    <View style={styles.tableCellRight}>
-                      <Text style={styles.tableLabel}>BASS GUITAR:</Text>
+                    <View style={[styles.tableCellLeft, { justifyContent: 'flex-end', flex: 1.2 }]}>
+                      <Text style={styles.tableLabel}>BASS GUITARIST:</Text>
                       <ExpandableText style={styles.tableValue}>{activeTrack.leadGuitarist?.split(',')[0]?.trim() || '—'}</ExpandableText>
                     </View>
                   </View>
