@@ -283,7 +283,6 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const closeSidebar = () => {
-    setIsSidebarOpen(false);
     Animated.parallel([
       Animated.timing(sidebarAnim, {
         toValue: -SIDEBAR_WIDTH,
@@ -296,7 +295,9 @@ export default function HomeScreen({ navigation }: any) {
         duration: 260,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      setIsSidebarOpen(false);
+    });
   };
 
   const toggleSidebar = () => {
@@ -492,15 +493,17 @@ export default function HomeScreen({ navigation }: any) {
       </Animated.View>
 
       {/* Darkened Backdrop Overlay */}
-      <Animated.View
-        pointerEvents={isSidebarOpen ? 'auto' : 'none'}
-        style={[styles.backdrop, { opacity: backdropAnim }]}
-      >
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={closeSidebar}
-        />
-      </Animated.View>
+      {isSidebarOpen && (
+        <Animated.View
+          style={[styles.backdrop, { opacity: backdropAnim }]}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={StyleSheet.absoluteFill}
+            onPress={closeSidebar}
+          />
+        </Animated.View>
+      )}
 
       {/* Slide-out Sidebar Drawer */}
       <Animated.View
@@ -534,26 +537,9 @@ export default function HomeScreen({ navigation }: any) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.sidebarScrollContent}>
             
-            <View style={[styles.sidebarHeader, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sidebarTitle}>Loveworld Singers</Text>
-                <Text style={styles.sidebarSubtitle}>Rehearsal Hub Portal</Text>
-              </View>
-              <TouchableOpacity
-                onPress={closeSidebar}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: 'rgba(255,255,255,0.1)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginLeft: 8,
-                }}
-              >
-                <Ionicons name="close" size={22} color="#ffffff" />
-              </TouchableOpacity>
+            <View style={styles.sidebarHeader}>
+              <Text style={styles.sidebarTitle}>Loveworld Singers</Text>
+              <Text style={styles.sidebarSubtitle}>Rehearsal Hub Portal</Text>
             </View>
 
             {MENU_SECTIONS.map((section, sIndex) => {
@@ -737,8 +723,8 @@ const getStyles = (theme: any, insets?: any) => {
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.65)',
-    zIndex: 100,
-    elevation: 100,
+    zIndex: 500,
+    elevation: 500,
   },
   sidebar: {
     position: 'absolute',

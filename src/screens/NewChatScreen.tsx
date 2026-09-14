@@ -285,7 +285,7 @@ export default function NewChatScreen({ route, navigation }: any) {
     }
   };
 
-  const openChat = async (user: UserProfile) => {
+  const openChat = (user: UserProfile) => {
     if (groupTargetChatId) {
       toggleSelectUser(user);
       return;
@@ -301,8 +301,6 @@ export default function NewChatScreen({ route, navigation }: any) {
       const myName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || (currentUser as any)?.displayName || (currentUser as any)?.name || 'Me' : (currentUser as any)?.displayName || (currentUser as any)?.name || 'Me';
       const myAvatar = profile?.avatar || '';
 
-      await api.chats.create({ id: chatId, name: user.name, type: 'direct', participants: [currentUser.uid, user.id] }).catch(() => {});
-
       const room = {
         id: chatId,
         title: user.name,
@@ -314,7 +312,12 @@ export default function NewChatScreen({ route, navigation }: any) {
           [user.id]: { name: user.name, avatar: user.avatar || '' },
         },
       };
+
+      // Navigate immediately without blocking on network roundtrip
       navigate(room);
+
+      // Create or ensure the chat exists in the background
+      api.chats.create({ id: chatId, name: user.name, type: 'direct', participants: [currentUser.uid, user.id] }).catch(() => {});
     } catch (e) {
       console.error('Failed to create chat', e);
     }

@@ -565,39 +565,40 @@ export default function RehearsalScreen({ navigation, route }: any) {
       };
 
 
-      if (_memCache[cacheKey] && _memCache[cacheKey].songs.length > 0) {
-        hasCachedDataRef.current = true;
-        setProgramSongs(_memCache[cacheKey].songs);
-        setProgramTitle(_memCache[cacheKey].title || 'Loveworld Singers Mix');
-        setProgramDate(_memCache[cacheKey].date || '');
-        setProgramLocation(_memCache[cacheKey].location || 'Centralized Zonal Rehearsal Platform');
-        if (_memCache[cacheKey].coverImage) setCoverImage(_memCache[cacheKey].coverImage);
-        setupCategoriesFromSongs(_memCache[cacheKey].songs, _memCache[cacheKey].categoryOrder || []);
-        setIsLoading(false);
-      } else {
+      if (!hasCachedDataRef.current) {
+        if (_memCache[cacheKey] && _memCache[cacheKey].songs.length > 0) {
+          hasCachedDataRef.current = true;
+          setProgramSongs(_memCache[cacheKey].songs);
+          setProgramTitle(_memCache[cacheKey].title || 'Loveworld Singers Mix');
+          setProgramDate(_memCache[cacheKey].date || '');
+          setProgramLocation(_memCache[cacheKey].location || 'Centralized Zonal Rehearsal Platform');
+          if (_memCache[cacheKey].coverImage) setCoverImage(_memCache[cacheKey].coverImage);
+          setupCategoriesFromSongs(_memCache[cacheKey].songs, _memCache[cacheKey].categoryOrder || []);
+          setIsLoading(false);
+        } else {
+          setProgramSongs([]);
+          setIsLoading(true);
 
-        setProgramSongs([]);
-        setIsLoading(true);
-
-        const cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(cacheKey);
-        if (active) {
-          if (cached?.songs && cached.songs.length > 0) {
-            hasCachedDataRef.current = true;
-            _memCache[cacheKey] = {
-              songs: cached.songs,
-              title: cached.title || '',
-              date: cached.date || '',
-              location: cached.location || '',
-              coverImage: cached.coverImage || null,
-              categoryOrder: cached.categoryOrder || [],
-            };
-            setProgramSongs(cached.songs);
-            setProgramTitle(cached.title || 'Loveworld Singers Rehearsal');
-            setProgramDate(cached.date || '');
-            setProgramLocation(cached.location || '');
-            if (cached.coverImage) setCoverImage(cached.coverImage);
-            setupCategoriesFromSongs(cached.songs, cached.categoryOrder || []);
-            setIsLoading(false);
+          const cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(cacheKey);
+          if (active) {
+            if (cached?.songs && cached.songs.length > 0) {
+              hasCachedDataRef.current = true;
+              _memCache[cacheKey] = {
+                songs: cached.songs,
+                title: cached.title || '',
+                date: cached.date || '',
+                location: cached.location || '',
+                coverImage: cached.coverImage || null,
+                categoryOrder: cached.categoryOrder || [],
+              };
+              setProgramSongs(cached.songs);
+              setProgramTitle(cached.title || 'Loveworld Singers Rehearsal');
+              setProgramDate(cached.date || '');
+              setProgramLocation(cached.location || '');
+              if (cached.coverImage) setCoverImage(cached.coverImage);
+              setupCategoriesFromSongs(cached.songs, cached.categoryOrder || []);
+              setIsLoading(false);
+            }
           }
         }
       }

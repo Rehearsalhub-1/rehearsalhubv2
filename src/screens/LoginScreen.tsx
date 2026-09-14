@@ -481,12 +481,25 @@ export default function LoginScreen({ route, navigation }: any) {
 
             {/* 1-Tap KingsChat Button */}
             <TouchableOpacity
-              style={styles.kingschatButton}
+              style={styles.kingschatWrapper}
               onPress={handleKingsChatAuth}
               disabled={loading}
               activeOpacity={0.85}
             >
-              <Text style={styles.kingschatButtonText}>Continue with KingsChat</Text>
+              <LinearGradient
+                colors={['#0080ff', '#006ce6', '#0052cc']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.kingschatButton}
+              >
+                <View style={styles.kingschatButtonContent}>
+                  <View style={styles.kingschatIconWrapper}>
+                    <Ionicons name="chatbubble-ellipses" size={17} color="#ffffff" />
+                  </View>
+                  <Text style={styles.kingschatButtonText}>Continue with KingsChat</Text>
+                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.7)" style={{ marginLeft: 6 }} />
+                </View>
+              </LinearGradient>
             </TouchableOpacity>
 
             {/* Divider */}
@@ -503,14 +516,46 @@ export default function LoginScreen({ route, navigation }: any) {
                 onPress={() => setIsLogin(true)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Sign In</Text>
+                {isLogin && (
+                  <LinearGradient
+                    colors={['#9333ea', '#7c3aed']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                )}
+                <View style={styles.tabButtonContent}>
+                  <Ionicons
+                    name="log-in-outline"
+                    size={16}
+                    color={isLogin ? '#ffffff' : 'rgba(255,255,255,0.45)'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Sign In</Text>
+                </View>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.tabButton, !isLogin && styles.tabButtonActive]}
                 onPress={() => setIsLogin(false)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Create Account</Text>
+                {!isLogin && (
+                  <LinearGradient
+                    colors={['#9333ea', '#7c3aed']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                )}
+                <View style={styles.tabButtonContent}>
+                  <Ionicons
+                    name="person-add-outline"
+                    size={16}
+                    color={!isLogin ? '#ffffff' : 'rgba(255,255,255,0.45)'}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Create Account</Text>
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -656,24 +701,37 @@ export default function LoginScreen({ route, navigation }: any) {
               )}
 
               {/* Action Buttons */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <View style={{ width: '100%', marginTop: 14 }}>
                 <TouchableOpacity
-                  style={[styles.primaryButton, { flex: 1 }]}
+                  style={styles.primaryButtonWrapper}
                   onPress={handleSubmit}
                   disabled={loading}
                   activeOpacity={0.85}
                 >
                   <LinearGradient
-                    colors={['#8b5cf6', '#a855f7', '#c084fc']}
+                    colors={['#8b5cf6', '#7c3aed', '#6d28d9']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={StyleSheet.absoluteFillObject}
-                  />
-                  {loading ? (
-                    <ActivityIndicator color="#fff" size="small" />
-                  ) : (
-                    <Text style={styles.primaryButtonText}>{isLogin ? 'Sign In' : 'Create Account'}</Text>
-                  )}
+                    style={styles.primaryButton}
+                  >
+                    <View style={styles.buttonTopHighlight} />
+                    {loading ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <View style={styles.primaryButtonContent}>
+                        <Ionicons
+                          name={isLogin ? 'log-in-outline' : 'sparkles-outline'}
+                          size={20}
+                          color="#ffffff"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.primaryButtonText}>{isLogin ? 'Sign In' : 'Create Account'}</Text>
+                        <View style={styles.buttonArrowCircle}>
+                          <Ionicons name="arrow-forward" size={14} color="#ffffff" />
+                        </View>
+                      </View>
+                    )}
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1135,24 +1193,47 @@ function getStyles() {
       textAlign: 'center',
       textTransform: 'uppercase',
     },
+    kingschatWrapper: {
+      width: '100%',
+      marginBottom: 16,
+      borderRadius: 16,
+      backgroundColor: '#007AFF', // Solid Vibrant Blue Fallback
+      shadowColor: '#007AFF',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.4,
+      shadowRadius: 12,
+      elevation: 6,
+    },
     kingschatButton: {
       width: '100%',
-      height: 52,
+      height: 54,
       borderRadius: 16,
-      backgroundColor: '#007AFF',
+      backgroundColor: '#007AFF', // Vibrant KingsChat Blue
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 16,
-      shadowColor: '#007AFF',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      elevation: 4,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.25)',
+      overflow: 'hidden',
+    },
+    kingschatButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    kingschatIconWrapper: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: 'rgba(255, 255, 255, 0.22)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
     },
     kingschatButtonText: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: '800',
+      letterSpacing: 0.3,
     },
     dividerRow: {
       flexDirection: 'row',
@@ -1175,27 +1256,42 @@ function getStyles() {
     tabContainer: {
       flexDirection: 'row',
       width: '100%',
-      backgroundColor: 'rgba(255,255,255,0.05)',
-      borderRadius: 14,
-      padding: 3,
+      backgroundColor: 'rgba(255, 255, 255, 0.06)',
+      borderRadius: 16,
+      padding: 4,
       marginBottom: 20,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.08)',
     },
     tabButton: {
       flex: 1,
-      paddingVertical: 10,
+      paddingVertical: 11,
       alignItems: 'center',
-      borderRadius: 11,
+      justifyContent: 'center',
+      borderRadius: 12,
+      overflow: 'hidden',
     },
     tabButtonActive: {
-      backgroundColor: darkTheme.colors.accent,
+      backgroundColor: '#7c3aed', // Pure vibrant Purple
+      shadowColor: '#7c3aed',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    tabButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     tabText: {
-      color: 'rgba(255,255,255,0.5)',
+      color: 'rgba(255, 255, 255, 0.5)',
       fontSize: 13,
       fontWeight: '700',
     },
     tabTextActive: {
       color: '#fff',
+      fontWeight: '800',
     },
     formContainer: {
       width: '100%',
@@ -1291,22 +1387,55 @@ function getStyles() {
     designationTextActive: {
       color: '#fff',
     },
-    primaryButton: {
-      height: 50,
+    primaryButtonWrapper: {
+      width: '100%',
       borderRadius: 16,
-      overflow: 'hidden',
+      backgroundColor: '#7c3aed', // Vibrant Purple Fallback
+      shadowColor: '#7c3aed',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.5,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+    primaryButton: {
+      width: '100%',
+      height: 54,
+      borderRadius: 16,
+      backgroundColor: '#7c3aed', // Solid Pure Purple
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#a855f7',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 4,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.25)',
+      overflow: 'hidden',
+    },
+    buttonTopHighlight: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 1,
+      backgroundColor: 'rgba(255, 255, 255, 0.35)',
+    },
+    primaryButtonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
     },
     primaryButtonText: {
       color: '#fff',
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '800',
+      letterSpacing: 0.4,
+    },
+    buttonArrowCircle: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: 'rgba(255, 255, 255, 0.22)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 10,
     },
     modalBackdrop: {
       flex: 1,
@@ -1452,6 +1581,7 @@ function getStyles() {
     selectCodeBtn: {
       height: 44,
       borderRadius: 12,
+      backgroundColor: '#7c3aed',
       overflow: 'hidden',
       flexDirection: 'row',
       alignItems: 'center',

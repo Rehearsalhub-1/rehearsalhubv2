@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useUserStore } from './useUser';
-import { apiClient } from '../lib/apiClient';
+import { apiClient, clearCache } from '../lib/apiClient';
 
 function getWsUrl(): string {
   const base = (apiClient.getBaseUrl() || process.env.EXPO_PUBLIC_BACKEND_URL || '')
@@ -142,6 +142,8 @@ export async function connect() {
 
       if (msg.type === 'pong') return;
       if (msg.type !== 'event') return;
+      // Invalidate stale GET cache so handlers refetch fresh data
+      clearCache();
       if (Number.isFinite(msg.sequence)) eventCursors.set(`${msg.resource}:${msg.id}`, Number(msg.sequence));
 
       subscriptions.forEach(({ resource, id, handler }) => {

@@ -360,7 +360,22 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         if (res?.success && res.data) {
           setRoom((prev: any) => ({ ...prev, ...res.data }));
         }
-      }).catch(() => {});
+      }).catch(() => {
+        // If room is direct and not found on backend yet, create it eagerly in background
+        if (targetRoomId.includes('_')) {
+          const parts = targetRoomId.split('_');
+          api.chats.create({
+            id: targetRoomId,
+            name: incomingRoom?.title || 'Direct Message',
+            type: 'direct',
+            participants: parts,
+          }).then(createRes => {
+            if (createRes?.success && createRes.data) {
+              setRoom((prev: any) => ({ ...prev, ...createRes.data }));
+            }
+          }).catch(() => {});
+        }
+      });
     }
   }, [incomingRoom?.id, deepLinkRoomId]);
 
@@ -474,6 +489,31 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       console.error('[notifyParticipants] Error:', err);
     }
   };
+  const dispatchSendMessage = async (targetRoomId: string, payload: Record<string, any>) => {
+    try {
+      return await api.chats.sendMessage(targetRoomId, payload);
+    } catch (err: any) {
+      // Auto-recover if direct chat doesn't exist yet on backend
+      if (targetRoomId && (room?.type === 'direct' || targetRoomId.includes('_'))) {
+        try {
+          const participants = (room?.participants && room.participants.length > 0)
+            ? room.participants
+            : targetRoomId.split('_');
+          await api.chats.create({
+            id: targetRoomId,
+            name: room?.title || 'Direct Message',
+            type: 'direct',
+            participants,
+          }).catch(() => {});
+          return await api.chats.sendMessage(targetRoomId, payload);
+        } catch {
+          throw err;
+        }
+      }
+      throw err;
+    }
+  };
+
   useEffect(() => {
     const fwdText: string | undefined = route.params?.forwardText;
     const fwdType: string = route.params?.forwardType || 'text';
@@ -533,7 +573,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           const name = msgObj.playlistData?.name || 'Playlist';
           lastMsgText = `🎼 Shared Playlist: ${name}`;
         }
-        await api.chats.sendMessage(room?.id, msgObj || {});
+        await dispatchSendMessage(room?.id, msgObj || {});
       } catch (e) {
         console.error('Forward send error', e);
       }
@@ -676,7 +716,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!item) return;
     setMessages(prev => prev.map(message => message.id === messageId ? { ...message, status: 'sending' } : message));
     try {
-      await api.chats.sendMessage(room?.id, item);
+      await dispatchSendMessage(room?.id, item);
       await AsyncStorage.setItem(PENDING_QUEUE_KEY, JSON.stringify(queue.filter(candidate => candidate.id !== messageId)));
       setMessages(prev => prev.map(message => message.id === messageId ? { ...message, status: 'sent' } : message));
     } catch {
@@ -965,7 +1005,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       setIsUploading(true); showToast('Sending voice note…');
       const audioUrl = await uploadImageToCloudinary(uri, 'video');
       const bars = downsampleWaveform(waveform, 40);
-      const res = await api.chats.sendMessage(room.id, {
+      const res = await dispatchSendMessage(room.id, {
         content: '🎤 Voice note',
         type: 'voice',
         media_url: audioUrl,
@@ -1140,7 +1180,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     setMessages(prev => [optimisticMessage, ...prev.filter(message => message.id !== optimisticMessage.id)]);
 
     try {
-      await api.chats.sendMessage(room.id, {
+      await dispatchSendMessage(room.id, {
         content: text,
         type: 'text',
         reply_to: replyingTo?.id,
@@ -1250,7 +1290,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             };
             setMessages(prev => [optimisticVideo, ...prev]);
             const videoUrl = await uploadImageToCloudinary(asset.uri, 'video');
-            await api.chats.sendMessage(room.id, {
+            await dispatchSendMessage(room.id, {
               content: '🎥 Video',
               type: 'video',
               videoUrl,
@@ -1301,7 +1341,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         if (replyingTo && item === pendingItems[0]) {
           data.replyTo = { id: replyingTo.id, text: '📷 Photo', senderName: replyingTo.sender };
         }
-        await api.chats.sendMessage(room.id, {
+        await dispatchSendMessage(room.id, {
           content: item.caption || '📷 Photo',
           type: 'image',
           media_url: imageUrl,
@@ -1568,7 +1608,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         setIsUploading(true);
         const uploadedUrl = await uploadImageToCloudinary(asset.uri, isAudio ? 'video' : 'raw');
 
-        await api.chats.sendMessage(room.id, {
+        await dispatchSendMessage(room.id, {
           content: isAudio ? '🎧 Audio' : `📄 ${asset.name}`,
           type: msgType,
           media_url: uploadedUrl,
@@ -1788,7 +1828,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!cu || !room?.id) return;
     try {
       const options = pollOptions.filter(o => o.trim()).map(o => ({ text: o.trim(), votes: [] }));
-      await api.chats.sendMessage(room.id, {
+      await dispatchSendMessage(room.id, {
         content: `📊 Poll: ${pollQuestion.trim()}`,
         type: 'poll',
         pollOptions: options,
@@ -1924,7 +1964,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!cu || !room?.id) return;
     setShowGifPicker(false);
     try {
-      await api.chats.sendMessage(room.id, {
+      await dispatchSendMessage(room.id, {
         content: '🎞️ GIF',
         type: 'image',
         media_url: gifUrl,
@@ -1956,7 +1996,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const cu = currentUser;
     if (!cu || !room?.id) return;
     try {
-      await api.chats.sendMessage(room.id, {
+      await dispatchSendMessage(room.id, {
         content: `📇 ${contactProfile.name}`,
         type: 'contact_share',
         contactData: contactProfile,

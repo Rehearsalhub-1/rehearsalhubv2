@@ -46,7 +46,6 @@ import { Image as ExpoImage, ImageBackground as ExpoImageBackground } from 'expo
 import { subscribe as wsSubscribe } from './src/hooks/useWebSocket';
 import { sendLocalNotification, sendPushNotification } from './src/lib/notifications';
 
-import { Asset } from 'expo-asset';
 import AnimatedSplashScreen from './src/components/AnimatedSplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef, navigate, reset } from './src/navigation/navigationService';
@@ -216,32 +215,12 @@ function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
   const [initialRoute, setInitialRoute] = useState<'Login' | 'Home' | null>(null);
-  const [splashUri, setSplashUri] = useState<string | null>(null);
   const hasHiddenNativeSplash = useRef(false);
 
   const hideNativeSplash = useCallback(() => {
     if (hasHiddenNativeSplash.current) return;
     hasHiddenNativeSplash.current = true;
     SplashScreen.hideAsync().catch(() => {});
-  }, []);
-
-  // Preload splash video asset immediately into disk cache
-  useEffect(() => {
-    let isMounted = true;
-    async function preloadSplash() {
-      try {
-        const [asset] = await Asset.loadAsync(require('./assets/splash_new.mp4'));
-        if (isMounted) {
-          setSplashUri(asset.localUri || asset.uri);
-        }
-      } catch (e) {
-        console.warn('[App] Error preloading splash video:', e);
-      }
-    }
-    preloadSplash();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // Safety fallback: if firstFrameRender doesn't fire within 2.5s (e.g. slow device), hide native splash
@@ -311,18 +290,18 @@ function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
-        {/* Render AppContent only when ready; show a black background while bootstrapping */}
+        {/* Render AppContent only when ready; show branded backdrop while bootstrapping */}
         {appIsReady && initialRoute ? (
           <AppContent initialRoute={initialRoute} />
         ) : (
-          <View style={{ flex: 1, backgroundColor: '#0a0a0a' }} />
+          <View style={{ flex: 1, backgroundColor: '#070a12' }} />
         )}
 
         {/* Overlay the Splash Screen on top until it finishes */}
         {!animationFinished && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 9999 }]}>
+          <View style={[StyleSheet.absoluteFill, { zIndex: 9999, width: '100%', height: '100%' }]}>
             <AnimatedSplashScreen 
-              videoUri={splashUri}
+              isAppReady={appIsReady && Boolean(initialRoute)}
               onFirstFrame={hideNativeSplash}
               onAnimationFinish={() => {
                 hideNativeSplash();
@@ -339,7 +318,7 @@ function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#070a12',
   },
 });
 

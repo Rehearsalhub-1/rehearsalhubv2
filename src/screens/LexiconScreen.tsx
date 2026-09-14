@@ -325,13 +325,17 @@ export default function LexiconScreen({ navigation }: any) {
           style={StyleSheet.absoluteFill}
         />
       </BlurView>
-      <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
+      {isSidebarOpen && (
+        <TouchableOpacity
+          activeOpacity={1}
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 90 }]}
+          onPress={() => setIsSidebarOpen(false)}
+        />
+      )}
+      <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }], zIndex: 100 }]}>
         <SafeAreaView style={styles.sidebarSafeArea} edges={['top', 'bottom']}>
           <View style={styles.sidebarHeader}>
             <Text style={styles.sidebarTitle}>Chat History</Text>
-            <TouchableOpacity onPress={() => setIsSidebarOpen(false)} style={styles.sidebarCloseBtn}>
-              <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-            </TouchableOpacity>
           </View>
           
           <TouchableOpacity 

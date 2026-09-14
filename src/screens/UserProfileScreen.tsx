@@ -58,13 +58,20 @@ export default function UserProfileScreen() {
     const chatId = [currentUser.uid, userId].sort().join('_');
     const roomObj = {
       id: chatId,
+      title: profile.displayName || profile.name || 'Chat',
       type: 'direct',
       participantDetails: {
         [currentUser.uid]: { name: (currentUser as any).displayName || (currentUser as any).name || 'You', avatar: (currentUser as any).photoURL || (currentUser as any).avatar || '' },
-        [userId]: { name: profile.displayName || 'User', avatar: profile.photoURL || profile.avatar || '' },
+        [userId]: { name: profile.displayName || profile.name || 'User', avatar: profile.photoURL || profile.avatar || '' },
       },
     };
     navigation.navigate('ChatRoom', { room: roomObj });
+    api.chats.create({
+      id: chatId,
+      name: profile.displayName || profile.name || 'Direct Message',
+      type: 'direct',
+      participants: [currentUser.uid, userId],
+    }).catch(() => {});
   };
 
   const formatDate = (dateStr: string) => {
