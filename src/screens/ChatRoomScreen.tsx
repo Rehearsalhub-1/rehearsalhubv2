@@ -637,8 +637,24 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const [clearedAt, setClearedAt] = useState<Date | null>(initialClearedAt);
   const [chatData, setChatData] = useState<any>(room);
   const [showMessageInfo, setShowMessageInfo] = useState(false);
-  const isDirectRequest = !isGroup && room?.lastMessageSenderId && room.lastMessageSenderId !== currentUser?.uid && (room?.unread > 0 || (room as any)?.isRequest);
-  const [hasAccepted, setHasAccepted] = useState(false);
+  const [hasAccepted, setHasAccepted] = useState(Boolean(room?.isAccepted));
+
+  useEffect(() => {
+    if (room?.isAccepted) {
+      setHasAccepted(true);
+      return;
+    }
+    if (room?.id && currentUser?.uid) {
+      AsyncStorage.getItem(`chat_accepted_${currentUser.uid}_${room.id}`).then((val) => {
+        if (val === 'true') setHasAccepted(true);
+      }).catch(() => {});
+    }
+  }, [room?.id, room?.isAccepted, currentUser?.uid]);
+
+  const isDirectRequest = !isGroup && !hasAccepted && !room?.isAccepted && Boolean(
+    (room as any)?.isRequest ||
+    (room?.lastMessageSenderId && room.lastMessageSenderId !== currentUser?.uid && (room?.unread ?? 0) > 0)
+  );
 
   useWebSocket('chats', room?.id || '', (eventData: any) => {
     if (!eventData) return;
@@ -3033,8 +3049,15 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                   style={{ flex: 1, backgroundColor: APP_THEME.primaryAccent, paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
                   onPress={async () => {
                     try {
-                      await api.chats.acceptRequest(room?.id);
                       setHasAccepted(true);
+                      if (room) {
+                        room.isAccepted = true;
+                        (room as any).isRequest = false;
+                      }
+                      if (currentUser?.uid && room?.id) {
+                        await AsyncStorage.setItem(`chat_accepted_${currentUser.uid}_${room.id}`, 'true').catch(() => {});
+                      }
+                      await api.chats.acceptRequest(room?.id);
                       showToast('Request accepted');
                     } catch {
                       setHasAccepted(true);

@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import { navigate } from '../navigation/navigationService';
 import { apiClient } from './apiClient';
 import { useUserStore } from '../hooks/useUser';
@@ -77,17 +77,37 @@ export function setupNotifications() {
   });
 
   const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-
+    const data = (notification.request.content.data || {}) as any;
+    if (data?.screen === 'IncomingCall' || data?.type === 'call' || data?.callId) {
+      if (AppState.currentState === 'active') {
+        navigate('IncomingCall', {
+          callId: data.callId,
+          callType: data.callType || data.type || 'voice',
+          callerName: data.callerName || data.senderName || 'Incoming Call',
+          callerAvatar: data.callerAvatar || data.senderAvatar || '',
+          roomId: data.roomId || data.chatId || data.callId,
+        });
+      }
+    }
   });
 
   const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-    const data = (response.notification.request.content.data || {}) as any;
+    const data = (response.notification.request.content.data || {}) as any;
     const user = useUserStore.getState().user;
     if (data?.zoneCode && user) {
       apiClient.patch(`/profiles/${user.uid}`, { zone_code: data.zoneCode }).catch(console.error);
     }
 
-    if (data?.screen) {
+    if (data?.screen === 'IncomingCall' || data?.type === 'call' || data?.callId) {
+      navigate('IncomingCall', {
+        callId: data.callId,
+        callType: data.callType || data.type || 'voice',
+        callerName: data.callerName || data.senderName || 'Incoming Call',
+        callerAvatar: data.callerAvatar || data.senderAvatar || '',
+        roomId: data.roomId || data.chatId || data.callId,
+        notificationId: response.notification.request.identifier,
+      });
+    } else if (data?.screen) {
       navigate(data.screen, data.params || {});
     } else {
       navigate('Notifications', {});

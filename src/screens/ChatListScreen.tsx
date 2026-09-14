@@ -52,6 +52,8 @@ interface ChatRoom {
   createdBy?: string;
   participants?: string[];
   type?: string;
+  isAccepted?: boolean;
+  isRequest?: boolean;
 }
 
 const DEFAULT_AVATAR = require('../../assets/image/home1.jpg');
@@ -140,7 +142,7 @@ const ChatItem = memo(({ room, onPress, currentUid, typingUsers }: { room: ChatR
                     ? `${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing...`
                     : 'typing...'}
                 </Text>
-              ) : room.isGroup && room.sender ? (
+              ) : room.isGroup && room.sender && room.lastMessage !== 'No messages yet' ? (
                 <Text style={[styles.lastMessageText, { color: APP_THEME.secondaryText, flex: 1 }]} numberOfLines={1}>
                   <Text style={{ fontWeight: '500', color: APP_THEME.primaryText }}>
                     {room.lastMessageSenderId === currentUid ? 'You' : room.sender}
@@ -335,22 +337,49 @@ export default function ChatListScreen({ route, navigation }: any) {
           } catch {}
         }
 
+        // Filter out audit logs and system activity from chat preview
+        const isAuditOrSystem = (txt: string, type?: string) => {
+          if (type === 'system' || type === 'audit' || type === 'log') return true;
+          const t = (txt || '').toLowerCase().trim();
+          return (
+            t.includes('created group') ||
+            t.includes('created the group') ||
+            t.includes('left the group') ||
+            (t.includes('promoted') && t.includes('admin')) ||
+            (t.includes('dismissed') && t.includes('admin')) ||
+            (t.includes('removed') && t.includes('group')) ||
+            t.includes('disappearing messages') ||
+            t.includes('audit log') ||
+            t.includes('changed group') ||
+            t.includes('updated group') ||
+            t.startsWith('[system]') ||
+            t.startsWith('[audit]')
+          );
+        };
+
+        const isAuditMsg = isAuditOrSystem(lastMsgText, typeof rawLastMsg === 'object' ? rawLastMsg?.type : undefined);
+        if (isAuditMsg) {
+          lastMsgText = 'No messages yet';
+        }
+
         const rawTimestamp = data.lastTimestamp || (typeof rawLastMsg === 'object' ? rawLastMsg?.timestamp : null) || data.createdAt;
 
         // Last sender: can be in rawLastMsg.senderId, data.lastMessageSenderId, or data.rawData
-        const lastSenderId: string = (typeof rawLastMsg === 'object' && rawLastMsg?.senderId) || data.lastMessageSenderId || data.rawData?.lastSenderId || '';
+        const lastSenderId: string = isAuditMsg ? '' : ((typeof rawLastMsg === 'object' && rawLastMsg?.senderId) || data.lastMessageSenderId || data.rawData?.lastSenderId || '');
         let senderName = '';
-        if (lastSenderId === currentUser.uid) {
-          senderName = 'You';
-        } else if (typeof rawLastMsg === 'object' && rawLastMsg?.senderName && rawLastMsg.senderName !== 'Member') {
-          senderName = cleanSenderName(rawLastMsg.senderName).split(' ')[0] || '';
-        } else if (data.lastMessageSenderName && data.lastMessageSenderName !== 'Member') {
-          senderName = cleanSenderName(data.lastMessageSenderName).split(' ')[0] || '';
-        } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.name && data.participantDetails[lastSenderId].name !== 'Member') {
-          senderName = cleanSenderName(data.participantDetails[lastSenderId].name).split(' ')[0] || '';
-        } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.email) {
-          const prefix = data.participantDetails[lastSenderId].email.split('@')[0];
-          senderName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+        if (!isAuditMsg && lastMsgText !== 'No messages yet') {
+          if (lastSenderId === currentUser.uid) {
+            senderName = 'You';
+          } else if (typeof rawLastMsg === 'object' && rawLastMsg?.senderName && rawLastMsg.senderName !== 'Member') {
+            senderName = cleanSenderName(rawLastMsg.senderName).split(' ')[0] || '';
+          } else if (data.lastMessageSenderName && data.lastMessageSenderName !== 'Member') {
+            senderName = cleanSenderName(data.lastMessageSenderName).split(' ')[0] || '';
+          } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.name && data.participantDetails[lastSenderId].name !== 'Member') {
+            senderName = cleanSenderName(data.participantDetails[lastSenderId].name).split(' ')[0] || '';
+          } else if (lastSenderId && data.participantDetails?.[lastSenderId]?.email) {
+            const prefix = data.participantDetails[lastSenderId].email.split('@')[0];
+            senderName = prefix.charAt(0).toUpperCase() + prefix.slice(1);
+          }
         }
 
         let roomAvatar: any = data.avatar ? (typeof data.avatar === 'string' ? { uri: data.avatar } : data.avatar) : null;
@@ -402,6 +431,8 @@ export default function ChatListScreen({ route, navigation }: any) {
           createdBy: data.createdBy || data.createdById,
           participants: participants,
           type: data.type || (isGroup ? 'group' : 'direct'),
+          isAccepted: Boolean(data.isAccepted),
+          isRequest: Boolean(data.isRequest),
         };
       });
 
@@ -444,8 +475,12 @@ export default function ChatListScreen({ route, navigation }: any) {
 
     if (selectedFilter === 'Unread' && room.unread === 0) return false;
     if (selectedFilter === 'Groups' && !room.isGroup) return false;
-    if (selectedFilter === 'Direct' && room.isGroup) return false;
-    if (selectedFilter === 'Requests' && (room.isGroup || room.lastMessageSenderId === user?.uid || room.unread === 0)) return false;
+    if (selectedFilter === 'Direct' && (room.isGroup || (room.isRequest && !room.isAccepted))) return false;
+    if (selectedFilter === 'Requests') {
+      if (room.isGroup || room.isAccepted || room.lastMessageSenderId === user?.uid) return false;
+      if (!room.isRequest && room.unread === 0) return false;
+      return true;
+    }
 
     if (searchQuery.trim()) {
       return room.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

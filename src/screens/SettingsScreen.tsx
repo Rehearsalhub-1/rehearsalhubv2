@@ -87,6 +87,7 @@ export default function SettingsScreen({ navigation }: any) {
   const [attendanceTab, setAttendanceTab] = useState<'biometric' | 'qr'>('biometric');
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [expanded, setExpanded] = useState({
     qr: true,
     attendance: false,
@@ -450,15 +451,25 @@ export default function SettingsScreen({ navigation }: any) {
   };
 
   const confirmDeleteAccount = async () => {
-    if (!currentUser) return;
+    if (!currentUser || isDeletingAccount) return;
+    setIsDeletingAccount(true);
     try {
-      // user deleted
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-    } catch {
-      Alert.alert('Error', 'Failed to delete account. Please re-login first.');
+      const res = await api.auth.deleteAccount();
+      if (res.success) {
+        setDeleteModalVisible(false);
+        await api.auth.storeTokens('', '', '');
+        await signOut();
+        Alert.alert('Account Deleted', 'Your account has been permanently deleted from Loveworld Singers.');
+        navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+      } else {
+        Alert.alert('Deletion Failed', res.error || 'Failed to delete account.');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to delete account. Please try again.');
+    } finally {
+      setIsDeletingAccount(false);
+      setDeleteConfirmText('');
     }
-    setDeleteModalVisible(false);
-    setDeleteConfirmText('');
   };
 
   const handleSignOut = () => {
@@ -729,7 +740,7 @@ export default function SettingsScreen({ navigation }: any) {
             )}
           </View>
         )}
-          {!isEditing && !isHQ && (
+          {!isEditing && (
             <View style={[s.section, expanded.subgroups && s.sectionExpanded]}>
               <TouchableOpacity style={s.sectionHeader} onPress={() => toggleSection('subgroups')} activeOpacity={0.7}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -784,7 +795,7 @@ export default function SettingsScreen({ navigation }: any) {
                         <Ionicons name="information" size={24} color={T.textSecondary} />
                       </View>
                       <Text style={s.subgroupEmptyTxt}>
-                        You haven't been added to any churches yet. Your Zone Admin will assign you.
+                        You haven't been added to any churches yet. Your Zone or HQ Admin will assign you.
                       </Text>
                     </View>
                   )}
@@ -1143,11 +1154,15 @@ export default function SettingsScreen({ navigation }: any) {
                 <Text style={{ color: T.textPrimary, fontWeight: '600' }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', backgroundColor: T.danger }, deleteConfirmText !== 'DELETE' && { opacity: 0.4 }]}
+                style={[{ flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', backgroundColor: T.danger }, (deleteConfirmText !== 'DELETE' || isDeletingAccount) && { opacity: 0.4 }]}
                 onPress={confirmDeleteAccount}
-                disabled={deleteConfirmText !== 'DELETE'}
+                disabled={deleteConfirmText !== 'DELETE' || isDeletingAccount}
               >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>Delete</Text>
+                {isDeletingAccount ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>Delete</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

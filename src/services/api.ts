@@ -29,6 +29,8 @@ export const api = {
       apiClient.post<{ success: boolean; error?: string }>('/auth/forgot-password/verify-otp', { email, otp }),
     resetPassword: (data: Record<string, any>) =>
       apiClient.post<{ success: boolean; error?: string }>('/auth/reset-password', data),
+    deleteAccount: () =>
+      apiClient.delete<{ success: boolean; message?: string; error?: string }>('/auth/delete-account'),
   },
 
   // ── Profiles ─────────────────────────────────────────────────────────────
@@ -37,6 +39,8 @@ export const api = {
       apiClient.get<{ success: boolean; data: any }>(`/profiles/${userId}`),
     update: (userId: string, data: Record<string, any>) =>
       apiClient.patch<{ success: boolean; data: any }>(`/profiles/${userId}`, data),
+    delete: (userId: string) =>
+      apiClient.delete<{ success: boolean; message?: string; error?: string }>(`/profiles/${encodeURIComponent(userId)}`),
     getDirectory: (limit = 500, search = '') =>
       apiClient.get<{ success: boolean; data: any[] }>(`/profiles?limit=${limit}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
     directory: (limit = 500, search = '') =>

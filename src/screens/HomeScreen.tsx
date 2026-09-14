@@ -31,6 +31,7 @@ import { useIsFocused, useNavigation } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const SLIDE_IMAGES = [
   require('../../assets/image/home1.jpg'),
@@ -494,15 +495,12 @@ export default function HomeScreen({ navigation }: any) {
 
       {/* Darkened Backdrop Overlay */}
       {isSidebarOpen && (
-        <Animated.View
+        <AnimatedPressable
           style={[styles.backdrop, { opacity: backdropAnim }]}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={StyleSheet.absoluteFill}
-            onPress={closeSidebar}
-          />
-        </Animated.View>
+          onPress={closeSidebar}
+          accessibilityRole="button"
+          accessibilityLabel="Close sidebar"
+        />
       )}
 
       {/* Slide-out Sidebar Drawer */}
@@ -564,8 +562,6 @@ export default function HomeScreen({ navigation }: any) {
                 if (item.id === 'media' && hf.hideAudioLab) return false;
                 if (item.id === 'subgroups') {
                   if (hf.hideSubgroups) return false;
-                  // HQ has no separate churches
-                  if (isCurrentZoneHQ) return false;
                   return true;
                 }
                 return true;
@@ -722,9 +718,16 @@ const getStyles = (theme: any, insets?: any) => {
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
     backgroundColor: 'rgba(0,0,0,0.65)',
-    zIndex: 500,
-    elevation: 500,
+    zIndex: 900,
+    elevation: 900,
   },
   sidebar: {
     position: 'absolute',
@@ -733,8 +736,8 @@ const getStyles = (theme: any, insets?: any) => {
     bottom: 0,
     height: '100%',
     width: SIDEBAR_WIDTH,
-    zIndex: 999,
-    elevation: 999,
+    zIndex: 1000,
+    elevation: 1000,
     backgroundColor: theme.colors.background,
     shadowColor: '#000',
     shadowOffset: { width: 12, height: 0 },

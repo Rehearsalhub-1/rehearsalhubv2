@@ -88,39 +88,51 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
   // ── OTA (Over-the-Air) JS bundle update check ──────────────────────────────
   useOTAUpdates();
 
+  const currentUser = useUserStore(s => s.user);
+
   useEffect(() => {
     const STALE_CALL_THRESHOLD_MS = 2 * 60 * 1000;
     let callUnsub: (() => void) | null = null;
 
-    const userId = useUserStore.getState().user?.uid;
+    const userId = currentUser?.uid;
     if (!userId) return;
 
     const handleCallEvent = async (data: any) => {
-      if (!data || data.status !== 'ringing') return;
-      const callId = data.id || data.callId;
-      const call = data;
+      const call = data?.call || data;
+      if (!call) return;
+      const isRinging = call.status === 'ringing' || data?.type === 'incoming_call';
+      if (!isRinging) return;
+      const callId = call.id || call.callId;
+      if (!callId) return;
 
-      const createdAt = data.createdAt ? new Date(data.createdAt) : null;
-      const callAgeMs = createdAt ? (Date.now() - createdAt.getTime()) : Infinity;
+      const createdAt = call.createdAt ? new Date(call.createdAt) : null;
+      const callAgeMs = createdAt ? (Date.now() - createdAt.getTime()) : 0;
 
       if (callAgeMs > STALE_CALL_THRESHOLD_MS) {
         apiClient.patch(`/calls/${callId}`, { status: 'missed' }).catch(() => {});
         return;
       }
 
+      const callerDisplayName = call.callerName || 'Unknown Caller';
+      const callerAvatarUrl = call.callerAvatar || '';
+      const callType = call.type || 'voice';
+      const roomId = call.chatId || call.roomId || callId;
+
       if (AppState.currentState === 'background' || AppState.currentState === 'inactive') {
         IncomingCallManager.displayIncomingCall({
           id: callId,
-          type: call.type || 'voice',
-          callerName: call.callerName || 'Unknown',
-          callerAvatar: call.callerAvatar,
-          chatId: call.chatId
+          type: callType,
+          callerName: callerDisplayName,
+          callerAvatar: callerAvatarUrl,
+          chatId: roomId,
         }).catch(() => {});
       } else if (navigationRef.isReady()) {
-        (navigationRef as any).navigate('Call', {
-          callId, callType: call.type || 'voice', isIncoming: true,
-          contactName: call.callerName || 'Unknown', contactAvatar: call.callerAvatar,
-          contactId: call.callerId, roomId: call.chatId,
+        (navigationRef as any).navigate('IncomingCall', {
+          callId,
+          callType,
+          callerName: callerDisplayName,
+          callerAvatar: callerAvatarUrl,
+          roomId,
         });
       }
     };
@@ -130,7 +142,7 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
     return () => {
       if (callUnsub) callUnsub();
     };
-  }, [useUserStore.getState().user?.uid]);
+  }, [currentUser?.uid]);
 
   // ── Concurrent session login check ─────────────────────────────────────────
   useEffect(() => {

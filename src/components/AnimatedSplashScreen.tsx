@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, Animated, Image, TouchableOpacity, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, Animated, TouchableOpacity, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEventListener } from 'expo';
@@ -13,7 +13,6 @@ interface AnimatedSplashScreenProps {
 }
 
 const SPLASH_VIDEO = require('../../assets/splash_new.mp4');
-const LOGO_SOURCE = require('../../assets/logo/logo.png');
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('screen');
 
 export default function AnimatedSplashScreen({
@@ -27,9 +26,6 @@ export default function AnimatedSplashScreen({
 
   // Animation values
   const exitOpacity = useRef(new Animated.Value(1)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const textFadeAnim = useRef(new Animated.Value(0)).current;
 
   // State refs
   const hasStartedRef = useRef(false);
@@ -139,7 +135,6 @@ export default function AnimatedSplashScreen({
       } catch {}
     } else if (status === 'error') {
       console.warn('Splash video error:', error);
-      // Attempt local file retry if available
       const a = Asset.fromModule(SPLASH_VIDEO);
       if (a.localUri && player && !hasRetriedLocalRef.current) {
         hasRetriedLocalRef.current = true;
@@ -150,41 +145,13 @@ export default function AnimatedSplashScreen({
         } catch {}
       }
       setVideoFailed(true);
-      // If video fails completely, fallback to branded splash finish
-      setTimeout(() => {
-        hasEndedRef.current = true;
-        triggerFinish();
-      }, 2500);
+      if (onFirstFrame) onFirstFrame();
+      triggerFinish();
     }
   });
 
-  // Background logo animation for frame 0 and fallback
+  // Safety timer so the app never hangs indefinitely
   useEffect(() => {
-    if (onFirstFrame) {
-      requestAnimationFrame(() => onFirstFrame());
-    }
-
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(textFadeAnim, {
-        toValue: 1,
-        duration: 600,
-        delay: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // 10-second safety timeout so the app never hangs indefinitely
     const safetyTimer = setTimeout(() => {
       hasEndedRef.current = true;
       triggerFinish();
@@ -193,7 +160,7 @@ export default function AnimatedSplashScreen({
     return () => {
       clearTimeout(safetyTimer);
     };
-  }, [fadeAnim, scaleAnim, textFadeAnim, triggerFinish, onFirstFrame]);
+  }, [triggerFinish]);
 
   const handleSkip = () => {
     hasSkippedRef.current = true;
@@ -207,41 +174,9 @@ export default function AnimatedSplashScreen({
     <Animated.View style={[styles.container, { opacity: exitOpacity }]}>
       <StatusBar hidden={true} />
 
-      {/* 1. Underlying Poster/Branding Layer (Guarantees Frame 0 is NEVER blank or black) */}
-      <View style={styles.posterContainer}>
-        <View style={styles.glowCircle} />
-
-        <Animated.View
-          style={[
-            styles.logoWrapper,
-            {
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
-          <Image source={LOGO_SOURCE} style={styles.logoImage} resizeMode="contain" />
-        </Animated.View>
-
-        <Animated.View style={[styles.textContainer, { opacity: textFadeAnim }]}>
-          <Text style={styles.title}>LOVEWORLD SINGERS</Text>
-          <Text style={styles.subtitle}>Rehearsal Hub Portal 2.0</Text>
-
-          <View style={styles.pillBadge}>
-            <View style={styles.onlineDot} />
-            <Text style={styles.pillText}>Live Rehearsal Suite</Text>
-          </View>
-        </Animated.View>
-      </View>
-
-      {/* 2. Hardware Video Layer (Plays splash_new.mp4 in full physical screen) */}
+      {/* Video Layer (Plays splash_new.mp4 directly in full screen) */}
       {!videoFailed && (
-        <Animated.View
-          style={[
-            styles.videoLayer,
-            { opacity: videoStarted ? 1 : 0 },
-          ]}
-        >
+        <View style={styles.videoLayer}>
           <VideoView
             style={styles.videoView}
             player={player}
@@ -255,10 +190,10 @@ export default function AnimatedSplashScreen({
               }
             }}
           />
-        </Animated.View>
+        </View>
       )}
 
-      {/* 3. Top Right Skip Button */}
+      {/* Top Right Skip Button */}
       <TouchableOpacity
         style={styles.skipButton}
         onPress={handleSkip}
@@ -268,7 +203,7 @@ export default function AnimatedSplashScreen({
         <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.7)" />
       </TouchableOpacity>
 
-      {/* 4. Bottom Right Mute/Unmute Button */}
+      {/* Bottom Right Mute/Unmute Button */}
       {videoStarted && !videoFailed && (
         <TouchableOpacity
           style={styles.muteButton}
@@ -293,7 +228,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-    backgroundColor: '#070a12',
+    backgroundColor: '#000000',
     zIndex: 9999,
   },
   videoLayer: {
@@ -306,81 +241,6 @@ const styles = StyleSheet.create({
   videoView: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT,
-  },
-  posterContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glowCircle: {
-    position: 'absolute',
-    width: SCREEN_WIDTH * 0.85,
-    height: SCREEN_WIDTH * 0.85,
-    borderRadius: (SCREEN_WIDTH * 0.85) / 2,
-    backgroundColor: 'rgba(56, 189, 248, 0.07)',
-  },
-  logoWrapper: {
-    width: 130,
-    height: 130,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#38bdf8',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 25,
-    elevation: 20,
-    marginBottom: 24,
-  },
-  logoImage: {
-    width: '100%',
-    height: '100%',
-  },
-  textContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 2.5,
-    textAlign: 'center',
-  },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.65)',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 6,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  pillBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 16,
-    marginTop: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-  },
-  onlineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#10b981',
-    marginRight: 7,
-  },
-  pillText: {
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.4,
   },
   skipButton: {
     position: 'absolute',

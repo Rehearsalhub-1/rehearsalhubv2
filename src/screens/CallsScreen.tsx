@@ -83,7 +83,11 @@ export default function CallsScreen({ navigation }: any) {
             computedStatus = 'incoming';
           }
 
-          const isGroup = Boolean(d.isGroup || (d.chatId && d.chatId.startsWith('group')) || (d.receiverId && d.receiverId.startsWith('group')));
+          const isGroup = Boolean(
+            d.isGroup ||
+            (d.chatId && (d.chatId.startsWith('group_') || d.chatId.startsWith('group'))) ||
+            (d.receiverId && d.receiverId.startsWith('group'))
+          );
 
           return {
             id: d.id,
@@ -164,7 +168,11 @@ export default function CallsScreen({ navigation }: any) {
     const cu = currentUser;
     if (!cu) return;
     const isOutgoing = item.callerId === cu.uid;
-    const isGroup = Boolean(item.isGroup || item.chatId);
+    const isGroup = Boolean(
+      item.isGroup ||
+      (item.chatId && (item.chatId.startsWith('group_') || item.chatId.startsWith('group'))) ||
+      (item.receiverId && item.receiverId.startsWith('group'))
+    );
     const contactId = isOutgoing ? item.receiverId : item.callerId;
     const contactName = isGroup ? (item.receiverName || 'Group Call') : (isOutgoing ? item.receiverName : item.callerName);
     const contactAvatar = isOutgoing ? item.receiverAvatar : item.callerAvatar;
@@ -200,15 +208,21 @@ export default function CallsScreen({ navigation }: any) {
 
   const renderItem = ({ item }: { item: CallLog }) => {
     const isOutgoing = item.callerId === currentUser?.uid;
-    const isGroup = Boolean(item.isGroup || (item.chatId && item.chatId.startsWith('group')) || (item.receiverId && item.receiverId.startsWith('group')));
+    const isGroup = Boolean(
+      item.isGroup ||
+      (item.chatId && (item.chatId.startsWith('group_') || item.chatId.startsWith('group'))) ||
+      (item.receiverId && item.receiverId.startsWith('group'))
+    );
     const contactId = isOutgoing ? item.receiverId : item.callerId;
     let contactName = 'Member';
     if (isGroup) {
       contactName = item.receiverName && item.receiverName !== 'Receiver' && item.receiverName !== 'Member' ? item.receiverName : 'Group Call';
     } else if (isOutgoing) {
+      // Outgoing call: we called someone, so display the PERSON WE CALLED (receiverName)
       contactName = item.receiverName && item.receiverName !== 'Receiver' ? item.receiverName : 'Member';
     } else {
-      contactName = item.callerName || 'Member';
+      // Incoming call: someone called us, so display THE PERSON WHO CALLED (callerName)
+      contactName = item.callerName && item.callerName !== 'Caller' ? item.callerName : 'Member';
     }
     const contactAvatar = isOutgoing ? item.receiverAvatar : item.callerAvatar;
     const icon = statusIcon(item.status, item.type);
