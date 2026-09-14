@@ -46,6 +46,7 @@ import { Image as ExpoImage, ImageBackground as ExpoImageBackground } from 'expo
 import { subscribe as wsSubscribe } from './src/hooks/useWebSocket';
 import { sendLocalNotification, sendPushNotification } from './src/lib/notifications';
 
+import { Asset } from 'expo-asset';
 import AnimatedSplashScreen from './src/components/AnimatedSplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
 import { navigationRef, navigate, reset } from './src/navigation/navigationService';
@@ -215,6 +216,41 @@ function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [animationFinished, setAnimationFinished] = useState(false);
   const [initialRoute, setInitialRoute] = useState<'Login' | 'Home' | null>(null);
+  const [splashUri, setSplashUri] = useState<string | null>(null);
+  const hasHiddenNativeSplash = useRef(false);
+
+  const hideNativeSplash = useCallback(() => {
+    if (hasHiddenNativeSplash.current) return;
+    hasHiddenNativeSplash.current = true;
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  // Preload splash video asset immediately into disk cache
+  useEffect(() => {
+    let isMounted = true;
+    async function preloadSplash() {
+      try {
+        const [asset] = await Asset.loadAsync(require('./assets/splash_new.mp4'));
+        if (isMounted) {
+          setSplashUri(asset.localUri || asset.uri);
+        }
+      } catch (e) {
+        console.warn('[App] Error preloading splash video:', e);
+      }
+    }
+    preloadSplash();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Safety fallback: if firstFrameRender doesn't fire within 2.5s (e.g. slow device), hide native splash
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      hideNativeSplash();
+    }, 2500);
+    return () => clearTimeout(fallbackTimer);
+  }, [hideNativeSplash]);
 
   // ── Blank screen fix: detect app returning from background ─────────────────
   const appState = useRef(AppState.currentState);
@@ -272,16 +308,6 @@ function App() {
     prepare();
   }, []);
 
-  // Hide the native splash screen immediately so our custom video splash is visible
-  useEffect(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
-
-  const onLayoutRootView = useCallback(async () => {
-    // Fallback in case the immediate useEffect didn't fire yet
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
@@ -294,8 +320,15 @@ function App() {
 
         {/* Overlay the Splash Screen on top until it finishes */}
         {!animationFinished && (
-          <View style={[StyleSheet.absoluteFill, { zIndex: 9999 }]} onLayout={onLayoutRootView}>
-            <AnimatedSplashScreen onAnimationFinish={() => setAnimationFinished(true)} />
+          <View style={[StyleSheet.absoluteFill, { zIndex: 9999 }]}>
+            <AnimatedSplashScreen 
+              videoUri={splashUri}
+              onFirstFrame={hideNativeSplash}
+              onAnimationFinish={() => {
+                hideNativeSplash();
+                setAnimationFinished(true);
+              }} 
+            />
           </View>
         )}
       </ThemeProvider>
