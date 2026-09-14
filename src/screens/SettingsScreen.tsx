@@ -21,6 +21,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
 import { useUser, useZone, useChurch, useUserStore } from '../hooks/useUser';
 import { isHQGroup } from '../config/zones';
+import * as Updates from 'expo-updates';
+import { checkAndApplyUpdate } from '../hooks/useOTAUpdates';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -81,6 +83,7 @@ export default function SettingsScreen({ navigation }: any) {
   const [presentCount, setPresentCount] = useState(0);
   const [attendanceRate, setAttendanceRate] = useState(0);
   const [clockingIn, setClockingIn] = useState(false);
+  const [checkingOta, setCheckingOta] = useState(false);
   const [attendanceTab, setAttendanceTab] = useState<'biometric' | 'qr'>('biometric');
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -173,6 +176,16 @@ export default function SettingsScreen({ navigation }: any) {
       };
     }, [currentUser?.uid])
   );
+
+  const handleCheckForUpdates = async () => {
+    if (checkingOta) return;
+    setCheckingOta(true);
+    try {
+      await checkAndApplyUpdate(true);
+    } finally {
+      setCheckingOta(false);
+    }
+  };
 
   const loadSubgroups = async () => {
     if (!currentUser) return;
@@ -1034,13 +1047,39 @@ export default function SettingsScreen({ navigation }: any) {
                   <Ionicons name="chevron-forward" size={16} color={T.textMuted} />
                 </TouchableOpacity>
 
-                <View style={[s.row, { paddingVertical: 14, borderBottomWidth: 0 }]}>
+                <View style={[s.row, { paddingVertical: 14 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
                     <Ionicons name="information-circle-outline" size={18} color={T.textSecondary} />
                     <Text style={s.rowLabel}>App Version</Text>
                   </View>
                   <Text style={{ color: T.textMuted, fontSize: 13, fontWeight: '600' }}>v2.1.1 (Build 1)</Text>
                 </View>
+
+                <TouchableOpacity
+                  style={[s.row, { paddingVertical: 14, borderBottomWidth: 0 }]}
+                  onPress={handleCheckForUpdates}
+                  activeOpacity={0.7}
+                  disabled={checkingOta}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+                    <Ionicons name="cloud-download-outline" size={18} color={T.accent} />
+                    <View>
+                      <Text style={s.rowLabel}>Check for Updates</Text>
+                      <Text style={{ color: T.textMuted, fontSize: 11, marginTop: 2 }}>
+                        {Updates.isEmbeddedLaunch ? 'Embedded Build' : 'Running OTA Update'}
+                        {Updates.channel ? ` • ${Updates.channel}` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                  {checkingOta ? (
+                    <ActivityIndicator size="small" color={T.accent} />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ color: T.accent, fontSize: 13, fontWeight: '600' }}>Check Now</Text>
+                      <Ionicons name="chevron-forward" size={14} color={T.accent} />
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
             )}
           </View>

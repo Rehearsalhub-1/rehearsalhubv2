@@ -1,28 +1,99 @@
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus, Alert } from 'react-native';
 import * as Updates from 'expo-updates';
+import * as Sentry from '@sentry/react-native';
 
-const CHECK_INTERVAL_MS = 30 * 60 * 1000; // re-check at most every 30 min when foregrounded
+const CHECK_INTERVAL_MS = 15 * 60 * 1000; // re-check at most every 15 min when foregrounded
+
+export interface OTACheckResult {
+  status: 'updated' | 'up_to_date' | 'disabled' | 'error';
+  message: string;
+}
+
+/**
+ * Perform an OTA check & download.
+ * @param isManual If true, ignores the 15-minute throttle and provides user-facing feedback.
+ */
+export async function checkAndApplyUpdate(isManual: boolean = false): Promise<OTACheckResult> {
+  console.log('[OTA] Status check:', {
+    isEnabled: Updates.isEnabled,
+    channel: Updates.channel,
+    runtimeVersion: Updates.runtimeVersion,
+    updateId: Updates.updateId,
+    isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+  });
+
+  if (__DEV__ || !Updates.isEnabled) {
+    const msg = 'OTA updates are only active in Release builds.';
+    console.log(`[OTA] ${msg}`);
+    if (isManual) {
+      Alert.alert('Updates Disabled', msg);
+    }
+    return { status: 'disabled', message: msg };
+  }
+
+  try {
+    const result = await Updates.checkForUpdateAsync();
+
+    if (result.isAvailable) {
+      console.log('[OTA] New update available — downloading now...');
+      await Updates.fetchUpdateAsync();
+      console.log('[OTA] Update downloaded successfully.');
+
+      Alert.alert(
+        '✨ Update Ready',
+        'A new version of Rehearsal Hub has been downloaded. Restart now to apply the latest updates.',
+        [
+          {
+            text: 'Later',
+            style: 'cancel',
+          },
+          {
+            text: 'Restart Now',
+            style: 'default',
+            onPress: async () => {
+              try {
+                await Updates.reloadAsync();
+              } catch (err) {
+                console.warn('[OTA] Failed to reload:', err);
+              }
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+
+      return { status: 'updated', message: 'Update downloaded and ready to apply.' };
+    } else {
+      console.log('[OTA] App is up to date.');
+      if (isManual) {
+        Alert.alert('Up to Date', 'You are already running the latest version of Rehearsal Hub.');
+      }
+      return { status: 'up_to_date', message: 'App is already up to date.' };
+    }
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.warn('[OTA] Update check failed:', errMsg);
+    if (!__DEV__) {
+      Sentry.captureMessage(`[OTA] check failed: ${errMsg}`);
+    }
+    if (isManual) {
+      Alert.alert('Update Check Failed', `Could not check for updates: ${errMsg}`);
+    }
+    return { status: 'error', message: errMsg };
+  }
+}
 
 /**
  * useOTAUpdates
  *
- * Silently checks for an EAS OTA (JS bundle) update:
- *  - On app launch (once app is ready)
- *  - Each time the app comes to the foreground, max once per 30 min
- *
- * If an update is found:
- *  - It is downloaded silently in the background
- *  - An Alert prompts the user to restart and apply it
- *
- * In dev mode this is a no-op (expo-updates doesn't function in dev).
+ * Silently checks for an EAS OTA (JS bundle) update on app launch and foreground transitions.
  */
 export function useOTAUpdates() {
   const lastCheckedAt = useRef<number>(0);
   const isChecking = useRef<boolean>(false);
 
-  const checkAndApplyUpdate = async () => {
-    // Skip in Expo Go dev environment — updates only work in production builds
+  const runBackgroundCheck = async () => {
     if (__DEV__ || !Updates.isEnabled) return;
     if (isChecking.current) return;
 
@@ -33,55 +104,20 @@ export function useOTAUpdates() {
     lastCheckedAt.current = now;
 
     try {
-      const result = await Updates.checkForUpdateAsync();
-
-      if (result.isAvailable) {
-        console.log('[OTA] New update available — downloading silently...');
-        await Updates.fetchUpdateAsync();
-        console.log('[OTA] Update downloaded. Prompting user to restart.');
-
-        Alert.alert(
-          '✨ Update Ready',
-          'A new version of Rehearsal Hub has been downloaded and is ready to apply. Restart now for the best experience.',
-          [
-            {
-              text: 'Later',
-              style: 'cancel',
-              onPress: () => console.log('[OTA] User deferred restart.'),
-            },
-            {
-              text: 'Restart Now',
-              style: 'default',
-              onPress: async () => {
-                try {
-                  await Updates.reloadAsync();
-                } catch (err) {
-                  console.warn('[OTA] Failed to reload after update:', err);
-                }
-              },
-            },
-          ],
-          { cancelable: false }
-        );
-      } else {
-        console.log('[OTA] App is up to date.');
-      }
-    } catch (err: any) {
-      // Non-critical — silently log, never crash the app
-      console.warn('[OTA] Update check failed:', err?.message || err);
+      await checkAndApplyUpdate(false);
     } finally {
       isChecking.current = false;
     }
   };
 
   useEffect(() => {
-    // Initial check on mount
-    checkAndApplyUpdate();
+    // Initial silent check on mount
+    runBackgroundCheck();
 
     // Re-check whenever the app comes back to the foreground
     const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (nextState === 'active') {
-        checkAndApplyUpdate();
+        runBackgroundCheck();
       }
     });
 

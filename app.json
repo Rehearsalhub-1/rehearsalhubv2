@@ -87,7 +87,7 @@
       [
         "expo-updates",
         {
-          "launchWaitMs": 0
+          "launchWaitMs": 3000
         }
       ],
       "./plugins/withKotlinJvmTarget",
@@ -107,7 +107,11 @@
     "updates": {
       "url": "https://u.expo.dev/e98f38ac-ca86-4999-aa48-083199465371",
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 3000,
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      },
+      "disableAntiBrickingMeasures": true
     }
   }
 }
