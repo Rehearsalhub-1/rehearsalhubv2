@@ -32,6 +32,7 @@
       },
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
+      "usesCleartextTraffic": true,
       "package": "com.karaoke.rehearsalhubv2",
       "permissions": [
         "android.permission.FOREGROUND_SERVICE",

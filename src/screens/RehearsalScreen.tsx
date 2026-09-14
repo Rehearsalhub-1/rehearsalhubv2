@@ -28,6 +28,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { sendPushNotification, sendLocalNotification } from '../lib/notifications';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
 
 const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
@@ -264,11 +265,43 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const [miniPlayerBg, setMiniPlayerBg] = useState(theme.colors.backgroundSecondary);
   const [playerModalBg, setPlayerModalBg] = useState(theme.colors.backgroundDark);
 
-  const placeholderVideoPlayer = useVideoPlayer(TRACK_PLACEHOLDER_VIDEO, player => {
+  const initialPlaceholderAsset = Asset.fromModule(TRACK_PLACEHOLDER_VIDEO);
+  const initialPlaceholderSource = initialPlaceholderAsset.localUri ? { uri: initialPlaceholderAsset.localUri } : TRACK_PLACEHOLDER_VIDEO;
+
+  const placeholderVideoPlayer = useVideoPlayer(initialPlaceholderSource, player => {
     player.loop = true;
     player.muted = true;
-    player.play();
+    try {
+      player.play();
+    } catch {}
   });
+
+  useEffect(() => {
+    let isMounted = true;
+    async function ensureLocalPlaceholder() {
+      try {
+        const a = Asset.fromModule(TRACK_PLACEHOLDER_VIDEO);
+        if (!a.localUri) {
+          await a.downloadAsync();
+        }
+        if (isMounted && a.localUri && placeholderVideoPlayer) {
+          placeholderVideoPlayer.replace({ uri: a.localUri });
+          placeholderVideoPlayer.muted = true;
+          placeholderVideoPlayer.loop = true;
+          try {
+            placeholderVideoPlayer.play();
+          } catch {}
+        }
+      } catch (e) {
+        console.warn('[RehearsalScreen] Track placeholder video local load warning:', e);
+      }
+    }
+    ensureLocalPlaceholder();
+    return () => {
+      isMounted = false;
+    };
+  }, [placeholderVideoPlayer]);
+
 
   const [activeTab, setActiveTab] = useState<'heard' | 'unheard'>('unheard');
   const [mainTab, setMainTab] = useState<'home' | 'audiolab' | 'more'>('audiolab');
@@ -1576,14 +1609,22 @@ export default function RehearsalScreen({ navigation, route }: any) {
                   )}
                   <View style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26', marginRight: 12 }}>
                     {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
-                      <Image source={{ uri: track.imageUrl }} style={styles.trackImage} contentFit="cover" cachePolicy="disk" />
+                      <Image source={{ uri: track.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" />
                     ) : (
-                      <VideoView
-                        player={placeholderVideoPlayer}
-                        style={StyleSheet.absoluteFill}
-                        contentFit="cover"
-                        nativeControls={false}
-                      />
+                      <>
+                        <Image
+                          source={coverImage || COVER_IMAGE}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                          cachePolicy="disk"
+                        />
+                        <VideoView
+                          player={placeholderVideoPlayer}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover"
+                          nativeControls={false}
+                        />
+                      </>
                     )}
                     {!hasAudio && (
                       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
@@ -2163,10 +2204,9 @@ const getStyles = (theme: any, insets: any) => {
     marginBottom: 16
   },
   trackImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 4,
-    marginRight: 12
+    width: 44,
+    height: 44,
+    borderRadius: 8
   },
   trackInfo: {
     flex: 1,
