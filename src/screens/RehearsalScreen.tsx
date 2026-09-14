@@ -45,7 +45,7 @@ import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { SongScheduleSheet } from '../components/SongScheduleSheet';
 import { api, clearCache } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
-import { useProgramStore } from '../stores/programStore';
+
 import { useLiveSongStore } from '../stores/liveSongStore';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
@@ -64,6 +64,12 @@ const _memCache: Record<string, {
   coverImage: any;
   categoryOrder?: string[];
 }> = {};
+
+const isInvalidUserCategory = (cat: string) => {
+  if (!cat || typeof cat !== 'string' || !cat.trim()) return true;
+  const lower = cat.trim().toLowerCase();
+  return lower === 'worship' || lower === 'praise night' || lower === 'uncategorized' || lower === 'none';
+};
 
 const songBelongsToCategory = (song: any, targetCategory: string) => {
   if (song.categories && Array.isArray(song.categories) && song.categories.length > 0) {
@@ -393,8 +399,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
               conductor: songDocData.conductor || '',
               key: songDocData.key || '',
               tempo: songDocData.tempo || '',
-              category: songDocData.category || 'Praise Night',
-              categories: songDocData.categories || [songDocData.category || 'Praise Night'],
+              category: songDocData.category || '',
+              categories: Array.isArray(songDocData.categories) ? songDocData.categories : (songDocData.category ? [songDocData.category] : []),
               audioUrl: songAudioUrl,
               lyrics: songDocData.lyrics || '',
               solfa: songDocData.notation || songDocData.solfas || songDocData.solfa || '',
@@ -545,9 +551,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
         const allCategoriesList: string[] = [];
         songs.forEach((song: any) => {
           if (song.categories && Array.isArray(song.categories)) {
-            allCategoriesList.push(...song.categories.filter((cat: any) => cat && cat.trim()));
-          } else if (song.category && song.category.trim()) {
-            allCategoriesList.push(song.category);
+            allCategoriesList.push(...song.categories.filter((cat: any) => !isInvalidUserCategory(cat)));
+          } else if (song.category && !isInvalidUserCategory(song.category)) {
+            allCategoriesList.push(song.category.trim());
           }
         });
         const uniqueCategories = [...new Set(allCategoriesList)];
@@ -579,15 +585,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           };
         });
 
-        const pageCategories = finalCategories.length > 0 ? finalCategories : [
-          { id: 'Global Communion', name: 'Global Communion', icon: 'globe-outline' },
-          { id: 'Praise Night', name: 'Praise Night', icon: 'musical-notes-outline' },
-          { id: 'Midweek', name: 'Midweek Rehearsal', icon: 'calendar-outline' },
-          { id: 'Sunday Special', name: 'Sunday Special', icon: 'sunny-outline' },
-          { id: 'Special Events', name: 'Special Events', icon: 'star-outline' }
-        ];
-
-        setCategories(pageCategories);
+        setCategories(finalCategories);
 
         setSelectedCategory((prevSelected) => {
           if (prevSelected && uniqueCategories.includes(prevSelected)) {
@@ -867,8 +865,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
             conductor: song.conductor || '',
             key: song.key || '',
             tempo: song.tempo || '',
-            category: song.category || 'Praise Night',
-            categories: song.categories || [song.category || 'Praise Night'],
+            category: song.category || '',
+            categories: Array.isArray(song.categories) ? song.categories : (song.category ? [song.category] : []),
             audioUrl: songAudioUrl,
             lyrics: song.lyrics || '',
             solfa: song.notation || song.solfas || song.solfa || '',
@@ -914,9 +912,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
         const allCategoriesList: string[] = [];
         finalSongs.forEach((song: any) => {
           if (song.categories && Array.isArray(song.categories)) {
-            allCategoriesList.push(...song.categories.filter((cat: any) => cat && cat.trim()));
-          } else if (song.category && song.category.trim()) {
-            allCategoriesList.push(song.category);
+            allCategoriesList.push(...song.categories.filter((cat: any) => !isInvalidUserCategory(cat)));
+          } else if (song.category && !isInvalidUserCategory(song.category)) {
+            allCategoriesList.push(song.category.trim());
           }
         });
         const uniqueCategories = [...new Set(allCategoriesList)];
@@ -949,12 +947,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           };
         });
 
-        const pageCategories = finalCategories.length > 0 ? finalCategories : [
-        { id: 'Global Communion', name: 'Global Communion', icon: 'globe-outline' },
-        { id: 'Praise Night', name: 'Praise Night', icon: 'musical-notes-outline' },
-        { id: 'Midweek', name: 'Midweek Rehearsal', icon: 'calendar-outline' },
-        { id: 'Sunday Special', name: 'Sunday Special', icon: 'sunny-outline' },
-        { id: 'Special Events', name: 'Special Events', icon: 'star-outline' }];
+        const pageCategories = finalCategories.length > 0 ? finalCategories : [];
 
         if (!active) return;
         setCategories(pageCategories);
@@ -1092,8 +1085,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
           conductor: update.conductor || '',
           key: update.key || '',
           tempo: update.tempo || '',
-          category: update.category || 'Praise Night',
-          categories: update.categories || [update.category || 'Praise Night'],
+          category: update.category || '',
+          categories: Array.isArray(update.categories) ? update.categories : (update.category ? [update.category] : []),
           audioUrl: songAudioUrl,
           lyrics: update.lyrics || '',
           solfa: update.notation || update.solfas || update.solfa || '',

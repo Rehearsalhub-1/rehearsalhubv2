@@ -22,7 +22,8 @@ import { uploadImageToCloudinary } from '../lib/cloudinary';
 import { useUser, useZone, useChurch, useUserStore } from '../hooks/useUser';
 import { isHQGroup } from '../config/zones';
 import * as Updates from 'expo-updates';
-import { checkAndApplyUpdate } from '../hooks/useOTAUpdates';
+import { useOTAUpdates } from '../hooks/useOTAUpdates';
+import OTAUpdateModal from '../components/OTAUpdateModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -44,6 +45,9 @@ export default function SettingsScreen({ navigation }: any) {
   const { theme, themeName, toggleTheme } = useTheme();
   const T = theme.colors;
   const s = getStyles(T, theme);
+
+  // OTA manual check — uses the same modal as the background check in App.tsx
+  const { showUpdateModal, dismissModal, checkManually } = useOTAUpdates();
 
   const currentUser = useUserStore(s => s.user);
   const isPremium = useUserStore(s => s.isPremium);
@@ -182,7 +186,14 @@ export default function SettingsScreen({ navigation }: any) {
     if (checkingOta) return;
     setCheckingOta(true);
     try {
-      await checkAndApplyUpdate(true);
+      const res = await checkManually();
+      if (res.status === 'up_to_date') {
+        Alert.alert('Up to Date', 'You are running the latest version of the app.');
+      } else if (res.status === 'disabled') {
+        Alert.alert('Updates Disabled', res.message);
+      } else if (res.status === 'error') {
+        Alert.alert('Update Check Failed', res.message);
+      }
     } finally {
       setCheckingOta(false);
     }
@@ -1169,6 +1180,10 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
         </KeyboardAvoidingView>
       </Modal>
+      <OTAUpdateModal
+        visible={showUpdateModal}
+        onDismiss={dismissModal}
+      />
     </View>
   );
 }
