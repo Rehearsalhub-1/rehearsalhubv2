@@ -26,17 +26,27 @@ export interface LiveSong {
 interface LiveSongStore {
   activeSongs: LiveSong[];
   isLoading: boolean;
+  /** IDs of songs explicitly turned off via WebSocket, with the timestamp they were removed.
+   *  Used to prevent stale HTTP fetches from re-adding already-removed songs. */
+  recentlyRemovedIds: Map<string, number>;
   setActiveSongs: (songs: LiveSong[]) => void;
   handleSongUpdate: (rawUpdate: any) => void;
   removeSong: (songId: string) => void;
   fetchActiveSongs: (zoneId?: string) => Promise<void>;
 }
 
+/** How long (ms) to shield a removed song from HTTP re-addition. */
+const REMOVAL_SHIELD_MS = 30_000;
+
 export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   activeSongs: [],
   isLoading: false,
+  recentlyRemovedIds: new Map(),
 
   setActiveSongs: (songs: LiveSong[]) => {
+    const { recentlyRemovedIds } = get();
+    const now = Date.now();
+
     const liveOnly = Array.isArray(songs)
       ? songs.filter(
           (s) =>
@@ -44,7 +54,9 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             (s.status === 'live' ||
               s.isLive === true ||
               s.isActive === true ||
-              String(s.isActive) === 'true')
+              String(s.isActive) === 'true') &&
+            // Don't re-add songs recently turned off via WebSocket
+            !isRecentlyRemoved(recentlyRemovedIds, String(s.id), now)
         )
       : [];
 
@@ -58,8 +70,14 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   },
 
   removeSong: (songId: string) => {
+    const { recentlyRemovedIds } = get();
+    // Record removal time so HTTP fetches in flight can't re-add this song
+    const updated = new Map(recentlyRemovedIds);
+    updated.set(String(songId), Date.now());
+
     set((state) => ({
       activeSongs: state.activeSongs.filter((s) => String(s.id) !== String(songId)),
+      recentlyRemovedIds: updated,
     }));
   },
 
@@ -91,11 +109,18 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
       return;
     }
 
-    // If explicit active / live
-    const isLiveNow =
-      isLiveField === true || statusField === 'live';
+    // If song is going LIVE, clear any removal shield so it shows up again
+    const isLiveNow = isLiveField === true || statusField === 'live';
 
     if (isLiveNow) {
+      // Clear removal shield — song was explicitly re-activated
+      const { recentlyRemovedIds } = get();
+      if (recentlyRemovedIds.has(String(songId))) {
+        const updated = new Map(recentlyRemovedIds);
+        updated.delete(String(songId));
+        set({ recentlyRemovedIds: updated });
+      }
+
       set((state) => {
         const existingIndex = state.activeSongs.findIndex(
           (s) => String(s.id) === String(songId)
@@ -125,7 +150,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             leadSinger: update.leadSinger || 'Loveworld Singers',
             writer: update.writer || '',
             conductor: update.conductor || '',
-            category: update.category || 'Live Rehearsal',
+            category: update.category || '',
             audioUrl: resolvedAudioUrl,
             audioUrls: resolvedAudioUrls,
             isActive: true,
@@ -157,10 +182,19 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   fetchActiveSongs: async (zoneId?: string) => {
     try {
       set({ isLoading: true });
+      const fetchStartTime = Date.now();
       const res = await api.songs.getActiveSongs(zoneId);
       if (res?.success && Array.isArray(res.data)) {
+        // After the await, re-read the current removal shield state
+        const { recentlyRemovedIds } = get();
+
         const liveOnly = res.data.filter(
-          (s: any) => s && (s.status === 'live' || s.isLive === true)
+          (s: any) =>
+            s &&
+            (s.status === 'live' || s.isLive === true) &&
+            // Exclude songs that were turned OFF via WebSocket AFTER this fetch started.
+            // This prevents a stale HTTP response from re-showing a song the admin just toggled off.
+            !isRecentlyRemoved(recentlyRemovedIds, String(s.id), fetchStartTime)
         );
         set({ activeSongs: liveOnly, isLoading: false });
       } else {
@@ -171,3 +205,17 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
     }
   },
 }));
+
+/** Returns true if this song ID was removed AFTER the given reference timestamp. */
+function isRecentlyRemoved(
+  removedMap: Map<string, number>,
+  songId: string,
+  sinceTimestamp: number
+): boolean {
+  const removedAt = removedMap.get(songId);
+  if (!removedAt) return false;
+  // Shield is active if: removed recently AND the removal happened after the reference time
+  const isStillShielded = Date.now() - removedAt < REMOVAL_SHIELD_MS;
+  const removedAfterFetchStart = removedAt >= sinceTimestamp;
+  return isStillShielded && removedAfterFetchStart;
+}

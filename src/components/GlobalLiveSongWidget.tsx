@@ -103,14 +103,23 @@ export default function GlobalLiveSongWidget() {
     fetchActiveSongs(currentZone?.id);
   }, [currentZone?.id, fetchActiveSongs]);
 
-  // Refetch when app returns from background
+  // Refetch when app returns from background — debounced to avoid racing with WebSocket updates
   useEffect(() => {
+    let refetchTimer: ReturnType<typeof setTimeout> | null = null;
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        fetchActiveSongs(currentZone?.id);
+        // Wait 2.5s before refetching so the WebSocket has time to deliver
+        // any in-flight "off" events before we re-populate from HTTP
+        if (refetchTimer) clearTimeout(refetchTimer);
+        refetchTimer = setTimeout(() => {
+          fetchActiveSongs(currentZone?.id);
+        }, 2500);
       }
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      if (refetchTimer) clearTimeout(refetchTimer);
+    };
   }, [currentZone?.id, fetchActiveSongs]);
 
   // Visibility guard
