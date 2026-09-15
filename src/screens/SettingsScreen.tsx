@@ -100,7 +100,7 @@ export default function SettingsScreen({ navigation }: any) {
     zones: false,
     subgroups: false,
     account: false,
-    app: false,
+    app: true,
     help: false
   });
 
@@ -992,7 +992,7 @@ export default function SettingsScreen({ navigation }: any) {
             <TouchableOpacity style={s.sectionHeader} onPress={() => toggleSection('app')} activeOpacity={0.7}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 <View style={[s.rowIcon, { backgroundColor: 'rgba(124,58,237,0.15)' }]}><Ionicons name="color-palette-outline" size={18} color={theme.colors.accent} /></View>
-                <Text style={s.sectionTitle}>App Preferences</Text>
+                <Text style={s.sectionTitle}>App Preferences & Updates</Text>
               </View>
               <Ionicons name={expanded.app ? "chevron-up" : "chevron-down"} size={20} color={T.textMuted} />
             </TouchableOpacity>
@@ -1009,6 +1009,26 @@ export default function SettingsScreen({ navigation }: any) {
                     thumbColor="#fff"
                   />
                 </View>
+
+                <TouchableOpacity
+                  style={[s.row, { paddingVertical: 14 }]}
+                  onPress={handleCheckForUpdates}
+                  disabled={checkingOta}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, paddingLeft: 12 }}>
+                    <Ionicons name="cloud-download-outline" size={18} color={T.accent} />
+                    <Text style={s.rowLabel}>Check for Updates</Text>
+                  </View>
+                  {checkingOta ? (
+                    <ActivityIndicator size="small" color={T.accent} />
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ color: T.accent, fontSize: 13, fontWeight: '700' }}>Check Now</Text>
+                      <Ionicons name="chevron-forward" size={16} color={T.textMuted} />
+                    </View>
+                  )}
+                </TouchableOpacity>
               </View>
             )}
           </View>
