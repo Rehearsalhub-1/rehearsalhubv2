@@ -815,26 +815,24 @@ export default function RehearsalScreen({ navigation, route }: any) {
             }
           } else {
             const effectiveZone = resolvedZoneId ? `&zoneId=${encodeURIComponent(resolvedZoneId)}` : '';
-            if (Array.isArray(selectedRehearsal.songs) && selectedRehearsal.songs.length > 0) {
+            const primary = await api.songs.getEndpoint(
+              `/songs/praise-night?programId=${encodeURIComponent(selectedRehearsal.id)}${effectiveZone}`
+            ).catch(() => null);
+            if (primary?.success && Array.isArray(primary.data) && primary.data.length > 0) {
+              dbSongs = primary.data;
+              isSongsFetchSuccessful = true;
+            } else if (Array.isArray(selectedRehearsal.songs) && selectedRehearsal.songs.length > 0) {
               dbSongs = selectedRehearsal.songs;
               isSongsFetchSuccessful = true;
-            } else {
-              const primary = await api.songs.getEndpoint(
-                `/songs/praise-night?programId=${encodeURIComponent(selectedRehearsal.id)}${effectiveZone}`
-              ).catch(() => null);
-              if (primary?.success && Array.isArray(primary.data) && primary.data.length > 0) {
-                dbSongs = primary.data;
-                isSongsFetchSuccessful = true;
-              } else if (Array.isArray(selectedRehearsal.songIds) && selectedRehearsal.songIds.length > 0) {
-                const zoneRes = await api.songs.getZoneSongs(resolvedZoneId).catch(() => null);
-                if (zoneRes?.success && Array.isArray(zoneRes.data)) {
-                  dbSongs = zoneRes.data.filter((s: any) => selectedRehearsal.songIds.includes(s.id));
-                  isSongsFetchSuccessful = true;
-                }
-              } else if (primary?.success && Array.isArray(primary.data)) {
-                dbSongs = primary.data;
+            } else if (Array.isArray(selectedRehearsal.songIds) && selectedRehearsal.songIds.length > 0) {
+              const zoneRes = await api.songs.getZoneSongs(resolvedZoneId).catch(() => null);
+              if (zoneRes?.success && Array.isArray(zoneRes.data)) {
+                dbSongs = zoneRes.data.filter((s: any) => selectedRehearsal.songIds.includes(s.id));
                 isSongsFetchSuccessful = true;
               }
+            } else if (primary?.success && Array.isArray(primary.data)) {
+              dbSongs = primary.data;
+              isSongsFetchSuccessful = true;
             }
           }
         } catch (songError) {
