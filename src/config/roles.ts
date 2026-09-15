@@ -14,7 +14,7 @@ export function isHQAdmin(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
 
   const role = (profile.role || (profile as any)?.raw?.role || '').toLowerCase();
-  if (['hq_admin', 'super_admin', 'admin', 'boss'].includes(role)) return true;
+  if (['hq_admin', 'super_admin', 'admin', 'boss', 'president', 'director', 'oftp', 'executive'].includes(role)) return true;
 
   const adminField = ((profile as any)?.administration || (profile as any)?.raw?.administration || '').toLowerCase();
   if (['boss', 'hq admin', 'admin'].includes(adminField)) return true;

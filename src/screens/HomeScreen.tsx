@@ -667,13 +667,22 @@ export default function HomeScreen({ navigation }: any) {
                       || "Rehearsal Hub User"}
                   </Text>
                   <Text style={styles.userRole}>
-                    {contextProfile?.role === 'hq_admin' || userProfile?.role === 'hq_admin' || contextProfile?.hasHqAccess || userProfile?.hasHqAccess
-                      ? 'HQ Admin' 
-                      : (contextProfile?.role === 'zone_admin' || userProfile?.role === 'zone_admin' || contextProfile?.role === 'boss' || userProfile?.role === 'boss' || contextProfile?.administration === 'Boss' || userProfile?.administration === 'Boss'
-                          ? 'Zone Admin'
-                          : (contextProfile?.role === 'church_coordinator' || userProfile?.role === 'church_coordinator' || contextProfile?.role === 'church_admin'
-                              ? 'Church Coordinator'
-                              : 'Member Account'))}
+                    {(() => {
+                      const r = (contextProfile?.role || userProfile?.role || '').toLowerCase();
+                      if (r === 'president') return 'The President';
+                      if (r === 'director') return 'The Director';
+                      if (r === 'oftp') return 'Office of the President';
+                      if (contextProfile?.role === 'hq_admin' || userProfile?.role === 'hq_admin' || contextProfile?.hasHqAccess || userProfile?.hasHqAccess) {
+                        return 'HQ Admin';
+                      }
+                      if (contextProfile?.role === 'zone_admin' || userProfile?.role === 'zone_admin' || contextProfile?.role === 'boss' || userProfile?.role === 'boss' || contextProfile?.administration === 'Boss' || userProfile?.administration === 'Boss') {
+                        return 'Zone Admin';
+                      }
+                      if (contextProfile?.role === 'church_coordinator' || userProfile?.role === 'church_coordinator' || contextProfile?.role === 'church_admin') {
+                        return 'Church Coordinator';
+                      }
+                      return 'Member Account';
+                    })()}
                   </Text>
                 </View>
                 <Ionicons name="log-out-outline" size={20} color={theme.colors.textMuted} style={{ marginRight: 8 }} />

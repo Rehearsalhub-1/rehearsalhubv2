@@ -676,8 +676,20 @@ export default function SettingsScreen({ navigation }: any) {
                           <Ionicons name="shield-checkmark" size={20} color={T.accent} />
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={s.zoneName}>HQ Administrator</Text>
-                          <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>Access to all zones via Admin Dashboard</Text>
+                          <Text style={s.zoneName}>
+                            {(() => {
+                              const r = (profile?.role || '').toLowerCase();
+                              if (r === 'president') return 'The President';
+                              if (r === 'director') return 'The Director';
+                              if (r === 'oftp') return 'Office of the President';
+                              return 'HQ Administrator';
+                            })()}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+                            {['president', 'director', 'oftp'].includes((profile?.role || '').toLowerCase())
+                              ? 'Loveworld Singers Headquarters • Executive Access'
+                              : 'Access to all zones via Admin Dashboard'}
+                          </Text>
                         </View>
                       </View>
                       <View style={[s.zoneSwitchBtn, { backgroundColor: 'rgba(192,132,252,0.15)' }]}>

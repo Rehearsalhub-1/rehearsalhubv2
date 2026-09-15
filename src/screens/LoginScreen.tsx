@@ -720,7 +720,7 @@ export default function LoginScreen({ route, navigation }: any) {
                     ) : (
                       <View style={styles.primaryButtonContent}>
                         <Ionicons
-                          name={isLogin ? 'log-in-outline' : 'sparkles-outline'}
+                          name={isLogin ? 'log-in-outline' : 'person-add-outline'}
                           size={20}
                           color="#ffffff"
                           style={{ marginRight: 8 }}
@@ -1047,7 +1047,13 @@ export default function LoginScreen({ route, navigation }: any) {
                 {multipleAccounts.map((acc, idx) => {
                   const fullName = `${acc.firstName || ''} ${acc.lastName || ''}`.trim() || 'Singer';
                   const roleBadge =
-                    acc.role === 'super_admin' || acc.role === 'hq_admin' || acc.hasHqAccess
+                    acc.role === 'president'
+                      ? 'The President'
+                      : acc.role === 'director'
+                      ? 'The Director'
+                      : acc.role === 'oftp'
+                      ? 'Office of the President'
+                      : acc.role === 'super_admin' || acc.role === 'hq_admin' || acc.hasHqAccess
                       ? 'HQ Admin'
                       : acc.role === 'zone_coordinator'
                       ? 'Zonal Coordinator'
