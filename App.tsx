@@ -58,7 +58,6 @@ import { ensureCacheSchema } from './src/lib/ensureCacheSchema';
 import { debugSessionLog, flushDebugSessionLogs } from './src/lib/debugSessionLog';
 import { IncomingCallManager } from './src/lib/IncomingCallManager';
 import { useOTAUpdates } from './src/hooks/useOTAUpdates';
-import OTAUpdateModal from './src/components/OTAUpdateModal';
 import GlobalLiveSongWidget from './src/components/GlobalLiveSongWidget';
 
 const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/+$/, '');
@@ -87,7 +86,7 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
   const { theme, themeName } = useTheme();
 
   // ── OTA (Over-the-Air) JS bundle update check ──────────────────────────────
-  const { showUpdateModal, dismissModal } = useOTAUpdates();
+  useOTAUpdates();
 
   const currentUser = useUserStore(s => s.user);
 
@@ -219,11 +218,6 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
         <OfflineBanner />
         <SessionResumeBanner />
         <AppUpdateChecker />
-        <OTAUpdateModal
-          visible={showUpdateModal}
-          appName="Rehearsal Hub"
-          onLater={dismissModal}
-        />
       </View>
     </SafeAreaProvider>
   );

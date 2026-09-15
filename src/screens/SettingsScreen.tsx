@@ -23,7 +23,6 @@ import { useUser, useZone, useChurch, useUserStore } from '../hooks/useUser';
 import { isHQGroup } from '../config/zones';
 import * as Updates from 'expo-updates';
 import { useOTAUpdates } from '../hooks/useOTAUpdates';
-import OTAUpdateModal from '../components/OTAUpdateModal';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -46,8 +45,8 @@ export default function SettingsScreen({ navigation }: any) {
   const T = theme.colors;
   const s = getStyles(T, theme);
 
-  // OTA manual check — uses the same modal as the background check in App.tsx
-  const { showUpdateModal, dismissModal, checkManually } = useOTAUpdates();
+  // OTA manual check
+  const { checkManually } = useOTAUpdates();
 
   const currentUser = useUserStore(s => s.user);
   const isPremium = useUserStore(s => s.isPremium);
@@ -187,7 +186,25 @@ export default function SettingsScreen({ navigation }: any) {
     setCheckingOta(true);
     try {
       const res = await checkManually();
-      if (res.status === 'up_to_date') {
+      if (res.status === 'updated') {
+        Alert.alert(
+          'Update Ready',
+          'A new update has been downloaded. You can restart now to apply it, or it will apply automatically next time you open the app.',
+          [
+            { text: 'Later', style: 'cancel' },
+            {
+              text: 'Restart Now',
+              onPress: async () => {
+                try {
+                  await Updates.reloadAsync();
+                } catch (e) {
+                  console.warn('Reload failed:', e);
+                }
+              },
+            },
+          ]
+        );
+      } else if (res.status === 'up_to_date') {
         Alert.alert('Up to Date', 'You are running the latest version of the app.');
       } else if (res.status === 'disabled') {
         Alert.alert('Updates Disabled', res.message);
@@ -1180,10 +1197,6 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
         </KeyboardAvoidingView>
       </Modal>
-      <OTAUpdateModal
-        visible={showUpdateModal}
-        onDismiss={dismissModal}
-      />
     </View>
   );
 }
