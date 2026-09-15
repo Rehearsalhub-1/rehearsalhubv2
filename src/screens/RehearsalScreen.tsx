@@ -539,13 +539,15 @@ export default function RehearsalScreen({ navigation, route }: any) {
   useEffect(() => {
     if (isZoneLoading || isProfileLoading || !user) return;
     let active = true;
-    hasCachedDataRef.current = false; // Reset so switching zones reads the correct cache
+    hasCachedDataRef.current = false; // Reset so switching zones/programs reads the correct cache
 
     clearCache();
 
     async function loadData() {
-
-      const cacheKey = `rehearsal_songs_${program?.id || 'default'}_${contextZone?.id || 'none'}`;
+      // Include selectedProgramOverride ID in cache key so switching programs
+      // never accidentally loads a different program's stale songs.
+      const overrideId = selectedProgramOverride?.id || null;
+      const cacheKey = `rehearsal_songs_${overrideId || program?.id || 'default'}_${contextZone?.id || 'none'}`;
 
       const setupCategoriesFromSongs = (songs: any[], categoryOrder: string[] = []) => {
         const allCategoriesList: string[] = [];
@@ -691,14 +693,11 @@ export default function RehearsalScreen({ navigation, route }: any) {
           }
         } else {
           try {
-            const isHQ = isHQGroup(resolvedZoneId);
-
-            const [zoneResult, hqResult] = await Promise.all([
-              !isHQ
-                ? api.programs.getAll(resolvedZoneId).catch(() => null)
-                : Promise.resolve(null),
-              isHQ ? api.programs.getAll().catch(() => null) : Promise.resolve(null),
-            ]);
+            // Always pass the explicit zoneId — even for zone-001 (HQ) users.
+            // The API's HQ-admin bypass (no zone filter) only applies to server-side
+            // admin tokens. Regular singers authenticated in zone-001 must still
+            // receive zoneId=zone-001 so the backend scopes results correctly.
+            const programsRes = await api.programs.getAll(resolvedZoneId).catch(() => null);
 
             const processPages = (res: any) => {
               if (!res) return [];
@@ -717,18 +716,15 @@ export default function RehearsalScreen({ navigation, route }: any) {
               return pages;
             };
 
-            const zonePages = !isHQ && zoneResult ? processPages(zoneResult) : [];
-            const hqPages = isHQ && hqResult ? processPages(hqResult) : [];
-            const allAvailable = isHQ ? hqPages : zonePages;
+            const allAvailable = processPages(programsRes);
             if (active) {
               setAvailablePrograms(allAvailable);
             }
 
             const targetCategory = (route?.params?.categoryFilter || 'ongoing').toLowerCase().trim();
 
-            // Strictly pick program matching target category from this zone only — NO HQ fallback!
-            const activePages = isHQ ? hqPages : zonePages;
-            selectedRehearsal = activePages.find((p: any) => (p.category || '').toLowerCase().trim() === targetCategory) || null;
+            // Pick program matching the target category from this zone's programs
+            selectedRehearsal = allAvailable.find((p: any) => (p.category || '').toLowerCase().trim() === targetCategory) || null;
           } catch (rehearsalError) {
             console.error('[RehearsalScreen] Rehearsals fetch error:', rehearsalError);
             isRehearsalFetchSuccessful = false;
@@ -1001,7 +997,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
     return () => {
       active = false;
     };
-  }, [program, reloadKey, contextZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
+  }, [program, selectedProgramOverride, reloadKey, contextZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
 
   useEffect(() => {
 

@@ -56,7 +56,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
               s.isActive === true ||
               String(s.isActive) === 'true') &&
             // Don't re-add songs recently turned off via WebSocket
-            !isRecentlyRemoved(recentlyRemovedIds, String(s.id), now)
+            !isRecentlyRemoved(recentlyRemovedIds, String(s.id))
         )
       : [];
 
@@ -182,19 +182,18 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   fetchActiveSongs: async (zoneId?: string) => {
     try {
       set({ isLoading: true });
-      const fetchStartTime = Date.now();
       const res = await api.songs.getActiveSongs(zoneId);
       if (res?.success && Array.isArray(res.data)) {
-        // After the await, re-read the current removal shield state
+        // Re-read current removal shield state
         const { recentlyRemovedIds } = get();
 
         const liveOnly = res.data.filter(
           (s: any) =>
             s &&
             (s.status === 'live' || s.isLive === true) &&
-            // Exclude songs that were turned OFF via WebSocket AFTER this fetch started.
-            // This prevents a stale HTTP response from re-showing a song the admin just toggled off.
-            !isRecentlyRemoved(recentlyRemovedIds, String(s.id), fetchStartTime)
+            // Exclude songs that were turned OFF recently via WebSocket or admin action.
+            // This prevents stale HTTP responses from re-showing songs that were turned off.
+            !isRecentlyRemoved(recentlyRemovedIds, String(s.id))
         );
         set({ activeSongs: liveOnly, isLoading: false });
       } else {
@@ -206,16 +205,12 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   },
 }));
 
-/** Returns true if this song ID was removed AFTER the given reference timestamp. */
+/** Returns true if this song ID was removed recently within REMOVAL_SHIELD_MS. */
 function isRecentlyRemoved(
   removedMap: Map<string, number>,
-  songId: string,
-  sinceTimestamp: number
+  songId: string
 ): boolean {
   const removedAt = removedMap.get(songId);
   if (!removedAt) return false;
-  // Shield is active if: removed recently AND the removal happened after the reference time
-  const isStillShielded = Date.now() - removedAt < REMOVAL_SHIELD_MS;
-  const removedAfterFetchStart = removedAt >= sinceTimestamp;
-  return isStillShielded && removedAfterFetchStart;
+  return Date.now() - removedAt < REMOVAL_SHIELD_MS;
 }

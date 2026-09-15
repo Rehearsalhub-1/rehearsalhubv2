@@ -23,13 +23,17 @@ export function isHQAdmin(profile: UserProfile | null | undefined): boolean {
 }
 
 /**
- * Checks if the user is authorized to view song and rehearsal archives
+ * Checks if the user is authorized to view song and rehearsal archives.
+ * HQ Admins (President, Director, OFTP, etc.) always have access — the
+ * hideArchives feature flag only controls access for regular singers.
  */
 export function canAccessArchive(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
+  // HQ Admins are never blocked by the hideArchives flag — check role first
+  if (isHQAdmin(profile)) return true;
+
   const hf = getHiddenFeatures(profile);
   if (hf.hideArchives === true) return false;
-  if (isHQAdmin(profile)) return true;
 
   const raw = (profile as any)?.raw || {};
   return !!(

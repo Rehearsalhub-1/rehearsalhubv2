@@ -550,9 +550,10 @@ export default function HomeScreen({ navigation }: any) {
                   return isZoneCoordinator(contextProfile) || isZoneCoordinator(userProfile as any) || contextProfile?.canAccessPreRehearsal === true || (userProfile as any)?.can_access_pre_rehearsal === true;
                 }
                 if (item.id === 'archives') {
+                  // HQ Admins (President, Director, OFTP, etc.) always see Archives — check role FIRST
+                  if (isHQAdmin(contextProfile) || isHQAdmin(userProfile as any)) return true;
+                  // Only block non-HQ users if the feature is explicitly hidden for them
                   if (hf.hideArchives) return false;
-                  // Only HQ Admins or singers explicitly granted archive access by an admin can see Archives
-                  if (isHQAdmin(contextProfile)) return true;
                   return canAccessArchive(contextProfile);
                 }
                 if (item.id === 'songs' && hf.hideMinisteredSongs) return false;

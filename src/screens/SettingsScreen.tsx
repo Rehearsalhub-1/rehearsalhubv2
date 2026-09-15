@@ -678,7 +678,7 @@ export default function SettingsScreen({ navigation }: any) {
                         <View style={{ flex: 1 }}>
                           <Text style={s.zoneName}>
                             {(() => {
-                              const r = (profile?.role || '').toLowerCase();
+                              const r = ((profile as any)?.role || '').toLowerCase();
                               if (r === 'president') return 'The President';
                               if (r === 'director') return 'The Director';
                               if (r === 'oftp') return 'Office of the President';
@@ -686,7 +686,7 @@ export default function SettingsScreen({ navigation }: any) {
                             })()}
                           </Text>
                           <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-                            {['president', 'director', 'oftp'].includes((profile?.role || '').toLowerCase())
+                            {['president', 'director', 'oftp'].includes(((profile as any)?.role || '').toLowerCase())
                               ? 'Loveworld Singers Headquarters • Executive Access'
                               : 'Access to all zones via Admin Dashboard'}
                           </Text>
