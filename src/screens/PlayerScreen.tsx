@@ -332,7 +332,8 @@ const PlayerProgressSlider = ({
 export default function PlayerScreen({ route, navigation }: any) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = getStyles(theme, insets);
+  const { width: windowWidth } = useWindowDimensions();
+  const styles = getStyles(theme, insets, windowWidth);
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isHQ = useUserStore(s => s.isHQ);
@@ -2247,7 +2248,8 @@ export default function PlayerScreen({ route, navigation }: any) {
     </View>);
 }
 
-const getStyles = (theme: any, insets: any) => {
+const getStyles = (theme: any, insets: any, screenWidth: number = SCREEN_WIDTH) => {
+  const isTablet = screenWidth >= 768;
   return StyleSheet.create({
   container: {
     flex: 1
@@ -2276,9 +2278,7 @@ const getStyles = (theme: any, insets: any) => {
   },
   artContainer: {
     width: '100%',
-    aspectRatio: SCREEN_WIDTH >= 768 ? 1.65 : 1.22,
-    minHeight: SCREEN_WIDTH >= 768 ? 380 : 310,
-    maxHeight: SCREEN_WIDTH >= 768 ? 420 : 340,
+    height: isTablet ? 380 : 310,
     borderRadius: 0,
     overflow: 'hidden',
     marginTop: 0,
