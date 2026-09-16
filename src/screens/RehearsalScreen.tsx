@@ -291,7 +291,11 @@ export default function RehearsalScreen({ navigation, route }: any) {
           await a.downloadAsync();
         }
         if (isMounted && a.localUri && placeholderVideoPlayer) {
-          placeholderVideoPlayer.replace({ uri: a.localUri });
+          if (typeof placeholderVideoPlayer.replaceAsync === 'function') {
+            await placeholderVideoPlayer.replaceAsync({ uri: a.localUri });
+          } else {
+            placeholderVideoPlayer.replace({ uri: a.localUri });
+          }
           placeholderVideoPlayer.muted = true;
           placeholderVideoPlayer.loop = true;
           try {

@@ -66,7 +66,11 @@ export default function AnimatedSplashScreen({
         }
         if (isMounted && a.localUri && player) {
           if (!hasStartedRef.current) {
-            player.replace({ uri: a.localUri });
+            if (typeof player.replaceAsync === 'function') {
+              await player.replaceAsync({ uri: a.localUri });
+            } else {
+              player.replace({ uri: a.localUri });
+            }
             player.muted = isMuted;
             try {
               player.play();
