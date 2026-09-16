@@ -76,9 +76,15 @@ export const uploadMedia = async (
 
     const data = await response.json();
     const rawUrl = data.data?.url || data.url;
-    if (rawUrl && typeof rawUrl === 'string' && rawUrl.includes('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev')) {
-      const key = rawUrl.split('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/')[1];
-      if (key) return `${BASE_URL}/upload/file/${key}`;
+    if (rawUrl && typeof rawUrl === 'string') {
+      if (rawUrl.startsWith('/upload/file') || rawUrl.startsWith('upload/file')) {
+        const cleanPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
+        return `${BASE_URL}${cleanPath}`;
+      }
+      if (rawUrl.includes('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev')) {
+        const key = rawUrl.split('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/')[1];
+        if (key) return `${BASE_URL}/upload/file/${key}`;
+      }
     }
     return rawUrl;
   } catch (error) {

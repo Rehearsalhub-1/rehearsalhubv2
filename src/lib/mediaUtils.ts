@@ -9,11 +9,19 @@
  * No side-effects, no external dependencies.
  */
 
-const BACKEND_BASE = (process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/+$/, '').replace(/\/api$/, '');
+const rawBackend = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const effectiveBackend = (!rawBackend || rawBackend.includes('loveworld-singers-backend.vercel.app'))
+  ? 'https://rehearsalhub-api-production-6a17.up.railway.app'
+  : rawBackend;
+const BACKEND_BASE = effectiveBackend.replace(/\/+$/, '').replace(/\/api$/, '');
 
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url || typeof url !== 'string') return '';
   const trimmed = url.trim();
+  if (trimmed.startsWith('/upload/file') || trimmed.startsWith('upload/file')) {
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    return `${BACKEND_BASE}${cleanPath}`;
+  }
   if (trimmed.includes('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev')) {
     const key = trimmed.split('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/')[1];
     if (key) {

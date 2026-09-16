@@ -104,7 +104,9 @@
       }
     },
     "owner": "hub11",
-    "runtimeVersion": "2.1.1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/e98f38ac-ca86-4999-aa48-083199465371",
       "checkAutomatically": "ON_LOAD",
