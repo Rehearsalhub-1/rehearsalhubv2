@@ -150,7 +150,11 @@ export async function connect() {
         const resourceMatch = matchesResource(resource, msg.resource);
         const idMatch = id === msg.id || id === 'all' || msg.id === 'all';
         if (resourceMatch && idMatch) {
-          handler(msg.data);
+          try {
+            handler(msg.data);
+          } catch (err) {
+            console.warn(`[useWebSocket] Handler error for ${resource}:${id}:`, err);
+          }
         }
       });
     };

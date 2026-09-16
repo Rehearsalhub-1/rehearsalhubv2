@@ -1,6 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-
-const BASE_URL = (process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/+$/, '').replace(/\/api$/, '');
+import { BASE_URL } from './apiClient';
 
 /**
  * Universal media uploader to Cloudflare R2 via rehearsalhub-api.
@@ -16,10 +15,17 @@ export const uploadMedia = async (
     if (!ext || ext.length > 5 || ext.includes('/') || ext.includes('?')) {
       ext = resourceType === 'image' ? 'jpg' : resourceType === 'video' ? 'mp4' : 'mp3';
     }
-    let mime = 'image/jpeg';
-    if (resourceType === 'image') {
+
+    const isAudio = ['m4a', 'mp3', 'wav', 'aac', 'ogg', 'opus', 'flac'].includes(ext);
+    const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) || resourceType === 'image';
+    const isVideo = ['mp4', 'mov', 'webm', 'mkv', 'm4v'].includes(ext) || (resourceType === 'video' && !isAudio);
+
+    let mime = 'application/octet-stream';
+    if (isAudio) {
+      mime = ext === 'm4a' ? 'audio/mp4' : `audio/${ext}`;
+    } else if (isImage) {
       mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-    } else if (resourceType === 'video') {
+    } else if (isVideo) {
       mime = ext === 'mov' ? 'video/quicktime' : 'video/mp4';
     } else if (ext === 'pdf') {
       mime = 'application/pdf';
@@ -29,10 +35,6 @@ export const uploadMedia = async (
       mime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     } else if (ext === 'txt') {
       mime = 'text/plain';
-    } else if (ext === 'm4a' || ext === 'mp3' || ext === 'wav' || ext === 'aac' || ext === 'ogg' || ext === 'opus') {
-      mime = `audio/${ext}`;
-    } else {
-      mime = 'application/octet-stream';
     }
 
     const filename = `upload_${Date.now()}.${ext}`;
@@ -43,12 +45,12 @@ export const uploadMedia = async (
       name: filename,
     } as any);
 
-    const folder = resourceType === 'image'
-      ? 'statuses'
-      : resourceType === 'video'
-      ? 'statuses_video'
-      : (ext === 'mp3' || ext === 'm4a' || ext === 'wav' || ext === 'aac')
+    const folder = isAudio
       ? 'audio'
+      : resourceType === 'image' || (isImage && resourceType !== 'video')
+      ? 'statuses'
+      : resourceType === 'video' || isVideo
+      ? 'statuses_video'
       : 'documents';
 
     formData.append('folder', folder);

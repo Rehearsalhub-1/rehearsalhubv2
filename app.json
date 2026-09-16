@@ -111,8 +111,7 @@
       "fallbackToCacheTimeout": 3000,
       "requestHeaders": {
         "expo-channel-name": "production"
-      },
-      "disableAntiBrickingMeasures": true
+      }
     }
   }
 }

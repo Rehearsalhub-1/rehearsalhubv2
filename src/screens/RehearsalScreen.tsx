@@ -593,7 +593,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           if (prevSelected && uniqueCategories.includes(prevSelected)) {
             return prevSelected;
           }
-          return uniqueCategories.length > 0 ? uniqueCategories[0] : null;
+          return null;
         });
       };
 

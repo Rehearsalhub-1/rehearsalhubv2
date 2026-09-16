@@ -155,7 +155,7 @@ export default function SubmitSongScreen({ navigation }: any) {
     try {
       let audioUrl = editingSubmission?.audioUrl || '';
       if (audioFile && !audioFile.isExisting) {
-        audioUrl = await uploadImageToCloudinary(audioFile.uri, 'video');
+        audioUrl = await uploadImageToCloudinary(audioFile.uri, 'raw');
       }
 
       const submissionData = {

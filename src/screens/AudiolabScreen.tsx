@@ -445,7 +445,12 @@ export default function AudiolabScreen({ navigation }: any) {
         type: 'audio/mp4',
       } as any);
       uploadForm.append('folder', 'audiolab/takes');
-      const uploadRes = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL ?? ''}/upload`, {
+      const rawBackendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+      const effectiveBackendUrl = (!rawBackendUrl || rawBackendUrl.includes('loveworld-singers-backend.vercel.app'))
+        ? 'https://rehearsalhub-api-production-6a17.up.railway.app'
+        : rawBackendUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+
+      const uploadRes = await fetch(`${effectiveBackendUrl}/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: uploadForm,

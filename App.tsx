@@ -10,9 +10,8 @@ import { disconnect as wsDisconnect } from './src/hooks/useWebSocket';
 // Initialize Sentry — captures all unhandled JS + native crashes
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN || '',
-  // Set to 1.0 to capture 100% of transactions for performance monitoring.
-  // Reduce in production for high-traffic apps.
-  tracesSampleRate: 1.0,
+  // Set to 0.1 (10%) in production for performance monitoring without exhausting quotas.
+  tracesSampleRate: 0.1,
   // Disable in dev to avoid noise
   enabled: !__DEV__,
   // Send user feedback prompts on crashes

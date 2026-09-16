@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Zone, isHQGroup, getZoneByInvitationCode } from '../config/zones';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearCache, setV2TenantScope } from '../lib/apiClient';
+import { clearCache, setV2TenantScope, onSessionExpired } from '../lib/apiClient';
 import { useShallow } from 'zustand/react/shallow';
 import * as SecureStore from 'expo-secure-store';
 
@@ -548,6 +548,11 @@ export function useChurch() {
 
 
 let _cleanup: (() => void) | null = null;
+
+// Register onSessionExpired listener with apiClient to avoid circular dependencies
+onSessionExpired(() => {
+  useUserStore.getState().signOut().catch(() => {});
+});
 
 export function initializeUserStore() {
   if (_cleanup) return; // Already initialized

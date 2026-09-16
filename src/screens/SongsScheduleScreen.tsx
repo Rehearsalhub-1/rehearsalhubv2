@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
-  ActivityIndicator
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
 import { useZone } from '../hooks/useZone';
+import { useChurch } from '../hooks/useUser';
 import { isHQGroup } from '../config/zones';
 import { DoodleBackground } from '../components/DoodleBackground';
 
@@ -93,121 +95,137 @@ const Reason = ({ c, theme }: { c: string, theme: any }) => {
   );
 };
 
-const NewSongs = ({ data, theme }: { data: any[], theme: any }) => (
-  <View>
-    <SectionHeader label={`New Songs Submitted`} count={data.length} icon="musical-notes" theme={theme} />
-    {data.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No new submissions.</Text>}
-    {data.map((s: any) => (
-      <Card key={s.id} theme={theme}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary, flex: 1 }}>{s.title}</Text>
-          <View style={{ backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 }}>
-            <Text style={{ fontSize: 10, color: theme.colors.textSecondary, fontWeight: '600' }}>Key: {s.key || '?'} · {s.duration || '--'}</Text>
+const NewSongs = ({ data, theme }: { data: any[], theme: any }) => {
+  const list = Array.isArray(data) ? data : [];
+  return (
+    <View>
+      <SectionHeader label={`New Songs Submitted`} count={list.length} icon="musical-notes" theme={theme} />
+      {list.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No new submissions.</Text>}
+      {list.map((s: any) => (
+        <Card key={s.id} theme={theme}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary, flex: 1 }}>{s.title}</Text>
+            <View style={{ backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 }}>
+              <Text style={{ fontSize: 10, color: theme.colors.textSecondary, fontWeight: '600' }}>Key: {s.key || '?'} · {s.duration || '--'}</Text>
+            </View>
           </View>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-          <KV label="By" value={s.submittedBy} bold theme={theme} />
-          <KV label="Date" value={s.submittedOn} theme={theme} />
-        </View>
-      </Card>
-    ))}
-  </View>
-);
-
-const CarriedOver = ({ data, theme }: { data: any[], theme: any }) => (
-  <View>
-    <SectionHeader label={`Carried Over Songs`} count={data.length} icon="return-down-back" theme={theme} />
-    {data.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No carried over songs.</Text>}
-    {data.map((s: any) => (
-      <Card key={s.id} theme={theme}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary, flex: 1 }}>{s.title}</Text>
-          <View style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 }}>
-            <Text style={{ fontSize: 10, color: '#f59e0b', fontWeight: '700' }}>{s.rehearsalCount || 1} prior rehearsals</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+            <KV label="By" value={s.submittedBy} bold theme={theme} />
+            <KV label="Date" value={s.submittedOn} theme={theme} />
           </View>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-          <KV label="From" value={s.originalProgram} theme={theme} />
-          <KV label="Key" value={s.key} theme={theme} />
-        </View>
-        <Reason c={s.reason} theme={theme} />
-      </Card>
-    ))}
-  </View>
-);
+        </Card>
+      ))}
+    </View>
+  );
+};
 
-const SwappedSongs = ({ data, theme }: { data: any[], theme: any }) => (
-  <View>
-    <SectionHeader label={`Swapped Songs`} count={data.length} icon="swap-horizontal" theme={theme} />
-    {data.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No swapped songs.</Text>}
-    {data.map((s: any) => (
-      <Card key={s.id} theme={theme}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-          <Text style={{ fontSize: 15, color: '#ef4444', textDecorationLine: "line-through" }}>{s.original}</Text>
-          <Ionicons name="arrow-forward" size={16} color={theme.colors.textMuted} style={{ marginHorizontal: 8 }} />
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#10b981' }}>{s.replacement}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <KV label="Swapped by" value={s.swappedBy} bold theme={theme} />
-          <KV label="Date" value={s.swappedOn} theme={theme} />
-        </View>
-        <Reason c={s.reason} theme={theme} />
-      </Card>
-    ))}
-  </View>
-);
-
-const InvalidSongs = ({ data, theme }: { data: any[], theme: any }) => (
-  <View>
-    <SectionHeader label={`Invalid Songs`} count={data.length} icon="ban" theme={theme} />
-    {data.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No invalid songs.</Text>}
-    {data.map((s: any) => (
-      <Card key={s.id} redBorder theme={theme}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#ef4444', textDecorationLine: "line-through", flex: 1 }}>{s.title}</Text>
-          <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 }}>
-            <Text style={{ fontSize: 10, color: '#ef4444', fontWeight: '700', textTransform: 'uppercase' }}>{s.invalidatedBy || 'Unknown'}</Text>
+const CarriedOver = ({ data, theme }: { data: any[], theme: any }) => {
+  const list = Array.isArray(data) ? data : [];
+  return (
+    <View>
+      <SectionHeader label={`Carried Over Songs`} count={list.length} icon="return-down-back" theme={theme} />
+      {list.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No carried over songs.</Text>}
+      {list.map((s: any) => (
+        <Card key={s.id} theme={theme}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary, flex: 1 }}>{s.title}</Text>
+            <View style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 }}>
+              <Text style={{ fontSize: 10, color: '#f59e0b', fontWeight: '700' }}>{s.rehearsalCount || 1} prior rehearsals</Text>
+            </View>
           </View>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
-          {s.replacedBy && <KV label="Replaced by" value={s.replacedBy} bold theme={theme} />}
-          <KV label="Date" value={s.date} theme={theme} />
-        </View>
-      </Card>
-    ))}
-  </View>
-);
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+            <KV label="From" value={s.originalProgram} theme={theme} />
+            <KV label="Key" value={s.key} theme={theme} />
+          </View>
+          <Reason c={s.reason} theme={theme} />
+        </Card>
+      ))}
+    </View>
+  );
+};
 
-const NameChanges = ({ data, theme }: { data: any[], theme: any }) => (
-  <View>
-    <SectionHeader label={`Song Name Changes`} count={data.length} icon="pencil" theme={theme} />
-    {data.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No name changes.</Text>}
-    {data.map((s: any) => (
-      <Card key={s.id} theme={theme}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-          <Text style={{ fontSize: 15, color: theme.colors.textMuted, fontStyle: "italic" }}>{s.from}</Text>
-          <Ionicons name="arrow-forward" size={16} color={theme.colors.accent} style={{ marginHorizontal: 8 }} />
-          <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary }}>{s.to}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          <KV label="Changed by" value={s.changedBy} bold theme={theme} />
-          <KV label="Date" value={s.changedOn} theme={theme} />
-        </View>
-        <Reason c={s.reason} theme={theme} />
-      </Card>
-    ))}
-  </View>
-);
+const SwappedSongs = ({ data, theme }: { data: any[], theme: any }) => {
+  const list = Array.isArray(data) ? data : [];
+  return (
+    <View>
+      <SectionHeader label={`Swapped Songs`} count={list.length} icon="swap-horizontal" theme={theme} />
+      {list.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No swapped songs.</Text>}
+      {list.map((s: any) => (
+        <Card key={s.id} theme={theme}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <Text style={{ fontSize: 15, color: '#ef4444', textDecorationLine: "line-through" }}>{s.original}</Text>
+            <Ionicons name="arrow-forward" size={16} color={theme.colors.textMuted} style={{ marginHorizontal: 8 }} />
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#10b981' }}>{s.replacement}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            <KV label="Swapped by" value={s.swappedBy} bold theme={theme} />
+            <KV label="Date" value={s.swappedOn} theme={theme} />
+          </View>
+          <Reason c={s.reason} theme={theme} />
+        </Card>
+      ))}
+    </View>
+  );
+};
+
+const InvalidSongs = ({ data, theme }: { data: any[], theme: any }) => {
+  const list = Array.isArray(data) ? data : [];
+  return (
+    <View>
+      <SectionHeader label={`Invalid Songs`} count={list.length} icon="ban" theme={theme} />
+      {list.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No invalid songs.</Text>}
+      {list.map((s: any) => (
+        <Card key={s.id} redBorder theme={theme}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#ef4444', textDecorationLine: "line-through", flex: 1 }}>{s.title}</Text>
+            <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', borderRadius: 6, paddingVertical: 3, paddingHorizontal: 8 }}>
+              <Text style={{ fontSize: 10, color: '#ef4444', fontWeight: '700', textTransform: 'uppercase' }}>{s.invalidatedBy || 'Unknown'}</Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+            {s.replacedBy && <KV label="Replaced by" value={s.replacedBy} bold theme={theme} />}
+            <KV label="Date" value={s.date} theme={theme} />
+          </View>
+        </Card>
+      ))}
+    </View>
+  );
+};
+
+const NameChanges = ({ data, theme }: { data: any[], theme: any }) => {
+  const list = Array.isArray(data) ? data : [];
+  return (
+    <View>
+      <SectionHeader label={`Song Name Changes`} count={list.length} icon="pencil" theme={theme} />
+      {list.length === 0 && <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>No name changes.</Text>}
+      {list.map((s: any) => (
+        <Card key={s.id} theme={theme}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <Text style={{ fontSize: 15, color: theme.colors.textMuted, fontStyle: "italic" }}>{s.from}</Text>
+            <Ionicons name="arrow-forward" size={16} color={theme.colors.accent} style={{ marginHorizontal: 8 }} />
+            <Text style={{ fontSize: 16, fontWeight: '700', color: theme.colors.textPrimary }}>{s.to}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            <KV label="Changed by" value={s.changedBy} bold theme={theme} />
+            <KV label="Date" value={s.changedOn} theme={theme} />
+          </View>
+          <Reason c={s.reason} theme={theme} />
+        </Card>
+      ))}
+    </View>
+  );
+};
 
 const DailySchedule = ({ data, theme }: { data: any[], theme: any }) => {
-  const rehearsed = data.filter((d: any) => d.status === "rehearsed").length;
-  const notRehearsed = data.filter((d: any) => d.status === "not-rehearsed").length;
-  const totalMins = data.filter((d: any) => d.status !== "break").reduce((a: number, s: any) => a + (parseInt(s.allotment) || 0), 0);
+  const list = Array.isArray(data) ? data : [];
+  const rehearsed = list.filter((d: any) => d.status === "rehearsed").length;
+  const notRehearsed = list.filter((d: any) => d.status === "not-rehearsed").length;
+  const totalMins = list.filter((d: any) => d.status !== "break").reduce((a: number, s: any) => a + (parseInt(s.allotment) || 0), 0);
 
   return (
     <View>
       <SectionHeader label={`Daily Schedule`} icon="calendar" theme={theme} />
-      {data.length > 0 ? (
+      {list.length > 0 ? (
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24, gap: 8 }}>
           {[
             { label: "Rehearsed", val: rehearsed, bg: 'rgba(16, 185, 129, 0.1)', color: "#10b981" },
@@ -224,14 +242,14 @@ const DailySchedule = ({ data, theme }: { data: any[], theme: any }) => {
         <Text style={{ color: theme.colors.textMuted, fontSize: 14, marginBottom: 20 }}>No daily schedule set.</Text>
       )}
       <View>
-        {data.map((s: any, i: number) => (
+        {list.map((s: any, i: number) => (
           <View key={s.id} style={{ flexDirection: 'row', marginBottom: 4, opacity: s.status === "not-rehearsed" ? 0.6 : 1 }}>
             <View style={{ width: 50, alignItems: 'flex-end', paddingRight: 10, paddingTop: 14 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: theme.colors.textSecondary }}>{s.time}</Text>
             </View>
             <View style={{ alignItems: 'center', marginRight: 12 }}>
               <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: s.status === "break" ? theme.colors.bottomTabBorder : s.status === "rehearsed" ? '#10b981' : '#ef4444', marginTop: 14, borderWidth: 2, borderColor: theme.colors.background }} />
-              {i < data.length - 1 && <View style={{ width: 2, flex: 1, backgroundColor: theme.colors.bottomTabBorder, marginTop: 4, borderRadius: 1 }} />}
+              {i < list.length - 1 && <View style={{ width: 2, flex: 1, backgroundColor: theme.colors.bottomTabBorder, marginTop: 4, borderRadius: 1 }} />}
             </View>
             <View style={{ flex: 1, backgroundColor: s.status === "break" ? 'transparent' : theme.colors.cardBackground, borderWidth: s.status === "break" ? 0 : 1, borderColor: theme.colors.bottomTabBorder, borderRadius: 12, padding: 14, marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
@@ -261,9 +279,10 @@ const DailySchedule = ({ data, theme }: { data: any[], theme: any }) => {
 
 const SubmittersPanel = ({ data, theme }: { data: any[], theme: any }) => {
   const [activeFilter, setActiveFilter] = useState<'eligible' | 'ineligible'>('eligible');
+  const list = Array.isArray(data) ? data : [];
 
-  const eligible = data.filter((d: any) => !d.isBlocked);
-  const ineligible = data.filter((d: any) => d.isBlocked);
+  const eligible = list.filter((d: any) => !d.isBlocked);
+  const ineligible = list.filter((d: any) => d.isBlocked);
 
   return (
     <View>
@@ -370,6 +389,7 @@ const TABS = [
 export default function SongsScheduleScreen({ navigation }: any) {
   const { theme, themeName } = useTheme();
   const { currentZone } = useZone();
+  const { currentChurch } = useChurch();
   const insets = useSafeAreaInsets();
   
   const [activeTab, setActiveTab] = useState("schedule");
@@ -377,68 +397,77 @@ export default function SongsScheduleScreen({ navigation }: any) {
   const [programs, setPrograms] = useState<any[]>([]);
   const [viewHistory, setViewHistory] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [selectedWeekId, setSelectedWeekId] = useState<string>('default_week_1');
-  const [selectedDayId, setSelectedDayId] = useState<string>('default_day_1');
+  const [selectedWeekId, setSelectedWeekId] = useState<string>('');
+  const [selectedDayId, setSelectedDayId] = useState<string>('');
+
+  const resolvedZoneId = isHQGroup(currentZone?.id || '') ? 'zone-001' : (currentZone?.id || 'zone-001');
+  const churchId = currentChurch?.id || '';
+  const cacheKey = `SCHEDULE_CACHE_${resolvedZoneId}_${churchId || 'zone'}_${viewHistory}`;
+
+  const selectDefaultProgram = (items: any[]) => {
+    if (!items || items.length === 0) {
+      setActiveProgramId(null);
+      return;
+    }
+    setActiveProgramId(prev => {
+      if (prev && items.some(p => p.id === prev)) return prev;
+      const currentProg = items.find(p => p.isCurrent && !p.isArchived);
+      if (currentProg) return currentProg.id;
+      const firstActive = items.find(p => !p.isArchived);
+      return firstActive ? firstActive.id : items[0].id;
+    });
+  };
+
+  const fetchSchedules = React.useCallback(async (isPullToRefresh = false) => {
+    if (isPullToRefresh) setRefreshing(true);
+    try {
+      const res = await api.songs.getSchedule(resolvedZoneId, viewHistory, churchId);
+      if (res?.success && Array.isArray(res.data)) {
+        const fetched = res.data.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'));
+        fetched.sort((a: any, b: any) => {
+          if (a.isCurrent && !b.isCurrent) return -1;
+          if (!a.isCurrent && b.isCurrent) return 1;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+        setPrograms(fetched);
+        selectDefaultProgram(fetched);
+        AsyncStorage.setItem(cacheKey, JSON.stringify(fetched)).catch(() => {});
+      }
+    } catch (e) {
+      console.error('[SongsScheduleScreen] fetch error:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [resolvedZoneId, viewHistory, churchId, cacheKey]);
+
   useEffect(() => {
-    if (!currentZone?.id) return;
-    
-    const resolvedZoneId = isHQGroup(currentZone.id) ? 'zone-001' : currentZone.id;
-    const cacheKey = `SCHEDULE_CACHE_${resolvedZoneId}_${viewHistory}`;
-    let isMounted = true;
+    let isMounted = true;
     const loadCache = async () => {
       try {
         const cachedStr = await AsyncStorage.getItem(cacheKey);
         if (cachedStr && isMounted) {
-          const fetched = JSON.parse(cachedStr);
-          setPrograms(fetched);
-          setActiveProgramId((prev) => {
-            if (!prev || !fetched.find((f: any) => f.id === prev)) {
-              const currentProg = fetched.find((f: any) => f.isCurrent);
-              if (currentProg) return currentProg.id;
-              return fetched.length > 0 ? fetched[fetched.length - 1].id : null;
-            }
-            return prev;
-          });
-          setLoading(false);
-        } else {
-          setLoading(true);
+          const parsed = JSON.parse(cachedStr);
+          const fetched = Array.isArray(parsed)
+            ? parsed.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'))
+            : [];
+          if (fetched.length > 0) {
+            setPrograms(fetched);
+            selectDefaultProgram(fetched);
+            setLoading(false);
+          }
         }
       } catch (e) {
         console.error("Error reading schedule cache:", e);
-        setLoading(true);
       }
     };
 
     loadCache();
-    const fetchSchedules = async () => {
-      try {
-        const res = await api.songs.getSchedule();
-        if (res?.success && Array.isArray(res.data) && isMounted) {
-          const fetched = res.data;
-          fetched.sort((a, b) => {
-            if (a.isCurrent) return -1;
-            if (b.isCurrent) return 1;
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-          });
-          setPrograms(fetched);
-          setActiveProgramId((prev) => {
-            if (!prev || !fetched.find((f: any) => f.id === prev)) {
-              const currentProg = fetched.find((f: any) => f.isCurrent);
-              if (currentProg) return currentProg.id;
-              return fetched.length > 0 ? fetched[fetched.length - 1].id : null;
-            }
-            return prev;
-          });
-          setLoading(false);
-        }
-      } catch (e) {
-        if (isMounted) setLoading(false);
-      }
-    };
     fetchSchedules();
     return () => { isMounted = false; };
-  }, [currentZone?.id, viewHistory]);
+  }, [fetchSchedules, cacheKey]);
 
   const activeProgram = programs.find(p => p.id === activeProgramId) || null;
 
@@ -448,17 +477,11 @@ export default function SongsScheduleScreen({ navigation }: any) {
 
   const rawDays = activeProgram?.days || [
     { id: 'default_day_1', weekId: 'default_week_1', name: 'Day 1' }
-  ];
-  const weeks = [...rawWeeks].sort((a, b) => {
-    if (activeProgram?.currentWeekId === a.id) return -1;
-    if (activeProgram?.currentWeekId === b.id) return 1;
-    return 0;
-  });
-  const days = [...rawDays].sort((a, b) => {
-    if (activeProgram?.currentDayId === a.id) return -1;
-    if (activeProgram?.currentDayId === b.id) return 1;
-    return 0;
-  });
+  ];
+
+  const weeks = [...rawWeeks];
+
+  const days = [...rawDays];
 
   useEffect(() => {
     if (weeks.length > 0) {
@@ -509,12 +532,12 @@ export default function SongsScheduleScreen({ navigation }: any) {
         style={StyleSheet.absoluteFill} />
 
       <View style={{ flex: 1, paddingTop: insets.top }}>
-      <View style={{ paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.bottomTabBorder }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <View>
-            <Text style={{ fontSize: 24, fontWeight: '800', color: theme.colors.textPrimary }}>Schedule</Text>
-            <Text style={{ fontSize: 12, color: theme.colors.textSecondary, fontWeight: '700', marginTop: 2 }}>
-              {viewHistory ? 'ARCHIVED PROGRAMS' : 'ACTIVE PROGRAMS'}
+        <View style={{ paddingHorizontal: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.bottomTabBorder }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <View>
+              <Text style={{ fontSize: 24, fontWeight: '800', color: theme.colors.textPrimary }}>Schedule</Text>
+              <Text style={{ fontSize: 12, color: theme.colors.textSecondary, fontWeight: '700', marginTop: 2 }}>
+                {viewHistory ? 'ARCHIVED PROGRAMS' : 'ACTIVE PROGRAMS'}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -596,7 +619,19 @@ export default function SongsScheduleScreen({ navigation }: any) {
           </ScrollView>
         </View>
       )}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 60 + insets.bottom }} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ padding: 20, paddingBottom: 60 + insets.bottom }} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => fetchSchedules(true)}
+            tintColor={theme.colors.accent}
+            colors={[theme.colors.accent]}
+          />
+        }
+      >
         {loading ? (
           <ActivityIndicator size="large" color={theme.colors.accent} style={{ marginTop: 40 }} />
         ) : activeProgram ? (

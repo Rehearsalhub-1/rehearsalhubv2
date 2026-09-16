@@ -62,6 +62,31 @@ export async function clearTokens(): Promise<void> {
   ]);
 }
 
+type SessionExpiredListener = () => void;
+const sessionExpiredListeners = new Set<SessionExpiredListener>();
+
+export function onSessionExpired(listener: SessionExpiredListener): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => sessionExpiredListeners.delete(listener);
+}
+
+function notifySessionExpired(): void {
+  sessionExpiredListeners.forEach(listener => {
+    try {
+      listener();
+    } catch (e) {
+      console.error('[apiClient] Session expired listener error:', e);
+    }
+  });
+  // Fallback to dynamic require if no listener is registered yet
+  if (sessionExpiredListeners.size === 0) {
+    try {
+      const { useUserStore } = require('../hooks/useUser');
+      useUserStore.getState().signOut().catch(() => {});
+    } catch {}
+  }
+}
+
 let _refreshPromise: Promise<string> | null = null;
 
 async function refreshSession(): Promise<string> {
@@ -74,10 +99,7 @@ async function refreshSession(): Promise<string> {
       const [refreshToken, userId] = await Promise.all([getRefreshToken(), getUserId()]);
 
       if (!refreshToken || !userId) {
-        try {
-          const { useUserStore } = require('../hooks/useUser');
-          useUserStore.getState().signOut().catch(() => {});
-        } catch {}
+        notifySessionExpired();
         throw new SessionExpiredError();
       }
 
@@ -92,10 +114,7 @@ async function refreshSession(): Promise<string> {
 
       if (res.status === 401 || res.status === 403) {
         await clearTokens();
-        try {
-          const { useUserStore } = require('../hooks/useUser');
-          useUserStore.getState().signOut().catch(() => {});
-        } catch {}
+        notifySessionExpired();
         throw new SessionExpiredError();
       }
 
@@ -234,10 +253,7 @@ async function request<T>(
         }
       } catch (err) {
         if (err instanceof SessionExpiredError) {
-          try {
-            const { useUserStore } = require('../hooks/useUser');
-            useUserStore.getState().signOut().catch(() => {});
-          } catch {}
+          notifySessionExpired();
           throw err;
         }
         console.warn(`[apiClient] Refresh attempt failed:`, err);
