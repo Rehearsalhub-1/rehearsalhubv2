@@ -85,12 +85,7 @@
       "expo-video",
       "expo-web-browser",
       "expo-secure-store",
-      [
-        "expo-updates",
-        {
-          "launchWaitMs": 3000
-        }
-      ],
+      "expo-updates",
       "./plugins/withKotlinJvmTarget",
       "expo-image",
       "expo-sharing",
@@ -107,8 +102,7 @@
     "runtimeVersion": "2.1.1",
     "updates": {
       "url": "https://u.expo.dev/e98f38ac-ca86-4999-aa48-083199465371",
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 3000,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
       "requestHeaders": {
         "expo-channel-name": "production"
       }

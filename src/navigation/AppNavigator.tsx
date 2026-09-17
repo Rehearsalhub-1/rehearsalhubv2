@@ -88,36 +88,43 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
         name="Player" 
         component={withErrorBoundary(PlayerScreen, 'Player')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_player'}
       />
       <Stack.Screen 
         name="Lyrics" 
         component={withErrorBoundary(LyricsScreen, 'Lyrics')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_lyrics'}
       />
       <Stack.Screen 
         name="Solfa" 
         component={withErrorBoundary(SolfaScreen, 'Solfa')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_solfa'}
       />
       <Stack.Screen 
         name="Conductor" 
         component={withErrorBoundary(ConductorScreen, 'Conductor')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_conductor'}
       />
       <Stack.Screen 
         name="History" 
         component={withErrorBoundary(HistoryScreen, 'History')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_history'}
       />
       <Stack.Screen 
         name="Comments" 
         component={withErrorBoundary(CommentsScreen, 'Comments')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_comments'}
       />
       <Stack.Screen 
         name="Details" 
         component={withErrorBoundary(DetailsScreen, 'Details')} 
         options={{ animation: 'slide_from_bottom' }}
+        getId={() => 'singleton_details'}
       />
       <Stack.Screen 
         name="Archive" 

@@ -4,6 +4,16 @@ import * as Updates from 'expo-updates';
 import * as Sentry from '@sentry/react-native';
 
 const CHECK_INTERVAL_MS = 15 * 60 * 1000; // re-check at most every 15 min when foregrounded
+// Max time we'll wait for EAS servers before giving up silently — prevents perceived hangs
+const OTA_TIMEOUT_MS = 8_000;
+
+/** Wraps a promise with a timeout; resolves to null if the timeout fires first. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
 
 export interface OTACheckResult {
   status: 'updated' | 'up_to_date' | 'disabled' | 'error';
@@ -15,6 +25,7 @@ export interface OTACheckResult {
  *
  * Silently checks for and downloads EAS OTA (JS bundle) updates on launch and foreground.
  * The update is applied automatically on the NEXT cold launch — no modal, no interruption.
+ * A hard 8-second timeout prevents slow EAS network responses from hanging the app.
  */
 export function useOTAUpdates() {
   const lastCheckedAt = useRef<number>(0);
@@ -31,10 +42,18 @@ export function useOTAUpdates() {
     lastCheckedAt.current = now;
 
     try {
-      const result = await Updates.checkForUpdateAsync();
+      const result = await withTimeout(Updates.checkForUpdateAsync(), OTA_TIMEOUT_MS);
+      if (!result) {
+        console.warn('[OTA] checkForUpdateAsync timed out — skipping.');
+        return;
+      }
       if (result.isAvailable) {
         console.log('[OTA] New update available — downloading silently...');
-        await Updates.fetchUpdateAsync();
+        const fetched = await withTimeout(Updates.fetchUpdateAsync(), OTA_TIMEOUT_MS);
+        if (!fetched) {
+          console.warn('[OTA] fetchUpdateAsync timed out — will retry next foreground.');
+          return;
+        }
         // Cached on disk — automatically applied on next cold start
         console.log('[OTA] Update downloaded. Will apply on next launch.');
       } else {

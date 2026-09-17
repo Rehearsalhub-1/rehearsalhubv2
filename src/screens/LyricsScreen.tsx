@@ -28,9 +28,20 @@ export default function LyricsScreen({ route, navigation }: any) {
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
-  const [activeTrack, setActiveTrack] = useState(initialTrack);
+  const paramTrack = route.params?.activeTrack;
+  const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack);
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
+
+  if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+    setActiveTrack(paramTrack);
+  }
+
+  useEffect(() => {
+    if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+      setActiveTrack(paramTrack);
+    }
+  }, [paramTrack]);
 
   useEffect(() => {
     AsyncStorage.getItem('document_zoom_level').then(val => {

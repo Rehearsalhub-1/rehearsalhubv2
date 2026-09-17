@@ -23,7 +23,12 @@ export default function DetailsScreen({ route, navigation }: any) {
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
-  const [activeTrack, setActiveTrack] = useState(initialTrack);
+  const paramTrack = route.params?.activeTrack;
+  const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack);
+
+  if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+    setActiveTrack(paramTrack);
+  }
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
   const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack, skipToNext, skipToPrevious } = useTrackPlayer();
