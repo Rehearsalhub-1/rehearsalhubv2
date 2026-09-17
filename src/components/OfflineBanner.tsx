@@ -31,6 +31,13 @@ export function OfflineBanner() {
   }, [isOffline]);
 
   useEffect(() => {
+    // Only count queued messages when we're actually offline — no point reading
+    // AsyncStorage every 5s when the user has a healthy connection.
+    if (!isOffline) {
+      setQueuedCount(0);
+      return;
+    }
+
     let active = true;
     const refreshQueueCount = async () => {
       try {
@@ -51,7 +58,7 @@ export function OfflineBanner() {
       clearInterval(interval);
       appStateSub.remove();
     };
-  }, []);
+  }, [isOffline]);
 
   if (!isOffline && queuedCount === 0) return null;
 
@@ -71,8 +78,6 @@ const getStyles = (theme: any) => {
     position: 'absolute',
     bottom: 100,
     alignSelf: 'center',
-    left: '50%',
-    marginLeft: -40,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(20,10,40,0.88)',

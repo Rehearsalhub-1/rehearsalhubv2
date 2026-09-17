@@ -28,8 +28,8 @@ let globalIsShuffle = false;
 let globalSimulationInterval: any = null;
 let globalPollingInterval: any = null;
 
-const startPollingInterval = () => {
-};
+// startPollingInterval intentionally removed — native RNTP events drive state;
+// polling is handled inside useTrackPlayerProgress only while playing.
 
 const stopPollingInterval = () => {
   if (globalPollingInterval) {
@@ -503,8 +503,14 @@ export const useTrackPlayer = () => {
         }
 
         globalIsSimulating = false;
-        if (globalCurrentTrack?.url && globalCurrentTrack.url === track.audioUrl) {
-          globalCurrentTrack = track; // Seamlessly adopt the rich track metadata
+        const currentAudio = globalCurrentTrack?.audioUrl || globalCurrentTrack?.url || globalCurrentTrack?.audioFile;
+        const incomingAudio = track.audioUrl || track.url || track.audioFile;
+        const isSameSong = Boolean(
+          (currentAudio && incomingAudio && currentAudio === incomingAudio) ||
+          (globalCurrentTrack?.id && track?.id && String(globalCurrentTrack.id) === String(track.id))
+        );
+        if (isSameSong) {
+          globalCurrentTrack = { ...globalCurrentTrack, ...track }; // Seamlessly adopt the rich track metadata
           globalIsLoading = false;
           globalIsFetching = false;
           notifySubscribers();
@@ -589,7 +595,8 @@ export const useTrackPlayer = () => {
         stopPollingInterval();
       } else {
         stopSimulationInterval();
-        startPollingInterval();
+        // Polling is handled by useTrackPlayerProgress's own interval;
+        // no manual polling loop is needed here.
       }
     } else {
       stopSimulationInterval();
@@ -880,6 +887,8 @@ export const useTrackPlayer = () => {
   };
 };
 
+// All positions/durations returned by this hook are in MILLISECONDS.
+// TrackPlayer native API uses seconds; we always convert on read (* 1000) and on write (/ 1000).
 export const useTrackPlayerProgress = (interval = 200) => {
   const [progress, setProgress] = useState({ position: 0, duration: 0 });
   const [, forceUpdate] = useState({});
@@ -895,9 +904,12 @@ export const useTrackPlayerProgress = (interval = 200) => {
     let isSeekingLoop = false;
     const poll = async () => {
       try {
+        // Skip polling entirely when paused — saves battery and avoids re-renders
+        if (!globalIsPlaying && !globalABLoop.active) return;
         if (!isPlayerSetup) return;
         const posSec = await TrackPlayer.getPosition().catch(() => 0);
         const durSec = await TrackPlayer.getDuration().catch(() => 0);
+        // posMs is in milliseconds for A-B comparisons (globalABLoop uses ms)
         const posMs = posSec * 1000;
 
         // Auto-loop back to Point A when Point B is reached
@@ -909,9 +921,11 @@ export const useTrackPlayerProgress = (interval = 200) => {
         ) {
           if (posMs >= globalABLoop.end && !isSeekingLoop) {
             isSeekingLoop = true;
+            // globalABLoop.start is in ms; seekTo expects seconds
             await TrackPlayer.seekTo(globalABLoop.start / 1000).catch(() => {});
             setTimeout(() => { isSeekingLoop = false; }, 250);
             if (mounted) {
+              // Store in seconds so the return below can multiply back to ms
               setProgress({ position: globalABLoop.start / 1000, duration: durSec });
             }
             return;

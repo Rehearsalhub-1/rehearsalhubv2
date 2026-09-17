@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { SafeTrackPlayer as TrackPlayer } from '../lib/safeNativeModules';
 
 import { useTheme } from '../context/ThemeContext';
 import { DoodleBackground } from '@/components/DoodleBackground';
@@ -125,6 +126,10 @@ function VideoPlayerInner({
   video: MediaAsset;
   onClose: () => void;
 }) {
+  useEffect(() => {
+    TrackPlayer.pause().catch(() => {});
+  }, []);
+
   const player = useVideoPlayer(video.url, (p) => {
     p.loop = false;
     p.play();

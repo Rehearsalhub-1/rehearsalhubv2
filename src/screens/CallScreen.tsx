@@ -131,6 +131,8 @@ export default function CallScreen({ route, navigation }: any) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectedAtRef = useRef(0);
+  const durationRef = useRef(0);
+  durationRef.current = duration;
   const ringAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -377,18 +379,45 @@ export default function CallScreen({ route, navigation }: any) {
   const endCall = useCallback(async (shouldLog = true) => {
     if (navigatedRef.current) return;
     navigatedRef.current = true;
+    if (ringTimerRef.current) {
+      clearTimeout(ringTimerRef.current);
+      ringTimerRef.current = null;
+    }
+    const finalDuration = durationRef.current;
     try {
       cleanupLiveKit();
       if (callId) await api.calls.update(callId, { status: 'ended' }).catch(() => {});
       let callResult: 'completed' | 'missed' | 'canceled' | 'declined' = 'completed';
-      if (duration === 0) {
+      if (finalDuration === 0) {
         if (!isIncoming) callResult = 'canceled';
         else callResult = 'declined';
       }
-      if (shouldLog) await logCall(callResult, duration);
+      if (shouldLog) await logCall(callResult, finalDuration);
     } catch {}
     navigation.goBack();
-  }, [status, callId, isGroupCall, duration, navigation, isIncoming]);
+  }, [callId, isGroupCall, navigation, isIncoming]);
+
+  useEffect(() => {
+    if (status === 'ringing' || status === 'connecting') {
+      if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
+      ringTimerRef.current = setTimeout(() => {
+        if (!remoteJoined) {
+          endCall(true);
+        }
+      }, 45000);
+    } else {
+      if (ringTimerRef.current) {
+        clearTimeout(ringTimerRef.current);
+        ringTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (ringTimerRef.current) {
+        clearTimeout(ringTimerRef.current);
+        ringTimerRef.current = null;
+      }
+    };
+  }, [status, remoteJoined, endCall]);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => { 
@@ -579,7 +608,7 @@ export default function CallScreen({ route, navigation }: any) {
         {/* Authentic Top Header */}
         <View style={styles.topHeader}>
           <TouchableOpacity 
-            onPress={() => navigation.goBack()} 
+            onPress={() => endCall()} 
             style={styles.headerBtnRound}
             activeOpacity={0.7}
           >

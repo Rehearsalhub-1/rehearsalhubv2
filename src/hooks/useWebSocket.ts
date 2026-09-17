@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { useUserStore } from './useUser';
 import { apiClient, clearCache } from '../lib/apiClient';
 
 function getWsUrl(): string {
@@ -51,8 +50,6 @@ function clearPingInterval() {
 
 async function getAuthToken(): Promise<string | null> {
   try {
-    const storeToken = (useUserStore.getState() as any)?.user?.token || (useUserStore.getState() as any)?.token;
-    if (storeToken) return storeToken;
     const secureToken = await SecureStore.getItemAsync('jwt');
     if (secureToken) return secureToken;
     const fallbackToken = await SecureStore.getItemAsync('auth_token');
@@ -266,8 +263,12 @@ export function useWebSocket(
   }, [resource, id, enabled, stableHandler]);
 }
 
-// Auto-reconnect when app returns to foreground
-if (typeof AppState !== 'undefined') {
+// Auto-reconnect when app returns to foreground.
+// Guard ensures this module-level listener is registered exactly once,
+// even across React Fast Refresh hot-reloads in development.
+let _appStateListenerRegistered = false;
+if (typeof AppState !== 'undefined' && !_appStateListenerRegistered) {
+  _appStateListenerRegistered = true;
   AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
     if (nextAppState === 'active') {
       if (!socket || socket.readyState !== WebSocket.OPEN) {

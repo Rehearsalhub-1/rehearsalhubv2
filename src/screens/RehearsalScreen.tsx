@@ -46,7 +46,7 @@ import { SongScheduleSheet } from '../components/SongScheduleSheet';
 import { api, clearCache } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
-import { useLiveSongStore } from '../stores/liveSongStore';
+import { useLiveSongStore, isLiveSong, isSongExplicitlyOff } from '../stores/liveSongStore';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
@@ -435,11 +435,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
           setActiveTab('unheard');
         }
 
-        console.log('[RehearsalScreen] Playing song:', song.title);
-        play(song, [song, ...programSongs], false);
-
-        console.log('[RehearsalScreen] Navigating to Player screen');
-        navigation.navigate('Player', { activeTrack: song, zoneId: activeZone?.id || song.zoneId, queue: [song, ...programSongs] });
+        console.log('[RehearsalScreen] Navigating to Player screen:', song.title);
+        navigation.navigate('Player', { activeTrack: song, zoneId: activeZone?.id || song.zoneId, queue: [song, ...programSongs], autoplay: false });
 
         navigation.setParams({ songId: undefined });
       }
@@ -852,7 +849,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         const mappedSongs = dbSongs.map((song: any, index: number) => {
           const songAudioUrl = resolveSongAudioUrl(song);
           const resolvedAudioUrls = resolveSongAudioUrls(song);
-          const isLiveNow = song.status === 'live' || song.isLive === true;
+          const isLiveNow = isLiveSong(song);
           return {
             id: song.id || `song-${index}`,
             title: song.title || 'Untitled Song',
@@ -869,7 +866,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
             lyrics: song.lyrics || '',
             solfa: song.notation || song.solfas || song.solfa || '',
             audioUrls: resolvedAudioUrls,
-            status: isSongHeard(song) ? 'heard' : 'unheard',
+            status: isLiveNow ? 'live' : (isSongHeard(song) ? 'heard' : 'unheard'),
+            isLive: isLiveNow,
             isActive: isLiveNow,
             rehearsalCount: getRehearsalCount(song),
             conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
@@ -1015,8 +1013,10 @@ export default function RehearsalScreen({ navigation, route }: any) {
     // Song deleted or removed
     if (update.deleted || update.isDeleted || update._action === 'removed') {
       setProgramSongs((prev: any[]) => prev.filter((s: any) => String(s.id) !== String(update.id)));
+      useLiveSongStore.getState().handleSongUpdate(update);
       return;
     }
+    useLiveSongStore.getState().handleSongUpdate(update);
 
     setProgramSongs((prev: any[]) => {
       const index = prev.findIndex((s: any) => String(s.id) === String(update.id));
@@ -1026,11 +1026,13 @@ export default function RehearsalScreen({ navigation, route }: any) {
         const merged = { ...s, ...update };
         const songAudioUrl = resolveSongAudioUrl(merged);
         const resolvedAudioUrls = resolveSongAudioUrls(merged);
-        const isActiveNow = update.isActive !== undefined ? (update.isActive === true || String(update.isActive) === 'true') : s.isActive;
+        const updateIsLive = isLiveSong(update);
+        const updateIsOff = isSongExplicitlyOff(update);
+        const isCurrentlyLive = updateIsLive ? true : (updateIsOff ? false : isLiveSong(s));
 
-        if (isActiveNow && !notifiedActiveSongsRef.current.has(update.id)) {
+        if (isCurrentlyLive && !notifiedActiveSongsRef.current.has(update.id)) {
           notifiedActiveSongsRef.current.add(update.id);
-        } else if (!isActiveNow) {
+        } else if (!isCurrentlyLive) {
           notifiedActiveSongsRef.current.delete(update.id);
         }
 
@@ -1052,9 +1054,11 @@ export default function RehearsalScreen({ navigation, route }: any) {
           categories: update.categories || s.categories,
           audioUrl: songAudioUrl,
           audioUrls: resolvedAudioUrls,
-          isActive: isActiveNow,
+          isLive: isCurrentlyLive,
           rehearsalCount: update.rehearsalCount ?? s.rehearsalCount,
-          status: isSongHeard(update) ? 'heard' : (update.status || s.status),
+          status: isCurrentlyLive
+            ? 'live'
+            : (isSongHeard(merged) ? 'heard' : (update.status && update.status !== 'live' ? update.status : (s.status === 'live' ? 'unheard' : (s.status || 'unheard')))),
           leadKeyboardist: update.leadKeyboardist || s.leadKeyboardist,
           drummer: update.drummer || s.drummer,
           leadGuitarist: update.leadGuitarist || s.leadGuitarist,
@@ -1157,15 +1161,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
     : (activeTrack || (programSongs.length > 0 ? programSongs[0] : fallbackTrack));
 
   const liveRehearsalSongs = useMemo(
-    () => programSongs.filter((song: any) => song && (song.isLive === true || song.status === 'live')),
+    () => programSongs.filter(isLiveSong),
     [programSongs]
   );
-
-  useEffect(() => {
-    if (liveRehearsalSongs.length > 0) {
-      useLiveSongStore.getState().setActiveSongs(liveRehearsalSongs);
-    }
-  }, [liveRehearsalSongs]);
 
   const categoryHeardCount = useMemo(() => programSongs.filter((track: any) => {
     return songBelongsToCategory(track, selectedCategory || '') && track.status === 'heard';

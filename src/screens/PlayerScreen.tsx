@@ -1,5 +1,5 @@
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { optimizeAudio, resolveSongAudioUrls } from '../lib/mediaUtils';
 import {
   StyleSheet,
@@ -49,6 +49,7 @@ import { SongScheduleSheet } from '../components/SongScheduleSheet';
 import { useUserStore } from '../hooks/useUser';
 import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useLiveSongStore, isLiveSong } from '../stores/liveSongStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -337,7 +338,11 @@ export default function PlayerScreen({ route, navigation }: any) {
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isHQ = useUserStore(s => s.isHQ);
-  const { activeTrack: initialTrack, fromAllSongs, queue: initialQueue } = route.params || {};
+  // Read queue dynamically from route.params so new queues from Live Now
+  // navigation are always picked up without needing to remount the screen.
+  const liveQueue = route.params?.queue;
+  const { activeTrack: initialTrack, fromAllSongs } = route.params || {};
+  const initialQueue = liveQueue;
 
   const fallbackTrack = {
     id: '',
@@ -358,16 +363,22 @@ export default function PlayerScreen({ route, navigation }: any) {
     collectionName: '',
   };
 
-  const [activeTrack, setActiveTrack] = useState(initialTrack || fallbackTrack);
+  const paramTrack = route.params?.activeTrack;
+  const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack || fallbackTrack);
   const lastPlayedTrackIdRef = useRef<string | null>(null);
+
+  // Synchronously update activeTrack if route.params provides a new/different track
+  // (Prevents the 1-frame/split-second flash of the previous song)
+  if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+    setActiveTrack(paramTrack);
+  }
 
   // Sync activeTrack when navigating with new route params
   useEffect(() => {
-    const paramTrack = route.params?.activeTrack;
     if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
       setActiveTrack(paramTrack);
     }
-  }, [route.params?.activeTrack]);
+  }, [paramTrack]);
 
   // Hydrate full song data from API when track is missing details (e.g. opened from chat share)
   useEffect(() => {
@@ -449,7 +460,6 @@ export default function PlayerScreen({ route, navigation }: any) {
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
-  const [liveSong, setLiveSong] = useState<any>(null);
   const [mediaMode, setMediaMode] = useState<'video' | 'art'>('video');
 
   const showToast = useCallback((text: string, icon?: string) => {
@@ -489,13 +499,23 @@ export default function PlayerScreen({ route, navigation }: any) {
     return false;
   };
 
+  // Ref to suppress duplicate WS fires — 'song:{id}' and 'song:all' can both
+  // match the same event; we debounce them to a single applySongUpdate call.
+  const lastWsUpdateIdRef = useRef<string>('');
+
   const applySongUpdate = useCallback((updateData: any) => {
     const update = updateData?.data || updateData;
     if (!update || typeof update !== 'object') return;
     setActiveTrack((prev: any) => {
       if (!prev) return prev;
-      const rawAudioUrl = update.audioFile || update.audioUrls?.full || prev.audioUrl;
-      const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl;
+      const rawAudioUrl = update.audioFile || update.audioUrls?.full || null;
+      // Only compute a new audioUrl if the incoming event actually carries one
+      // that differs from what we already have — avoids re-triggering play().
+      const songAudioUrl = rawAudioUrl
+        ? (rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl)
+        : prev.audioUrl;
+      // If nothing meaningful changed, return same ref to skip re-render
+      const nextAudioUrl = songAudioUrl || prev.audioUrl;
       return {
         ...prev,
         ...update,
@@ -504,23 +524,33 @@ export default function PlayerScreen({ route, navigation }: any) {
         conductorGuide: (update.solfas || update.conductorGuide || update.guide) !== undefined ? (update.solfas || update.conductorGuide || update.guide) : prev.conductorGuide,
         comments: update.comments !== undefined ? update.comments : prev.comments,
         history: update.history !== undefined ? update.history : prev.history,
-        audioUrl: songAudioUrl,
-        status: isSongHeard(update) ? 'heard' : (update.status || prev.status),
-        isActive: update.isActive !== undefined ? (update.isActive === true || String(update.isActive) === 'true' || update.isLive === true || update.status === 'live') : Boolean(prev?.isActive),
+        // Preserve existing audioUrl when the update doesn't supply a new one
+        status: isLiveSong(update) ? 'live' : (isSongHeard(update) ? 'heard' : (update.status || prev.status)),
+        isLive: isLiveSong(update) || (update.status === undefined && Boolean(prev?.isLive)),
       };
     });
   }, []);
 
-  useWebSocket('song', activeTrack?.id ? String(activeTrack.id) : '', (eventData: any) => {
-    applySongUpdate(eventData);
-  }, Boolean(activeTrack?.id));
-
-  useWebSocket('song', 'all', (eventData: any) => {
+  // Targeted subscription: handles updates for THIS specific song
+  useWebSocket('song', activeTrack?.id ? String(activeTrack.id) : '', useCallback((eventData: any) => {
     const update = eventData?.data || eventData;
-    if (update && typeof update === 'object' && activeTrack?.id && (String(update.id) === String(activeTrack.id) || update.title === activeTrack.title)) {
-      applySongUpdate(update);
-    }
-  }, Boolean(activeTrack?.id));
+    // Record this event as handled so the 'all' sub below skips it
+    if (update?.id) lastWsUpdateIdRef.current = String(update.id) + (update._seq || update.sequence || Date.now());
+    applySongUpdate(eventData);
+  }, [applySongUpdate]), Boolean(activeTrack?.id));
+
+  // Broadcast subscription: only fires if the targeted sub didn't already handle it
+  useWebSocket('song', 'all', useCallback((eventData: any) => {
+    const update = eventData?.data || eventData;
+    if (!update || typeof update !== 'object') return;
+    if (!activeTrack?.id) return;
+    const idMatch = String(update.id) === String(activeTrack.id);
+    if (!idMatch) return;
+    // De-duplicate: skip if the targeted handler already processed this event
+    const eventSig = String(update.id) + (update._seq || update.sequence || '');
+    if (eventSig && lastWsUpdateIdRef.current === eventSig) return;
+    applySongUpdate(update);
+  }, [applySongUpdate, activeTrack?.id]), Boolean(activeTrack?.id));
 
   const {
     AnnotationLayer,
@@ -829,12 +859,19 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   const previewTabs = ['Lyrics', 'Comments', 'Conductor'];
 
+  // Track the last audioUrl we actually loaded so WS patches that preserve the
+  // same URL string don't retrigger play() and interrupt playback.
+  const lastPlayedAudioUrlRef = useRef<string>('');
+
   useEffect(() => {
     if (!activeTrack?.id) return;
     const currentId = currentTrack?.id ? String(currentTrack.id) : null;
     const activeId = String(activeTrack.id);
+    const activeAudioUrl = activeTrack.audioUrl || '';
     const isSameTrack = currentId === activeId;
-    const needsAudioReload = isSameTrack && !currentTrack?.audioUrl && Boolean(activeTrack.audioUrl);
+    // Only reload audio if the URL actually changed to a different value
+    const audioUrlChanged = activeAudioUrl && activeAudioUrl !== lastPlayedAudioUrlRef.current;
+    const needsAudioReload = isSameTrack && !currentTrack?.audioUrl && audioUrlChanged;
 
     if (isSameTrack && !needsAudioReload) {
       lastPlayedTrackIdRef.current = activeId;
@@ -846,7 +883,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     }
 
     lastPlayedTrackIdRef.current = activeId;
-    play(activeTrack, initialQueue || undefined, false);
+    lastPlayedAudioUrlRef.current = activeAudioUrl;
+    const shouldAutoplay = route.params?.autoplay === true;
+    play(activeTrack, initialQueue || undefined, shouldAutoplay);
   }, [activeTrack?.id, activeTrack?.audioUrl]);
 
   const handlePlayPause = async () => {
@@ -864,9 +903,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
-  const parseMarkdown = (text: any) => {
+  const parseMarkdown = useCallback((text: any) => {
     return formatLyricsHtml(text);
-  };
+  }, []);
 
   const getParsedCommentsHtml = () => {
     let comments = activeTrack?.comments;
@@ -982,7 +1021,10 @@ export default function PlayerScreen({ route, navigation }: any) {
     setShowOptionsModal(true);
   };
 
-  const displayQueue = queue && queue.length > 0 ? queue : (initialQueue || [activeTrack]);
+  const displayQueue = useMemo(
+    () => queue && queue.length > 0 ? queue : (initialQueue || [activeTrack]),
+    [queue, initialQueue, activeTrack]
+  );
 
   return (
     <View style={styles.container}>
@@ -1060,36 +1102,6 @@ export default function PlayerScreen({ route, navigation }: any) {
             <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
           </TouchableOpacity>
         </View>
-
-        {liveSong && String(liveSong.id) !== String(activeTrack?.id) && (
-          <TouchableOpacity 
-            style={{
-              backgroundColor: theme.colors.accent + '20',
-              borderColor: theme.colors.accent,
-              borderWidth: 1,
-              marginHorizontal: 16,
-              marginTop: 10,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              borderRadius: 8,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}
-            onPress={() => {
-              setActiveTrack(liveSong);
-              play(liveSong, initialQueue || undefined);
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.colors.accent, marginRight: 8 }} />
-              <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 13, flex: 1 }} numberOfLines={1}>
-                Live Now: {liveSong.title || 'Unknown'}
-              </Text>
-            </View>
-            <Ionicons name="play-circle" size={20} color={theme.colors.accent} />
-          </TouchableOpacity>
-        )}
 
         <View style={{ flex: 1 }}>
         <ScrollView 
@@ -2182,7 +2194,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                   <Text style={styles.playlistItemName}>Main Track</Text>
                   <Text style={styles.playlistItemCount}>Full recording</Text>
                 </View>
-                {currentTrack?.url === activeTrack.audioUrl && (
+                {(currentTrack?.audioUrl === activeTrack.audioUrl || currentTrack?.url === activeTrack.audioUrl) && (
                   <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
                 )}
               </TouchableOpacity>
@@ -2199,7 +2211,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                   );
                 }
                 return entries.map(([partName, url]) => {
-                  const isSelected = currentTrack?.url === url;
+                  const isSelected = currentTrack?.audioUrl === url || currentTrack?.url === url;
                   return (
                     <TouchableOpacity
                       key={partName}

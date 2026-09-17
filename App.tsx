@@ -47,7 +47,7 @@ import { sendLocalNotification, sendPushNotification } from './src/lib/notificat
 
 import AnimatedSplashScreen from './src/components/AnimatedSplashScreen';
 import AppNavigator from './src/navigation/AppNavigator';
-import { navigationRef, navigate, reset } from './src/navigation/navigationService';
+import { navigationRef, navigate, reset, notifyRouteChanged } from './src/navigation/navigationService';
 import { OfflineBanner } from './src/components/OfflineBanner';
 import { AppUpdateChecker } from './src/components/AppUpdateChecker';
 import { useUserStore } from './src/hooks/useUser';
@@ -210,10 +210,16 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
         style={themeName === 'dark' ? 'light' : 'dark'} 
       />
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <NavigationContainer theme={NavTheme} ref={navigationRef} linking={linking}>
+        <NavigationContainer
+          theme={NavTheme}
+          ref={navigationRef}
+          linking={linking}
+          onReady={notifyRouteChanged}
+          onStateChange={notifyRouteChanged}
+        >
           <AppNavigator initialRoute={initialRoute} />
-          <GlobalLiveSongWidget />
         </NavigationContainer>
+        <GlobalLiveSongWidget />
         <OfflineBanner />
         <SessionResumeBanner />
         <AppUpdateChecker />
@@ -263,36 +269,18 @@ function App() {
   useEffect(() => {
     async function prepare() {
       try {
-        const flushed = await flushDebugSessionLogs();
-        if (flushed > 0) {
-          debugSessionLog('H9', 'App.tsx:prepare:flush', 'Flushed buffered debug logs from device', { flushed });
-        }
-        await ensureCacheSchema();
-        debugSessionLog('H5', 'App.tsx:prepare:start', 'App prepare started', {
-          appState: AppState.currentState,
-        });
-        // Unified Big Tech Bootstrap: ONE call to hydrate user and route
-        const isLoggedIn = await useUserStore.getState().bootstrap();
-        if (isLoggedIn) {
-          setInitialRoute('Home');
-          debugSessionLog('H5', 'App.tsx:prepare:bootstrap', 'User successfully bootstrapped — routing to Home', {
-            hasUser: true,
-          });
-          return;
-        }
+        // Run log flushing in background so it never slows down app launch
+        flushDebugSessionLogs().catch(() => {});
+        ensureCacheSchema().catch(() => {});
 
-        setInitialRoute('Login');
-        debugSessionLog('H5', 'App.tsx:prepare:bootstrap', 'No active session — routing to Login', {
-          hasUser: false,
-        });
+        // Fast bootstrap: hydrates user session and decides route
+        const isLoggedIn = await useUserStore.getState().bootstrap();
+        setInitialRoute(isLoggedIn ? 'Home' : 'Login');
       } catch (e) {
         console.warn(e);
         setInitialRoute('Login');
       } finally {
         setAppIsReady(true);
-        debugSessionLog('H5', 'App.tsx:prepare:finally', 'App prepare finalized', {
-          appIsReadySetTo: true,
-        });
       }
     }
     prepare();

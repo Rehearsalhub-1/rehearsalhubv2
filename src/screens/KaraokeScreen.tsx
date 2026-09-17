@@ -148,8 +148,17 @@ export default function KaraokeScreen({ route, navigation }: any) {
         recordingRef.current.stop().catch(() => { });
         recordingRef.current = null;
       }
+      if (reviewTimeoutRef.current) {
+        clearTimeout(reviewTimeoutRef.current);
+        reviewTimeoutRef.current = null;
+      }
+      if (isReviewPlayingTimeoutRef.current) {
+        clearTimeout(isReviewPlayingTimeoutRef.current);
+        isReviewPlayingTimeoutRef.current = null;
+      }
       (global as any).isReviewPlaying = false;
       (global as any).isRecording = false;
+      TrackPlayer.reset().catch(() => { });
       setAudioModeAsync({
         allowsRecording: false,
         playsInSilentMode: true,

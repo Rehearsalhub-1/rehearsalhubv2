@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { api } from '../services/api';
 import { SafeNotifee as notifee } from '../lib/safeNativeModules';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 const { width, height } = Dimensions.get('window');
 
@@ -13,6 +14,12 @@ export default function IncomingCallScreen() {
   const navigation = useNavigation<any>();
   
   const { callId, callerName, callerAvatar, roomId, callType, notificationId } = route.params || {};
+
+  useWebSocket('calls', callId || '', (data: any) => {
+    if (data?.status === 'ended' || data?.status === 'declined' || data?.status === 'canceled') {
+      handleDecline();
+    }
+  }, Boolean(callId));
 
   useEffect(() => {
     

@@ -43,37 +43,9 @@ export default function ArchiveScreen({ navigation }: any) {
   const profile = useUserStore(s => s.profile);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
 
+  const [visibleCount, setVisibleCount] = useState(10);
   const hf = getHiddenFeatures(profile);
   const hasArchiveAccess = !hf.hideArchives && canAccessArchive(profile);
-
-  if (!isProfileLoading && !hasArchiveAccess) {
-    return (
-      <View style={styles.container}>
-        <StatusBar style="light" />
-        <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-        <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-        <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }]}>
-          <Ionicons name="lock-closed" size={80} color={theme.colors.accent} style={{ marginBottom: 24 }} />
-          <Text style={{ color: theme.colors.textPrimary, fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 12 }}>Access Restricted</Text>
-          <Text style={{ color: theme.colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 }}>
-            You do not have permission to access the Archives. Please contact an HQ Administrator or your Zonal Coordinator if you believe this is an error.
-          </Text>
-          <TouchableOpacity 
-            style={{ backgroundColor: theme.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 }}
-            onPress={() => {
-              if (navigation.canGoBack()) {
-                navigation.goBack();
-              } else {
-                navigation.navigate('Home');
-              }
-            }}
-          >
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Go Back</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </View>
-    );
-  }
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -82,7 +54,7 @@ export default function ArchiveScreen({ navigation }: any) {
   };
 
   useEffect(() => {
-    if (isZoneLoading || isProfileLoading || !user) return;
+    if (isZoneLoading || isProfileLoading || !user || !hasArchiveAccess) return;
     let active = true;
 
     async function loadData() {
@@ -177,8 +149,36 @@ export default function ArchiveScreen({ navigation }: any) {
     return () => { active = false; };
   }, [currentZone?.id, reloadKey, isZoneLoading, isProfileLoading, user?.uid, zoneVersion]);
 
-  const [visibleCount, setVisibleCount] = React.useState(10);
   const visibleCategories = categories.slice(0, visibleCount);
+
+  if (!isProfileLoading && !hasArchiveAccess) {
+    return (
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
+        <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }]}>
+          <Ionicons name="lock-closed" size={80} color={theme.colors.accent} style={{ marginBottom: 24 }} />
+          <Text style={{ color: theme.colors.textPrimary, fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 12 }}>Access Restricted</Text>
+          <Text style={{ color: theme.colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 }}>
+            You do not have permission to access the Archives. Please contact an HQ Administrator or your Zonal Coordinator if you believe this is an error.
+          </Text>
+          <TouchableOpacity 
+            style={{ backgroundColor: theme.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 }}
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Home');
+              }
+            }}
+          >
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Go Back</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

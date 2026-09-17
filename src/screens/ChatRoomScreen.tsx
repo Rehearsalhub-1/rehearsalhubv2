@@ -54,6 +54,10 @@ function ChatVideoModal({ uri, onClose }: { uri: string | null; onClose: () => v
 }
 
 function ChatVideoPlayerInner({ uri, onClose }: { uri: string; onClose: () => void }) {
+  useEffect(() => {
+    TrackPlayer.pause().catch(() => {});
+  }, []);
+
   const player = useVideoPlayer(uri, p => {
     p.loop = true;
     p.play();
@@ -349,12 +353,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     tickColorRead: theme.colors.tickRead,
   };
 
-  const { room: incomingRoom, roomId: deepLinkRoomId } = route.params || {};
+  const { room: incomingRoom, roomId: deepLinkRoomId, chatId } = route.params || {};
+  const effectiveRoomId = deepLinkRoomId || chatId;
   const [room, setRoom] = useState<any>(incomingRoom);
-  const [isLoadingDeepLink, setIsLoadingDeepLink] = useState(!incomingRoom && !!deepLinkRoomId);
+  const [isLoadingDeepLink, setIsLoadingDeepLink] = useState(!incomingRoom && !!effectiveRoomId);
 
   useEffect(() => {
-    const targetRoomId = incomingRoom?.id || deepLinkRoomId;
+    const targetRoomId = incomingRoom?.id || effectiveRoomId;
     if (targetRoomId) {
       api.chats.getById(targetRoomId).then(res => {
         if (res?.success && res.data) {
@@ -897,7 +902,16 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             finalMsgs = msgs.filter(m => (m.timestampObj?.getTime?.() || 0) > clearedAt);
           }
           finalMsgs.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
-          setMessages(finalMsgs);
+          setMessages(prev => {
+            if (prev.length === finalMsgs.length && prev.length > 0) {
+              const isSame = prev[0]?.id === finalMsgs[0]?.id &&
+                prev[prev.length - 1]?.id === finalMsgs[finalMsgs.length - 1]?.id &&
+                prev[0]?.status === finalMsgs[0]?.status &&
+                prev[0]?.text === finalMsgs[0]?.text;
+              if (isSame) return prev;
+            }
+            return finalMsgs;
+          });
           setIsInitialLoading(false);
           setIsLoadingMore(false);
         }
@@ -1098,9 +1112,13 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   };
 
   useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event: any) => {
-    if (event.type === Event.PlaybackQueueEnded || (event.type === Event.PlaybackState && event.state === State.Stopped)) {
-      if (playingId) {
+    const isEnded = event.type === Event.PlaybackQueueEnded ||
+      (event.type === Event.PlaybackState && (event.state === State.Stopped || event.state === State.Ended || event.state === 'ended' || event.state === 'stopped'));
+    if (isEnded) {
+      if (playingIdRef.current || playingId) {
         setIsAudioPlaying(false);
+        setPlayingId(null);
+        playingIdRef.current = null;
         await TrackPlayer.seekTo(0).catch(()=>{});
         (global as any).isChatAudio = false;
       }
@@ -1159,11 +1177,12 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`,
       type:'text', text, timestamp: new Date().toISOString(), edited:false, reactions:{}, status:'sending', starred:false,
     };
-    if (replyingTo) {
+    const replyTarget = replyingTo;
+    if (replyTarget) {
       msgData.replyTo = {
-        id:replyingTo.id,
-        text: replyingTo.isVoiceNote ? '🎤 Voice note' : (replyingTo.imageUrl ? '📷 Photo' : replyingTo.text),
-        senderName:replyingTo.sender, type:replyingTo.type, imageUrl:replyingTo.imageUrl,
+        id:replyTarget.id,
+        text: replyTarget.isVoiceNote ? '🎤 Voice note' : (replyTarget.imageUrl ? '📷 Photo' : replyTarget.text),
+        senderName:replyTarget.sender, type:replyTarget.type, imageUrl:replyTarget.imageUrl,
       };
       setReplyingTo(null);
     }
@@ -1199,7 +1218,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       await dispatchSendMessage(room.id, {
         content: text,
         type: 'text',
-        reply_to: replyingTo?.id,
+        reply_to: msgData.replyTo?.id || replyTarget?.id,
         ...msgData,
       });
       setMessages(prev => prev.map(message => message.id === msgData.id ? { ...message, status: 'sent' } : message));

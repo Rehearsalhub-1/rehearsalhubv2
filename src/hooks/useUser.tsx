@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { clearCache, setV2TenantScope, onSessionExpired } from '../lib/apiClient';
 import { useShallow } from 'zustand/react/shallow';
 import * as SecureStore from 'expo-secure-store';
+import { disconnect as wsDisconnect } from './useWebSocket';
 
 export interface UserProfile {
   uid: string;
@@ -272,58 +273,73 @@ export const useUserStore = create<UserStore>((set, get) => ({
         } catch {}
       }
 
+      // If we already restored user from local cache, don't block app startup on slow network
+      const hasCachedSession = Boolean(get().user?.uid);
+
       // Live unified bootstrap from GET /auth/me
-      const meRes: any = await apiClient.get('/auth/me');
-      if (meRes?.success && meRes?.data?.id) {
-        const data = meRes.data;
-        const uid = data.id;
-        await SecureStore.setItemAsync('userId', uid);
+      const fetchAuthMe = async (): Promise<boolean> => {
+        try {
+          const meRes: any = await apiClient.get('/auth/me');
+          if (meRes?.success && meRes?.data?.id) {
+            const data = meRes.data;
+            const uid = data.id;
+            await SecureStore.setItemAsync('userId', uid);
 
-        const parsed = parseProfile(uid, data);
-        const zoneCode = data.zone_code || data.zoneCode || data.zoneId || '';
-        const initialZone: Zone | null = (data.memberships?.[0]?.organization ? {
-          id: data.memberships[0].organization.id,
-          name: data.memberships[0].organization.name,
-          invitationCode: data.memberships[0].organization.invitationCode || data.memberships[0].organization.code,
-          isHq: !!data.memberships[0].organization.isHq,
-          region: data.memberships[0].organization.region,
-        } : null) || (data.zoneId ? {
-          id: data.zoneId,
-          name: data.zoneName || data.zone_name || 'Your Loveworld Singers',
-          invitationCode: data.zoneCode || data.zone_code,
-          isHq: isHQGroup(data.zoneId),
-          region: data.region || 'Headquarters',
-        } : null);
-        const resolved = getZoneByInvitationCode(zoneCode) || initialZone;
+            const parsed = parseProfile(uid, data);
+            const zoneCode = data.zone_code || data.zoneCode || data.zoneId || '';
+            const initialZone: Zone | null = (data.memberships?.[0]?.organization ? {
+              id: data.memberships[0].organization.id,
+              name: data.memberships[0].organization.name,
+              invitationCode: data.memberships[0].organization.invitationCode || data.memberships[0].organization.code,
+              isHq: !!data.memberships[0].organization.isHq,
+              region: data.memberships[0].organization.region,
+            } : null) || (data.zoneId ? {
+              id: data.zoneId,
+              name: data.zoneName || data.zone_name || 'Your Loveworld Singers',
+              invitationCode: data.zoneCode || data.zone_code,
+              isHq: isHQGroup(data.zoneId),
+              region: data.region || 'Headquarters',
+            } : null);
+            const resolved = getZoneByInvitationCode(zoneCode) || initialZone;
 
-        const isPrem = checkPremium(
-          parsed.hasHqAccess,
-          resolved?.id || data.zoneId,
-          parsed.role,
-          parsed.administration,
-          null
-        );
+            const isPrem = checkPremium(
+              parsed.hasHqAccess,
+              resolved?.id || data.zoneId,
+              parsed.role,
+              parsed.administration,
+              null
+            );
 
-        set({
-          user: { uid, email: data.email || null },
-          isAuthenticated: true,
-          profile: parsed,
-          ...(resolved ? { currentZone: resolved, isHQ: isHQGroup(resolved.id, resolved.isHq) } : {}),
-          isProfileLoading: false,
-          isZoneLoading: false,
-          isPremium: isPrem,
-        });
+            set({
+              user: { uid, email: data.email || null },
+              isAuthenticated: true,
+              profile: parsed,
+              ...(resolved ? { currentZone: resolved, isHQ: isHQGroup(resolved.id, resolved.isHq) } : {}),
+              isProfileLoading: false,
+              isZoneLoading: false,
+              isPremium: isPrem,
+            });
 
-        await loadZoneMemberships(uid, data, resolved || null);
+            await loadZoneMemberships(uid, data, resolved || null);
+            persistCache();
+            return true;
+          }
+          return false;
+        } catch {
+          return false;
+        }
+      };
 
-        persistCache();
-
-
-
+      if (hasCachedSession) {
+        // App opens instantly; refresh profile in background
+        fetchAuthMe().catch(() => {});
         return true;
       }
 
-      return false;
+      return await Promise.race([
+        fetchAuthMe(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500)),
+      ]);
     } catch (err) {
       console.warn('[useUserStore] bootstrap network error:', err);
       const current = get().user;
@@ -510,6 +526,22 @@ export const useUserStore = create<UserStore>((set, get) => ({
         isPremium: false,
       });
 
+      // 5. Close the WebSocket so the old user's authenticated connection is torn down
+      wsDisconnect();
+
+      // 6. Stop TrackPlayer and clear live songs so logged-out user doesn't keep playing audio
+      try {
+        const { SafeTrackPlayer } = require('../lib/safeNativeModules');
+        await SafeTrackPlayer.reset().catch(() => {});
+      } catch {}
+
+      try {
+        const { useLiveSongStore } = require('../stores/liveSongStore');
+        useLiveSongStore.getState().setActiveSongs([]);
+      } catch {}
+
+      // 7. Reset deduplication guard so same-UID re-login always re-bootstraps profile
+      loadedForUser = null;
 
     } catch (e) {
       console.error('[useUserStore] Sign out error:', e);

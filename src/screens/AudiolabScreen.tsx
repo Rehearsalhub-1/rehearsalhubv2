@@ -237,6 +237,7 @@ export default function AudiolabScreen({ navigation }: any) {
   const soundTimeoutsRef = useRef<any[]>([]);
   const playTimeRef = useRef<number>(0);
   const recordStartTimeRef = useRef<number>(0);
+  const meterIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const playTimerInterval = useRef<NodeJS.Timeout | null>(null);
   const tunerInterval = useRef<NodeJS.Timeout | null>(null);
   const lastBeatRef = useRef<number>(0);
@@ -502,6 +503,7 @@ export default function AudiolabScreen({ navigation }: any) {
 
     return () => {
       stopPlayback();
+      if (meterIntervalRef.current) clearInterval(meterIntervalRef.current);
       if (playTimerInterval.current) clearInterval(playTimerInterval.current);
       if (tunerInterval.current) clearInterval(tunerInterval.current);
 
@@ -823,9 +825,10 @@ export default function AudiolabScreen({ navigation }: any) {
       await rec.prepareToRecordAsync();
       rec.record();
 
-      const meterInterval = setInterval(() => {
+      if (meterIntervalRef.current) clearInterval(meterIntervalRef.current);
+      meterIntervalRef.current = setInterval(() => {
         if (!recordingRef.current) {
-          clearInterval(meterInterval);
+          if (meterIntervalRef.current) clearInterval(meterIntervalRef.current);
           return;
         }
         try {
@@ -836,12 +839,15 @@ export default function AudiolabScreen({ navigation }: any) {
             recordingPeaksRef.current.push(mappedHeight);
             setLiveMeterLevel(normalized);
 
-            const elapsed = status.durationMillis || (recordingPeaksRef.current.length * 50);
-            setTracks(prev => prev.map(t => t.id === newTrackId ? {
-              ...t,
-              duration: elapsed,
-              peaks: [...recordingPeaksRef.current]
-            } : t));
+            // Throttle tracks state update to once every 500ms (10 ticks) so UI renders smoothly without heating CPU
+            if (recordingPeaksRef.current.length % 10 === 0) {
+              const elapsed = status.durationMillis || (recordingPeaksRef.current.length * 50);
+              setTracks(prev => prev.map(t => t.id === newTrackId ? {
+                ...t,
+                duration: elapsed,
+                peaks: [...recordingPeaksRef.current]
+              } : t));
+            }
           }
         } catch {}
       }, 50);
@@ -864,6 +870,10 @@ export default function AudiolabScreen({ navigation }: any) {
 
   const stopRecording = async () => {
     try {
+      if (meterIntervalRef.current) {
+        clearInterval(meterIntervalRef.current);
+        meterIntervalRef.current = null;
+      }
       if (!recordingRef.current) return;
       const rec = recordingRef.current;
       const st = rec.getStatus();

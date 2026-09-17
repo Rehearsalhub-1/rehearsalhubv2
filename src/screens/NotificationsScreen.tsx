@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useUserStore } from '../hooks/useUser';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -120,7 +121,7 @@ const getNavigationRoute = (actionUrl?: string) => {
     const match = actionUrl.match(/(?:chat|conversation|groups\/)([^\/?#&]+)/i) || actionUrl.match(/(?:[?&]chat|[?&]conversation)=([^&]+)/i);
     const chatId = match ? match[1] : null;
     if (chatId) {
-      return { screen: 'ChatRooms', params: { chatId } };
+      return { screen: 'ChatRoom', params: { roomId: chatId } };
     }
     return { screen: 'ChatRooms' };
   }
@@ -188,6 +189,14 @@ export default function NotificationsScreen({ route, navigation }: any) {
     }
     fetchNotifications();
   }, [user?.uid, fetchNotifications]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.uid) {
+        fetchNotifications(true);
+      }
+    }, [user?.uid, fetchNotifications])
+  );
 
   const handleMarkAsRead = async (id: string) => {
     try {

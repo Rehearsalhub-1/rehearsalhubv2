@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -471,26 +471,30 @@ export default function SongsScheduleScreen({ navigation }: any) {
 
   const activeProgram = programs.find(p => p.id === activeProgramId) || null;
 
-  const rawWeeks = activeProgram?.weeks || [
-    { id: 'default_week_1', name: 'Week 1' }
-  ];
+  const weeks = useMemo(() => {
+    return activeProgram?.weeks && activeProgram.weeks.length > 0
+      ? activeProgram.weeks
+      : [{ id: 'default_week_1', name: 'Week 1' }];
+  }, [activeProgram?.weeks]);
 
-  const rawDays = activeProgram?.days || [
-    { id: 'default_day_1', weekId: 'default_week_1', name: 'Day 1' }
-  ];
-
-  const weeks = [...rawWeeks];
-
-  const days = [...rawDays];
+  const days = useMemo(() => {
+    return activeProgram?.days && activeProgram.days.length > 0
+      ? activeProgram.days
+      : [{ id: 'default_day_1', weekId: 'default_week_1', name: 'Day 1' }];
+  }, [activeProgram?.days]);
 
   useEffect(() => {
-    if (weeks.length > 0) {
-      const exists = weeks.some((w: any) => w.id === selectedWeekId);
-      if (!exists) {
-        setSelectedWeekId(weeks[0].id);
-      }
+    if (activeProgram) {
+      const defaultWeek = activeProgram.currentWeekId || activeProgram.weeks?.[0]?.id || 'default_week_1';
+      setSelectedWeekId(defaultWeek);
+
+      const weekDays = (activeProgram.days || []).filter((d: any) => d.weekId === defaultWeek);
+      const defaultDay = activeProgram.currentDayId && weekDays.some((d: any) => d.id === activeProgram.currentDayId)
+        ? activeProgram.currentDayId
+        : (weekDays[0]?.id || 'default_day_1');
+      setSelectedDayId(defaultDay);
     }
-  }, [weeks, selectedWeekId]);
+  }, [activeProgramId]);
 
   useEffect(() => {
     const weekDays = days.filter((d: any) => d.weekId === selectedWeekId);
@@ -502,20 +506,7 @@ export default function SongsScheduleScreen({ navigation }: any) {
     } else {
       setSelectedDayId('');
     }
-  }, [days, selectedWeekId, selectedDayId]);
-
-  useEffect(() => {
-    if (activeProgram) {
-      const defaultWeek = activeProgram.currentWeekId || activeProgram.weeks?.[0]?.id || 'default_week_1';
-      setSelectedWeekId(defaultWeek);
-      
-      const weekDays = (activeProgram.days || []).filter((d: any) => d.weekId === defaultWeek);
-      const defaultDay = activeProgram.currentDayId && weekDays.some((d: any) => d.id === activeProgram.currentDayId)
-        ? activeProgram.currentDayId
-        : (weekDays[0]?.id || 'default_day_1');
-      setSelectedDayId(defaultDay);
-    }
-  }, [activeProgramId]);
+  }, [selectedWeekId, days]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>

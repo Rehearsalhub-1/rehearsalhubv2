@@ -19,3 +19,27 @@ export function reset(state: any) {
 export function getCurrentRoute() {
   return navigationRef.getCurrentRoute();
 }
+
+type RouteListener = (name: string | null) => void;
+const routeListeners = new Set<RouteListener>();
+
+export function subscribeToRoute(listener: RouteListener) {
+  routeListeners.add(listener);
+  if (navigationRef.isReady()) {
+    listener(navigationRef.getCurrentRoute()?.name || null);
+  }
+  return () => {
+    routeListeners.delete(listener);
+  };
+}
+
+export function notifyRouteChanged() {
+  if (navigationRef.isReady()) {
+    const current = navigationRef.getCurrentRoute()?.name || null;
+    routeListeners.forEach((fn) => {
+      try {
+        fn(current);
+      } catch {}
+    });
+  }
+}

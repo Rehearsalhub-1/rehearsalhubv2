@@ -36,7 +36,43 @@ interface LiveSongStore {
 }
 
 /** How long (ms) to shield a removed song from HTTP re-addition. */
-const REMOVAL_SHIELD_MS = 30_000;
+const REMOVAL_SHIELD_MS = 12_000;
+
+export function isLiveSong(s: any): boolean {
+  if (!s || typeof s !== 'object') return false;
+  const status = s.status !== undefined && s.status !== null ? String(s.status).toLowerCase().trim() : '';
+  if (status === 'live') {
+    return true;
+  }
+  const isTruthy = (v: any) =>
+    v === true ||
+    v === 1 ||
+    v === '1' ||
+    (typeof v === 'string' && (v.toLowerCase() === 'true' || v.toLowerCase() === 'live'));
+
+  return Boolean(
+    isTruthy(s.isLive) ||
+    isTruthy(s.live) ||
+    isTruthy(s.is_live)
+  );
+}
+
+export function isSongExplicitlyOff(s: any): boolean {
+  if (!s || typeof s !== 'object') return false;
+  const status = s.status !== undefined && s.status !== null ? String(s.status).toLowerCase().trim() : '';
+  if (status === 'inactive' || status === 'ended' || status === 'off' || status === 'stopped') {
+    return true;
+  }
+  const isFalsy = (v: any) =>
+    v === false ||
+    v === 0 ||
+    v === '0' ||
+    (typeof v === 'string' && (v.toLowerCase() === 'false' || v.toLowerCase() === 'off' || v.toLowerCase() === 'inactive'));
+
+  if (s.isLive !== undefined && isFalsy(s.isLive)) return true;
+  if (s.live !== undefined && isFalsy(s.live)) return true;
+  return false;
+}
 
 export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   activeSongs: [],
@@ -44,34 +80,34 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   recentlyRemovedIds: new Map(),
 
   setActiveSongs: (songs: LiveSong[]) => {
-    const { recentlyRemovedIds } = get();
-    const now = Date.now();
+    const rawList = Array.isArray(songs) ? songs : [];
+    const liveOnly = rawList.filter(isLiveSong);
+    if (liveOnly.length === 0) return; // Do not wipe global active songs on partial screen sync
 
-    const liveOnly = Array.isArray(songs)
-      ? songs.filter(
-          (s) =>
-            s &&
-            (s.status === 'live' ||
-              s.isLive === true ||
-              s.isActive === true ||
-              String(s.isActive) === 'true') &&
-            // Don't re-add songs recently turned off via WebSocket
-            !isRecentlyRemoved(recentlyRemovedIds, String(s.id))
-        )
-      : [];
+    const { recentlyRemovedIds, activeSongs: current } = get();
+    const updatedShields = new Map(recentlyRemovedIds);
+    liveOnly.forEach((s) => updatedShields.delete(String(s.id)));
 
-    const current = get().activeSongs;
+    // Merge incoming live songs into current active songs
+    const mergedMap = new Map<string, LiveSong>();
+    current.forEach((s) => {
+      if (isLiveSong(s) && !isRecentlyRemoved(recentlyRemovedIds, String(s.id))) {
+        mergedMap.set(String(s.id), s);
+      }
+    });
+    liveOnly.forEach((s) => mergedMap.set(String(s.id), s));
+
+    const finalActive = Array.from(mergedMap.values());
     const currentSig = current.map((s) => `${s.id}-${s.title}`).join('|');
-    const newSig = liveOnly.map((s) => `${s.id}-${s.title}`).join('|');
+    const newSig = finalActive.map((s) => `${s.id}-${s.title}`).join('|');
 
     if (currentSig !== newSig) {
-      set({ activeSongs: liveOnly });
+      set({ activeSongs: finalActive, recentlyRemovedIds: updatedShields });
     }
   },
 
   removeSong: (songId: string) => {
     const { recentlyRemovedIds } = get();
-    // Record removal time so HTTP fetches in flight can't re-add this song
     const updated = new Map(recentlyRemovedIds);
     updated.set(String(songId), Date.now());
 
@@ -93,33 +129,18 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
       return;
     }
 
-    // Determine if song is active/live now
-    const isActiveField =
-      update.isActive !== undefined
-        ? update.isActive === true || String(update.isActive) === 'true'
-        : undefined;
-    const isLiveField =
-      update.isLive !== undefined ? Boolean(update.isLive) : undefined;
-    const statusField =
-      update.status !== undefined ? String(update.status).toLowerCase() : undefined;
-
-    // If explicit inactive / off
-    if (isActiveField === false || statusField === 'inactive' || statusField === 'unheard') {
+    // If explicitly inactive / off
+    if (isSongExplicitlyOff(update)) {
       get().removeSong(songId);
       return;
     }
 
-    // If song is going LIVE, clear any removal shield so it shows up again
-    const isLiveNow = isLiveField === true || statusField === 'live';
-
-    if (isLiveNow) {
-      // Clear removal shield — song was explicitly re-activated
+    // If song is live / active now
+    if (isLiveSong(update)) {
+      // Clear removal shield — song was explicitly activated
       const { recentlyRemovedIds } = get();
-      if (recentlyRemovedIds.has(String(songId))) {
-        const updated = new Map(recentlyRemovedIds);
-        updated.delete(String(songId));
-        set({ recentlyRemovedIds: updated });
-      }
+      const updatedShields = new Map(recentlyRemovedIds);
+      updatedShields.delete(String(songId));
 
       set((state) => {
         const existingIndex = state.activeSongs.findIndex(
@@ -135,13 +156,14 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             ...update,
             isActive: true,
             isLive: true,
+            status: 'live',
             audioUrl: resolvedAudioUrl || next[existingIndex].audioUrl,
             audioUrls:
               resolvedAudioUrls && Object.keys(resolvedAudioUrls).length > 0
                 ? resolvedAudioUrls
                 : next[existingIndex].audioUrls,
           };
-          return { activeSongs: next };
+          return { activeSongs: next, recentlyRemovedIds: updatedShields };
         } else {
           const newSong: LiveSong = {
             id: String(update.id),
@@ -155,13 +177,14 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             audioUrls: resolvedAudioUrls,
             isActive: true,
             isLive: true,
+            status: 'live',
             ...update,
           };
-          return { activeSongs: [newSong, ...state.activeSongs] };
+          return { activeSongs: [newSong, ...state.activeSongs], recentlyRemovedIds: updatedShields };
         }
       });
     } else {
-      // Song might already be active and this is a metadata patch (e.g. lyrics updated while live)
+      // Song might already be active and this is a metadata patch
       set((state) => {
         const existingIndex = state.activeSongs.findIndex(
           (s) => String(s.id) === String(songId)
@@ -182,23 +205,56 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   fetchActiveSongs: async (zoneId?: string) => {
     try {
       set({ isLoading: true });
-      const res = await api.songs.getActiveSongs(zoneId);
-      if (res?.success && Array.isArray(res.data)) {
-        // Re-read current removal shield state
-        const { recentlyRemovedIds } = get();
-
-        const liveOnly = res.data.filter(
-          (s: any) =>
-            s &&
-            (s.status === 'live' || s.isLive === true) &&
-            // Exclude songs that were turned OFF recently via WebSocket or admin action.
-            // This prevents stale HTTP responses from re-showing songs that were turned off.
-            !isRecentlyRemoved(recentlyRemovedIds, String(s.id))
-        );
-        set({ activeSongs: liveOnly, isLoading: false });
-      } else {
-        set({ isLoading: false });
+      let rawData: any[] = [];
+      if (zoneId) {
+        const scopedRes = await api.songs.getActiveSongs(zoneId).catch(() => null);
+        if (scopedRes?.success && Array.isArray(scopedRes.data) && scopedRes.data.length > 0) {
+          rawData = scopedRes.data;
+        }
       }
+      if (rawData.length === 0) {
+        const allRes = await api.songs.getActiveSongs().catch(() => null);
+        if (allRes?.success && Array.isArray(allRes.data)) {
+          rawData = allRes.data;
+        }
+      }
+
+      const { recentlyRemovedIds } = get();
+      const seenIds = new Set<string>();
+      const prepped: LiveSong[] = [];
+
+      for (const s of rawData) {
+        if (!s || !s.id) continue;
+        const idStr = String(s.id);
+
+        if (seenIds.has(idStr)) continue;
+        seenIds.add(idStr);
+
+        // Any song returned from GET /songs/active is an active live song
+        if (!isRecentlyRemoved(recentlyRemovedIds, idStr) && !isSongExplicitlyOff(s)) {
+          const resolvedAudioUrl = resolveSongAudioUrl(s);
+          const resolvedAudioUrls = resolveSongAudioUrls(s);
+          prepped.push({
+            ...s,
+            id: idStr,
+            isLive: true,
+            isActive: true,
+            status: 'live',
+            audioUrl: resolvedAudioUrl || s.audioUrl,
+            audioUrls: resolvedAudioUrls || s.audioUrls,
+          });
+        }
+      }
+
+      if (prepped.length > 0) {
+        get().setActiveSongs(prepped);
+      } else if (rawData.length === 0) {
+        // Server confirmed 0 active songs, clear activeSongs unless shielded
+        const { activeSongs: current } = get();
+        const remaining = current.filter((s) => isRecentlyRemoved(recentlyRemovedIds, String(s.id)));
+        set({ activeSongs: remaining });
+      }
+      set({ isLoading: false });
     } catch (e) {
       set({ isLoading: false });
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -16,7 +16,7 @@ import { useLiveSongStore, LiveSong } from '../stores/liveSongStore';
 import { useZone } from '../hooks/useZone';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
-import { navigationRef, navigate } from '../navigation/navigationService';
+import { navigationRef, navigate, subscribeToRoute } from '../navigation/navigationService';
 
 const HIDDEN_SCREENS = new Set([
   'Login',
@@ -25,6 +25,12 @@ const HIDDEN_SCREENS = new Set([
   'Call',
   'Calls',
   'IncomingCall',
+  'ChatRoom',
+  'ChatRooms',
+  'ChatInfo',
+  'NewChat',
+  'CreateGroup',
+  'ChatSettings',
 ]);
 
 export default function GlobalLiveSongWidget() {
@@ -33,9 +39,10 @@ export default function GlobalLiveSongWidget() {
   const { currentZone } = useZone();
   const { play, currentTrack } = useTrackPlayer();
 
+  // Use stable primitive selectors so Zustand doesn't return new refs every render
   const activeSongs = useLiveSongStore((state) => state.activeSongs);
-  const handleSongUpdate = useLiveSongStore((state) => state.handleSongUpdate);
-  const fetchActiveSongs = useLiveSongStore((state) => state.fetchActiveSongs);
+  const handleSongUpdate = useLiveSongStore(useCallback((state) => state.handleSongUpdate, []));
+  const fetchActiveSongs = useLiveSongStore(useCallback((state) => state.fetchActiveSongs, []));
 
   const [currentScreen, setCurrentScreen] = useState<string | null>(null);
   const [showPickerModal, setShowPickerModal] = useState(false);
@@ -43,6 +50,8 @@ export default function GlobalLiveSongWidget() {
   // Pulse animation for the green live indicator
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(0.7)).current;
+  // Animated bottom offset — springs smoothly when mini-player shows/hides
+  const bottomAnim = useRef(new Animated.Value(Math.max(90, 75 + insets.bottom))).current;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -77,26 +86,38 @@ export default function GlobalLiveSongWidget() {
     return () => animation.stop();
   }, [pulseAnim, opacityAnim]);
 
-  // Track active navigation screen
+  // Track active navigation screen using robust subscriber
   useEffect(() => {
-    const updateCurrentScreen = () => {
-      if (navigationRef.isReady()) {
-        const route = navigationRef.getCurrentRoute();
-        setCurrentScreen(route?.name || null);
-      }
+    let isMounted = true;
+    const update = (routeName: string | null) => {
+      if (isMounted) setCurrentScreen(routeName);
     };
 
-    updateCurrentScreen();
-    const unsubState = navigationRef.addListener('state', updateCurrentScreen);
+    const unsub = subscribeToRoute(update);
+
+    // Fallback polling if navigation wasn't ready yet on mount
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    if (!navigationRef.isReady()) {
+      pollTimer = setInterval(() => {
+        if (navigationRef.isReady()) {
+          const route = navigationRef.getCurrentRoute();
+          if (route?.name && isMounted) {
+            setCurrentScreen(route.name);
+          }
+          if (pollTimer) clearInterval(pollTimer);
+        }
+      }, 300);
+    }
 
     return () => {
-      if (typeof unsubState === 'function') unsubState();
+      isMounted = false;
+      unsub();
+      if (pollTimer) clearInterval(pollTimer);
     };
   }, []);
 
-  // Real-time WebSocket subscriptions across the entire app
+  // Real-time WebSocket subscription across the entire app
   useWebSocket('song', 'all', handleSongUpdate, true);
-  useWebSocket('songs', 'all', handleSongUpdate, true);
 
   // Initial & Zone-based fetch of active songs
   useEffect(() => {
@@ -108,8 +129,6 @@ export default function GlobalLiveSongWidget() {
     let refetchTimer: ReturnType<typeof setTimeout> | null = null;
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
-        // Wait 2.5s before refetching so the WebSocket has time to deliver
-        // any in-flight "off" events before we re-populate from HTTP
         if (refetchTimer) clearTimeout(refetchTimer);
         refetchTimer = setTimeout(() => {
           fetchActiveSongs(currentZone?.id);
@@ -122,10 +141,36 @@ export default function GlobalLiveSongWidget() {
     };
   }, [currentZone?.id, fetchActiveSongs]);
 
-  // Visibility guard
+  // Smoothly animate the widget's bottom position when the mini-player appears
+  const hasMiniPlayer = Boolean(currentTrack?.id);
+  const targetBottom = hasMiniPlayer
+    ? Math.max(145, 135 + insets.bottom)
+    : Math.max(90, 75 + insets.bottom);
+
+  useEffect(() => {
+    Animated.spring(bottomAnim, {
+      toValue: targetBottom,
+      useNativeDriver: false, // 'bottom' is a layout prop, can't use native driver
+      speed: 18,
+      bounciness: 4,
+    }).start();
+  }, [targetBottom, bottomAnim]);
+
+  // Visibility guard:
+  // Hide if on a screen that forbids live widget (Chat screens, Calls, Player, Auth),
+  // OR if there are no active songs.
+  // DO NOT hide if currentScreen is temporarily null/unknown!
+  const isHiddenScreen = currentScreen
+    ? Boolean(
+        HIDDEN_SCREENS.has(currentScreen) ||
+        currentScreen.startsWith('Chat') ||
+        currentScreen.toLowerCase().includes('call') ||
+        currentScreen === 'Player'
+      )
+    : false;
+
   const isHidden =
-    !currentScreen ||
-    HIDDEN_SCREENS.has(currentScreen) ||
+    isHiddenScreen ||
     !activeSongs ||
     activeSongs.length === 0;
 
@@ -135,15 +180,11 @@ export default function GlobalLiveSongWidget() {
 
   const handleTuneIn = (song: LiveSong) => {
     setShowPickerModal(false);
-    try {
-      play(song, activeSongs, false);
-    } catch (e) {
-      // safe fallback
-    }
     navigate('Player', {
       activeTrack: song,
       zoneId: currentZone?.id,
       queue: activeSongs,
+      autoplay: false, // Never autoplay automatically when opening a song
     });
   };
 
@@ -158,26 +199,22 @@ export default function GlobalLiveSongWidget() {
   const primarySong = activeSongs[0];
   const titleText =
     activeSongs.length === 1
-      ? primarySong.title || 'Live Rehearsal'
+      ? primarySong?.title || 'Live Rehearsal'
       : `${activeSongs.length} Songs Live`;
-
-  // Dynamically elevate widget if a mini player is active
-  const hasMiniPlayer = Boolean(currentTrack?.id);
-  const bottomOffset = hasMiniPlayer
-    ? Math.max(145, 135 + insets.bottom)
-    : Math.max(90, 75 + insets.bottom);
 
   return (
     <>
-      <TouchableOpacity
+      <Animated.View
         style={[
           styles.floatingLiveWidget,
           {
             backgroundColor: theme.colors.background,
             borderColor: '#22c55e',
-            bottom: bottomOffset,
+            bottom: bottomAnim,
           },
         ]}
+      >
+      <TouchableOpacity
         activeOpacity={0.88}
         onPress={handleWidgetPress}
       >
@@ -217,6 +254,7 @@ export default function GlobalLiveSongWidget() {
           />
         </View>
       </TouchableOpacity>
+      </Animated.View>
 
       {/* Multiple Active Songs Selection Sheet */}
       <Modal

@@ -25,7 +25,7 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
 
   useEffect(() => {
     if (trackId) subscribeToTrack(trackId);
-  }, [trackId]);
+  }, [trackId, subscribeToTrack]);
 
 
   const [showNotesModal, setShowNotesModal] = useState(false);
