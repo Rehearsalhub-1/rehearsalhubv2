@@ -30,7 +30,19 @@ export class SessionExpiredError extends Error {
   }
 }
 
-const apiGetCache = new Map<string, any>();
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+const apiGetCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 15_000;
+
+function shouldCachePath(path: string): boolean {
+  if (path.includes('/songs/active') || path.includes('/schedules') || path.includes('/chats') || path.includes('/messages') || path.includes('/notes') || path.includes('/annotations')) {
+    return false;
+  }
+  return true;
+}
 
 export function clearCache(): void { apiGetCache.clear(); }
 
@@ -288,8 +300,8 @@ async function request<T>(
       }
       // On any successful write mutation, immediately invalidate the GET cache
       apiGetCache.clear();
-    } else if (json?.success !== false && json?.data !== undefined) {
-      apiGetCache.set(path, json);
+    } else if (json?.success !== false && json?.data !== undefined && shouldCachePath(path)) {
+      apiGetCache.set(path, { data: json, timestamp: Date.now() });
     }
     return json as T;
   } catch (netErr: any) {
@@ -298,9 +310,12 @@ async function request<T>(
     if (netErr?.name === 'AbortError') {
       throw new Error('Request timed out. The server took too long to respond. Please try again.');
     }
-    if (method === 'GET' && apiGetCache.has(path)) {
-      console.warn(`[apiClient] Network drop detected. Serving cached response for ${path}`);
-      return apiGetCache.get(path) as T;
+    if (method === 'GET' && shouldCachePath(path) && apiGetCache.has(path)) {
+      const cached = apiGetCache.get(path);
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        console.warn(`[apiClient] Network drop detected. Serving cached response for ${path}`);
+        return cached.data as T;
+      }
     }
     throw netErr;
   }

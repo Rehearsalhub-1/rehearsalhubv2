@@ -360,6 +360,13 @@ export const useUserStore = create<UserStore>((set, get) => ({
       await apiClient.patch(`/profiles/${user.uid}`, { zone_code: zone.invitationCode });
       set(s => ({ currentZone: zone, isHQ: isHQGroup(zone.id), zoneVersion: s.zoneVersion + 1 }));
       clearCache();
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const purgeKeys = allKeys.filter((k) =>
+          ['screen_cache_', 'MINISTERED_', 'SEARCH_SONGS_', 'RESOLVED_TRACKS_'].some((p) => k.startsWith(p))
+        );
+        if (purgeKeys.length > 0) await AsyncStorage.multiRemove(purgeKeys);
+      } catch {}
 
       // ── Update scope store so all future requests carry correct X-Zone-Id headers
       setV2TenantScope({
@@ -508,8 +515,15 @@ export const useUserStore = create<UserStore>((set, get) => ({
         await ct();
       } catch {}
 
-      // 3. Flush in-memory GET cache
+      // 3. Flush in-memory GET cache and disk caches
       clearCache();
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const purgeKeys = allKeys.filter((k) =>
+          ['screen_cache_', 'MINISTERED_', 'SEARCH_SONGS_', 'RESOLVED_TRACKS_', 'cached_chat_'].some((p) => k.startsWith(p))
+        );
+        if (purgeKeys.length > 0) await AsyncStorage.multiRemove(purgeKeys);
+      } catch {}
 
       // 4. Reset Zustand store to unauthenticated state
       set({

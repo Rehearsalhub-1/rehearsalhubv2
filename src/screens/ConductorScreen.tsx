@@ -73,11 +73,7 @@ export default function ConductorScreen({ route, navigation }: any) {
     showColorPalette,
     setShowColorPalette
   } = useAnnotationsAndNotes(activeTrack?.id, activeTrack?.title, { isPlayer: false });
-  useEffect(() => {
-    if (currentTrack && currentTrack.id !== activeTrack?.id) {
-      setActiveTrack(currentTrack);
-    }
-  }, [currentTrack]);
+
   useWebSocket(
     'songs',
     activeTrack?.id || '',

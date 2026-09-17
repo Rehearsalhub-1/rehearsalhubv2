@@ -9,12 +9,13 @@ interface CacheEntry<T> {
   timestamp: number;
   version: string;
 }
-export async function readCache<T>(key: string): Promise<T | null> {
+export async function readCache<T>(key: string, ttlMs = DEFAULT_TTL_MS): Promise<T | null> {
   try {
     const raw = await AsyncStorage.getItem(`screen_cache_${key}`);
     if (!raw) return null;
     const entry: CacheEntry<T> = JSON.parse(raw);
     if (entry.version !== CACHE_VERSION) return null;
+    if (entry.timestamp && Date.now() - entry.timestamp > ttlMs) return null;
     return entry.data;
   } catch {
     return null;

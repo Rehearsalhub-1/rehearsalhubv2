@@ -29,11 +29,7 @@ export default function SolfaScreen({ route, navigation }: any) {
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
   const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack, skipToNext, skipToPrevious } = useTrackPlayer();
-  useEffect(() => {
-    if (currentTrack && currentTrack.id !== activeTrack?.id) {
-      setActiveTrack(currentTrack);
-    }
-  }, [currentTrack]);
+
   useWebSocket(
     'songs',
     activeTrack?.id || '',
