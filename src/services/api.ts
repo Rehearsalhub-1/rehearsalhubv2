@@ -81,8 +81,8 @@ export const api = {
       apiClient.get<{ success: boolean; data: any[] }>(`/songs/history?songId=${encodeURIComponent(songId)}`),
     getSchedule: (zoneId?: string, isArchived?: boolean, subGroupId?: string) => {
       const params = new URLSearchParams();
-      if (zoneId && zoneId !== 'all' && zoneId !== 'global') params.append('zoneId', zoneId);
-      if (subGroupId && subGroupId !== 'all' && subGroupId !== 'global') params.append('subGroupId', subGroupId);
+      if (zoneId && zoneId !== 'all') params.append('zoneId', zoneId.trim());
+      if (subGroupId && subGroupId !== 'all') params.append('subGroupId', subGroupId.trim());
       if (isArchived !== undefined) params.append('isArchived', String(isArchived));
       const query = params.toString() ? `?${params.toString()}` : '';
       return apiClient.get<{ success: boolean; data: any[] }>(`/schedules${query}`);

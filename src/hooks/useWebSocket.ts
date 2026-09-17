@@ -68,6 +68,8 @@ const RESOURCE_ALIASES: Record<string, string[]> = {
   calls: ['call'],
   song: ['songs'],
   songs: ['song'],
+  schedule: ['schedules'],
+  schedules: ['schedule'],
 };
 
 function matchesResource(subscribedResource: string, incomingResource: string): boolean {

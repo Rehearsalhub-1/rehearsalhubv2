@@ -57,6 +57,7 @@ const MENU_SECTIONS = [
   items: [
   { id: 'songs', title: 'All Ministered Songs', icon: 'musical-notes' },
   { id: 'ongoing', title: 'Ongoing Rehearsal', icon: 'radio' },
+  { id: 'schedule', title: 'Schedule', icon: 'calendar' },
   { id: 'pre-rehearsal', title: 'Pre-Rehearsals', icon: 'calendar-outline' },
   { id: 'archives', title: 'Archives', icon: 'archive' },
   { id: 'subgroups', title: 'Church', icon: 'people' },
@@ -582,6 +583,8 @@ export default function HomeScreen({ navigation }: any) {
                   closeSidebar();
                   if (item.id === 'ongoing') {
                     navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'ongoing' });
+                  } else if (item.id === 'schedule') {
+                    navigation.navigate('SongsSchedule');
                   } else if (item.id === 'pre-rehearsal') {
                     navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'pre-rehearsal' });
                   } else if (item.id === 'archives') {

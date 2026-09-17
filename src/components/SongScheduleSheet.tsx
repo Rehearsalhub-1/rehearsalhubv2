@@ -1,5 +1,5 @@
 import { apiClient } from '../lib/apiClient';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,8 @@ import { useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useZone } from '../hooks/useZone';
 import { useChurch } from '../hooks/useUser';
-import { isHQGroup } from '../config/zones';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { api } from '../services/api';
 
 const { height: H } = Dimensions.get('window');
 const StatusPill = ({ status, theme }: { status: string, theme: any }) => {
@@ -393,12 +394,45 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
   const [selectedDayId, setSelectedDayId] = useState<string>('default_day_1');
   
   const slideAnim = useRef(new Animated.Value(H)).current;
-  
-  const minimizedTranslateY = H * 0.42; // When minimized, push it down so only 50% of screen is covered
+  const minimizedTranslateY = H * 0.42;
+
+  const zoneId = currentZone?.id || '';
+  const churchId = currentChurch?.id || '';
+  const cacheKey = `SCHEDULE_CACHE_${zoneId || 'all'}_${churchId || 'all'}_${viewHistory}`;
+
+  const fetchSchedules = useCallback(() => {
+    api.songs.getSchedule(zoneId || undefined, viewHistory, churchId || undefined).then(res => {
+      if (res?.success && Array.isArray(res.data)) {
+        const fetched = res.data.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'));
+        fetched.sort((a: any, b: any) => {
+          if (a.isCurrent && !b.isCurrent) return -1;
+          if (!a.isCurrent && b.isCurrent) return 1;
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+        setPrograms(fetched);
+        if (fetched.length > 0) {
+          AsyncStorage.setItem(cacheKey, JSON.stringify(fetched)).catch(() => {});
+        }
+        setActiveProgramId((prev) => {
+          if (!prev || !fetched.find((f: any) => f.id === prev)) {
+            const currentProg = fetched.find((f: any) => f.isCurrent);
+            if (currentProg) return currentProg.id;
+            const firstActive = fetched.find((f: any) => !f.isArchived);
+            return firstActive ? firstActive.id : (fetched.length > 0 ? fetched[0].id : null);
+          }
+          return prev;
+        });
+        setLoading(false);
+      }
+    }).catch(() => {
+      setLoading(false);
+    });
+  }, [zoneId, churchId, viewHistory, cacheKey]);
 
   useEffect(() => {
     if (visible) {
       setIsMaximized(true);
+      fetchSchedules();
       Animated.spring(slideAnim, {
         toValue: 0, useNativeDriver: true, bounciness: 0, speed: 16,
       }).start();
@@ -412,7 +446,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
         setIsMaximized(false);
       }, 300);
     }
-  }, [visible]);
+  }, [visible, fetchSchedules]);
 
   const toggleMaximize = () => {
     const nextMax = !isMaximized;
@@ -422,12 +456,8 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
       useNativeDriver: true, bounciness: 0, speed: 16,
     }).start();
   };
+
   useEffect(() => {
-    if (!currentZone?.id) return;
-    
-    const resolvedZoneId = isHQGroup(currentZone.id) ? 'zone-001' : currentZone.id;
-    const churchId = currentChurch?.id || '';
-    const cacheKey = `SCHEDULE_CACHE_${resolvedZoneId}_${churchId || 'zone'}_${viewHistory}`;
     let isMounted = true;
     const loadCache = async () => {
       try {
@@ -437,50 +467,34 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
           const fetched = Array.isArray(parsed)
             ? parsed.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'))
             : [];
-          setPrograms(fetched);
           if (fetched.length > 0) {
+            setPrograms(fetched);
             setActiveProgramId((prev) => {
               if (!prev || !fetched.find((f: any) => f.id === prev)) {
                 const currentProg = fetched.find((f: any) => f.isCurrent);
                 if (currentProg) return currentProg.id;
-                return fetched[fetched.length - 1].id;
+                const firstActive = fetched.find((f: any) => !f.isArchived);
+                return firstActive ? firstActive.id : fetched[0].id;
               }
               return prev;
             });
-          } else {
-            setActiveProgramId(null);
+            setLoading(false);
           }
-          setLoading(false);
-        } else {
-          setLoading(true);
         }
       } catch (e) {
         console.error("Error reading schedule cache:", e);
-        setLoading(true);
       }
     };
 
     loadCache();
-    const queryUrl = `/schedules?zoneId=${encodeURIComponent(resolvedZoneId)}&subGroupId=${encodeURIComponent(churchId)}&isArchived=${viewHistory}`;
-    apiClient.get<{ success: boolean; data: any[] }>(queryUrl).then(res => {
-      if (res?.success && Array.isArray(res.data) && isMounted) {
-        const fetched = res.data.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'));
-        setPrograms(fetched);
-        AsyncStorage.setItem(cacheKey, JSON.stringify(fetched)).catch(() => {});
-        setActiveProgramId((prev) => {
-          if (!prev || !fetched.find((f: any) => f.id === prev)) {
-            const currentProg = fetched.find((f: any) => f.isCurrent);
-            if (currentProg) return currentProg.id;
-            return fetched.length > 0 ? fetched[fetched.length - 1].id : null;
-          }
-          return prev;
-        });
-        setLoading(false);
-      }
-    }).catch(() => { if (isMounted) setLoading(false); });
+    fetchSchedules();
 
     return () => { isMounted = false; };
-  }, [currentZone?.id, currentChurch?.id, viewHistory]);
+  }, [fetchSchedules, cacheKey]);
+
+  useWebSocket('schedule', 'all', () => {
+    fetchSchedules();
+  }, true);
 
   const activeProgram = programs.find(p => p.id === activeProgramId) || null;
 

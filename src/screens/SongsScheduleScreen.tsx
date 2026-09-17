@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +19,7 @@ import { useTheme } from '../context/ThemeContext';
 import { api } from '../services/api';
 import { useZone } from '../hooks/useZone';
 import { useChurch } from '../hooks/useUser';
-import { isHQGroup } from '../config/zones';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
 
 const StatusPill = ({ status, theme }: { status: string, theme: any }) => {
@@ -402,9 +403,9 @@ export default function SongsScheduleScreen({ navigation }: any) {
   const [selectedWeekId, setSelectedWeekId] = useState<string>('');
   const [selectedDayId, setSelectedDayId] = useState<string>('');
 
-  const resolvedZoneId = isHQGroup(currentZone?.id || '') ? 'zone-001' : (currentZone?.id || 'zone-001');
+  const zoneId = currentZone?.id || '';
   const churchId = currentChurch?.id || '';
-  const cacheKey = `SCHEDULE_CACHE_${resolvedZoneId}_${churchId || 'zone'}_${viewHistory}`;
+  const cacheKey = `SCHEDULE_CACHE_${zoneId || 'all'}_${churchId || 'all'}_${viewHistory}`;
 
   const selectDefaultProgram = (items: any[]) => {
     if (!items || items.length === 0) {
@@ -423,7 +424,7 @@ export default function SongsScheduleScreen({ navigation }: any) {
   const fetchSchedules = React.useCallback(async (isPullToRefresh = false) => {
     if (isPullToRefresh) setRefreshing(true);
     try {
-      const res = await api.songs.getSchedule(resolvedZoneId, viewHistory, churchId);
+      const res = await api.songs.getSchedule(zoneId || undefined, viewHistory, churchId || undefined);
       if (res?.success && Array.isArray(res.data)) {
         const fetched = res.data.filter((p: any) => !p.id?.startsWith('schedule_hslhs_') && !p.id?.startsWith('schedule_midweek_') && !p.id?.startsWith('schedule_may_archive'));
         fetched.sort((a: any, b: any) => {
@@ -433,7 +434,9 @@ export default function SongsScheduleScreen({ navigation }: any) {
         });
         setPrograms(fetched);
         selectDefaultProgram(fetched);
-        AsyncStorage.setItem(cacheKey, JSON.stringify(fetched)).catch(() => {});
+        if (fetched.length > 0) {
+          AsyncStorage.setItem(cacheKey, JSON.stringify(fetched)).catch(() => {});
+        }
       }
     } catch (e) {
       console.error('[SongsScheduleScreen] fetch error:', e);
@@ -441,7 +444,7 @@ export default function SongsScheduleScreen({ navigation }: any) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [resolvedZoneId, viewHistory, churchId, cacheKey]);
+  }, [zoneId, viewHistory, churchId, cacheKey]);
 
   useEffect(() => {
     let isMounted = true;
@@ -468,6 +471,17 @@ export default function SongsScheduleScreen({ navigation }: any) {
     fetchSchedules();
     return () => { isMounted = false; };
   }, [fetchSchedules, cacheKey]);
+
+  // Real-time updates when schedule is created/updated in admin
+  useWebSocket('schedule', 'all', () => {
+    fetchSchedules(false);
+  }, true);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchSchedules(false);
+    }, [fetchSchedules])
+  );
 
   const activeProgram = programs.find(p => p.id === activeProgramId) || null;
 
