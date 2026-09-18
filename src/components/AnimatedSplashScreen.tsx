@@ -64,18 +64,17 @@ export default function AnimatedSplashScreen({
         if (!a.localUri) {
           await a.downloadAsync();
         }
-        if (isMounted && a.localUri && player) {
-          if (!hasStartedRef.current) {
-            if (typeof player.replaceAsync === 'function') {
-              await player.replaceAsync({ uri: a.localUri });
-            } else {
-              player.replace({ uri: a.localUri });
-            }
-            player.muted = isMuted;
-            try {
-              player.play();
-            } catch {}
+        // Only replace source if initialAsset didn't already have localUri and video hasn't started playing yet
+        if (isMounted && a.localUri && player && !initialAsset.localUri && !hasStartedRef.current) {
+          if (typeof player.replaceAsync === 'function') {
+            await player.replaceAsync({ uri: a.localUri });
+          } else {
+            player.replace({ uri: a.localUri });
           }
+          player.muted = isMuted;
+          try {
+            player.play();
+          } catch {}
         }
       } catch (e) {
         console.warn('Splash video local load warning:', e);
@@ -85,7 +84,7 @@ export default function AnimatedSplashScreen({
     return () => {
       isMounted = false;
     };
-  }, [player]);
+  }, [player, initialAsset.localUri, isMuted]);
 
   // Trigger smooth exit to AppContent
   const triggerFinish = useCallback(() => {

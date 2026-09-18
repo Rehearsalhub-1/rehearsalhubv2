@@ -141,13 +141,22 @@ export async function connect() {
 
       if (msg.type === 'pong') return;
       if (msg.type !== 'event') return;
-      // Invalidate stale GET cache so handlers refetch fresh data
-      clearCache();
       if (Number.isFinite(msg.sequence)) eventCursors.set(`${msg.resource}:${msg.id}`, Number(msg.sequence));
 
       subscriptions.forEach(({ resource, id, handler }) => {
         const resourceMatch = matchesResource(resource, msg.resource);
-        const idMatch = id === msg.id || id === 'all' || msg.id === 'all';
+        let idMatch = false;
+        if (id === 'all') {
+          idMatch = true;
+        } else if (msg.id === id) {
+          idMatch = true;
+        } else if (msg.id === 'all') {
+          const payload = (msg.data as any)?.data || msg.data;
+          const payloadId = payload?.id || payload?._id;
+          if (payloadId && String(payloadId) === String(id)) {
+            idMatch = true;
+          }
+        }
         if (resourceMatch && idMatch) {
           try {
             handler(msg.data);

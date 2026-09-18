@@ -111,8 +111,9 @@ export default function HistoryScreen({ route, navigation }: any) {
     'song_history',
     activeTrack?.id ? String(activeTrack.id) : '',
     (data: unknown) => {
-      const update = data as any;
+      const update = (data as any)?.data || (data as any);
       if (!update) return;
+      if (update.songId && activeTrack?.id && String(update.songId) !== String(activeTrack.id)) return;
       setHistoryEntries(prev => {
         const existingIndex = prev.findIndex(e => e.id === update.id);
         if (existingIndex !== -1) {

@@ -351,9 +351,15 @@ export default function RehearsalScreen({ navigation, route }: any) {
     }
   }, [route?.params?.resetState]);
 
+  const handledSongIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     const targetSongId = route?.params?.songId;
-    if (!targetSongId) return;
+    if (!targetSongId) {
+      handledSongIdRef.current = null;
+      return;
+    }
+    if (handledSongIdRef.current === String(targetSongId)) return;
 
     console.log('[RehearsalScreen] useEffect songId triggered:', {
       targetSongId,
@@ -424,6 +430,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
       }
 
       if (song && active) {
+        handledSongIdRef.current = String(targetSongId);
 
         if (song.category) {
           setSelectedCategory(song.category);

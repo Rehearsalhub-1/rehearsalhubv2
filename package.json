@@ -53,7 +53,6 @@
     "react-native-callkeep": "^4.3.16",
     "react-native-feather": "^2.0.0",
     "react-native-gesture-handler": "~2.32.0",
-    "react-native-onesignal": "^5.5.3",
     "react-native-qrcode-svg": "^6.3.21",
     "react-native-reanimated": "4.5.1",
     "react-native-render-html": "^6.3.4",

@@ -34,7 +34,7 @@ if (typeof (global as any).ErrorUtils !== 'undefined') {
 
 // Enable native screens and screen freezing for off-screen components
 enableScreens(true);
-enableFreeze(false);
+enableFreeze(true);
 
 LogBox.ignoreLogs(['Method moveAsync']);
 import { NavigationContainer } from '@react-navigation/native';
@@ -61,31 +61,16 @@ import GlobalLiveSongWidget from './src/components/GlobalLiveSongWidget';
 
 const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/+$/, '');
 
-const disableAnimatedImagePlayback = () => {
-  const imageProps = (ExpoImage as any)?.defaultProps ?? {};
-  (ExpoImage as any).defaultProps = {
-    ...imageProps,
-    autoplay: false,
-  };
-
-  const backgroundProps = (ExpoImageBackground as any)?.defaultProps ?? {};
-  (ExpoImageBackground as any).defaultProps = {
-    ...backgroundProps,
-    autoplay: false,
-  };
-};
-
-disableAnimatedImagePlayback();
 
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 const incomingCallsCache: Record<string, any> = {};
 
-function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
+function AppContent({ initialRoute, splashFinished }: { initialRoute: 'Login' | 'Home'; splashFinished: boolean }) {
   const { theme, themeName } = useTheme();
 
-  // ── OTA (Over-the-Air) JS bundle update check ──────────────────────────────
-  useOTAUpdates();
+  // ── OTA (Over-the-Air) JS bundle update check (deferred until splash finishes) ──
+  useOTAUpdates(splashFinished);
 
   const currentUser = useUserStore(s => s.user);
 
@@ -222,7 +207,7 @@ function AppContent({ initialRoute }: { initialRoute: 'Login' | 'Home' }) {
         <GlobalLiveSongWidget />
         <OfflineBanner />
         <SessionResumeBanner />
-        <AppUpdateChecker />
+        <AppUpdateChecker enabled={splashFinished} />
       </View>
     </SafeAreaProvider>
   );
@@ -269,11 +254,7 @@ function App() {
   useEffect(() => {
     async function prepare() {
       try {
-        // Run log flushing in background so it never slows down app launch
-        flushDebugSessionLogs().catch(() => {});
-        ensureCacheSchema().catch(() => {});
-
-        // Fast bootstrap: hydrates user session and decides route
+        // Fast bootstrap: hydrates user session and decides route without blocking CPU
         const isLoggedIn = await useUserStore.getState().bootstrap();
         setInitialRoute(isLoggedIn ? 'Home' : 'Login');
       } catch (e) {
@@ -286,12 +267,19 @@ function App() {
     prepare();
   }, []);
 
+  // Run non-critical background maintenance ONLY after splash animation has fully finished
+  useEffect(() => {
+    if (!animationFinished) return;
+    flushDebugSessionLogs().catch(() => {});
+    ensureCacheSchema().catch(() => {});
+  }, [animationFinished]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         {/* Render AppContent only when ready; show branded backdrop while bootstrapping */}
         {appIsReady && initialRoute ? (
-          <AppContent initialRoute={initialRoute} />
+          <AppContent initialRoute={initialRoute} splashFinished={animationFinished} />
         ) : (
           <View style={{ flex: 1, backgroundColor: '#070a12' }} />
         )}

@@ -23,7 +23,7 @@ const compareVersions = (v1: string, v2: string) => {
   return 0;
 };
 
-export const AppUpdateChecker = () => {
+export const AppUpdateChecker = ({ enabled = true }: { enabled?: boolean }) => {
   const [updateConfig, setUpdateConfig] = useState<AppUpdateConfig | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isForceUpdate, setIsForceUpdate] = useState(false);
@@ -31,6 +31,7 @@ export const AppUpdateChecker = () => {
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
 
   useEffect(() => {
+    if (!enabled) return;
     let isMounted = true;
 
     const checkUpdate = async () => {

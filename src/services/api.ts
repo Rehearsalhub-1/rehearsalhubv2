@@ -2,7 +2,7 @@ import { apiClient } from '../lib/apiClient';
 
 /**
  * ============================================================================
- * Centralized API Service (The Single Hub)
+ * Centralized API Service 
  * All screens connect through this single service — no fragmented calls.
  * ============================================================================
  */

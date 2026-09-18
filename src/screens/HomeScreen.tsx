@@ -57,7 +57,6 @@ const MENU_SECTIONS = [
   items: [
   { id: 'songs', title: 'All Ministered Songs', icon: 'musical-notes' },
   { id: 'ongoing', title: 'Ongoing Rehearsal', icon: 'radio' },
-  { id: 'schedule', title: 'Schedule', icon: 'calendar' },
   { id: 'pre-rehearsal', title: 'Pre-Rehearsals', icon: 'calendar-outline' },
   { id: 'archives', title: 'Archives', icon: 'archive' },
   { id: 'subgroups', title: 'Church', icon: 'people' },
@@ -91,21 +90,9 @@ const CLOUD_ASSETS = [
   { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud4_min.webp' }, // cloud 4 for third card (last card)
 ];
 
-function LoopingOnceImage({ source, durationMs = 15800, style, contentPosition }: { source: any; durationMs?: number; style: any; contentPosition?: any }) {
-  const imageRef = useRef<any>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        imageRef.current?.stopAnimating?.();
-      } catch {}
-    }, durationMs);
-    return () => clearTimeout(timer);
-  }, [durationMs]);
-
+function LoopingOnceImage({ source, style, contentPosition }: { source: any; durationMs?: number; style: any; contentPosition?: any }) {
   return (
     <Image
-      ref={imageRef}
       source={source}
       style={style}
       contentFit="cover"

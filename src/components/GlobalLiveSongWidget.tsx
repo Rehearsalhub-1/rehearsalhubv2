@@ -50,8 +50,8 @@ export default function GlobalLiveSongWidget() {
   // Pulse animation for the green live indicator
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(0.7)).current;
-  // Animated bottom offset — springs smoothly when mini-player shows/hides
-  const bottomAnim = useRef(new Animated.Value(Math.max(90, 75 + insets.bottom))).current;
+  // Animated translateY offset — springs smoothly on native driver (GPU) when mini-player shows/hides
+  const translateYAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -141,20 +141,19 @@ export default function GlobalLiveSongWidget() {
     };
   }, [currentZone?.id, fetchActiveSongs]);
 
-  // Smoothly animate the widget's bottom position when the mini-player appears
+  // Smoothly animate the widget position on GPU native driver when mini-player appears
   const hasMiniPlayer = Boolean(currentTrack?.id);
-  const targetBottom = hasMiniPlayer
-    ? Math.max(145, 135 + insets.bottom)
-    : Math.max(90, 75 + insets.bottom);
+  const targetOffsetY = hasMiniPlayer ? -55 : 0;
+  const baseBottom = Math.max(90, 75 + insets.bottom);
 
   useEffect(() => {
-    Animated.spring(bottomAnim, {
-      toValue: targetBottom,
-      useNativeDriver: false, // 'bottom' is a layout prop, can't use native driver
+    Animated.spring(translateYAnim, {
+      toValue: targetOffsetY,
+      useNativeDriver: true,
       speed: 18,
       bounciness: 4,
     }).start();
-  }, [targetBottom, bottomAnim]);
+  }, [targetOffsetY, translateYAnim]);
 
   // Visibility guard:
   // Hide if on a screen that forbids live widget (Chat screens, Calls, Player, Auth),
@@ -210,7 +209,8 @@ export default function GlobalLiveSongWidget() {
           {
             backgroundColor: theme.colors.background,
             borderColor: '#22c55e',
-            bottom: bottomAnim,
+            bottom: baseBottom,
+            transform: [{ translateY: translateYAnim }],
           },
         ]}
       >

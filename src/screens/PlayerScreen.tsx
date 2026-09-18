@@ -367,12 +367,6 @@ export default function PlayerScreen({ route, navigation }: any) {
   const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack || fallbackTrack);
   const lastPlayedTrackIdRef = useRef<string | null>(null);
 
-  // Synchronously update activeTrack if route.params provides a new/different track
-  // (Prevents the 1-frame/split-second flash of the previous song)
-  if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
-    setActiveTrack(paramTrack);
-  }
-
   // Sync activeTrack when navigating with new route params
   useEffect(() => {
     if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
@@ -508,6 +502,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (!update || typeof update !== 'object') return;
     setActiveTrack((prev: any) => {
       if (!prev) return prev;
+      if (update.id && prev.id && String(update.id) !== String(prev.id)) {
+        return prev;
+      }
       const rawAudioUrl = update.audioFile || update.audioUrls?.full || null;
       // Only compute a new audioUrl if the incoming event actually carries one
       // that differs from what we already have — avoids re-triggering play().
@@ -534,10 +531,11 @@ export default function PlayerScreen({ route, navigation }: any) {
   // Targeted subscription: handles updates for THIS specific song
   useWebSocket('song', activeTrack?.id ? String(activeTrack.id) : '', useCallback((eventData: any) => {
     const update = eventData?.data || eventData;
+    if (update?.id && activeTrack?.id && String(update.id) !== String(activeTrack.id)) return;
     // Record this event as handled so the 'all' sub below skips it
     if (update?.id) lastWsUpdateIdRef.current = String(update.id) + (update._seq || update.sequence || Date.now());
     applySongUpdate(eventData);
-  }, [applySongUpdate]), Boolean(activeTrack?.id));
+  }, [applySongUpdate, activeTrack?.id]), Boolean(activeTrack?.id));
 
   // Broadcast subscription: only fires if the targeted sub didn't already handle it
   useWebSocket('song', 'all', useCallback((eventData: any) => {
@@ -622,6 +620,7 @@ export default function PlayerScreen({ route, navigation }: any) {
           return prev;
         }
         lastPlayedTrackIdRef.current = currentId;
+        lastPlayedAudioUrlRef.current = currentTrack.audioUrl || '';
         return {
           ...prev,
           ...currentTrack,
@@ -870,11 +869,12 @@ export default function PlayerScreen({ route, navigation }: any) {
     const activeAudioUrl = activeTrack.audioUrl || '';
     const isSameTrack = currentId === activeId;
     // Only reload audio if the URL actually changed to a different value
-    const audioUrlChanged = activeAudioUrl && activeAudioUrl !== lastPlayedAudioUrlRef.current;
+    const audioUrlChanged = Boolean(activeAudioUrl && activeAudioUrl !== lastPlayedAudioUrlRef.current);
     const needsAudioReload = isSameTrack && !currentTrack?.audioUrl && audioUrlChanged;
 
     if (isSameTrack && !needsAudioReload) {
       lastPlayedTrackIdRef.current = activeId;
+      lastPlayedAudioUrlRef.current = activeAudioUrl;
       return;
     }
 

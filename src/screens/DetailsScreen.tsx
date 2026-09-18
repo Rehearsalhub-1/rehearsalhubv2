@@ -12,7 +12,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
 
@@ -26,40 +25,38 @@ export default function DetailsScreen({ route, navigation }: any) {
   const paramTrack = route.params?.activeTrack;
   const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack);
 
-  if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
-    setActiveTrack(paramTrack);
-  }
+  useEffect(() => {
+    if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+      setActiveTrack(paramTrack);
+    }
+  }, [paramTrack]);
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
-  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
-  const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack, skipToNext, skipToPrevious } = useTrackPlayer();
-
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
+
   useWebSocket(
     'songs',
     activeTrack?.id || '',
     (data: unknown) => {
-      const d = data as any;
+      const d = (data as any)?.data || (data as any);
       if (!d) return;
-      setActiveTrack((prev: any) => ({
-        ...prev,
-        leadSinger: d.leadSinger || prev.leadSinger,
-        writer: d.writer || prev.writer,
-        program: d.program || d.subtitle || prev.program,
-        arrangement: d.arrangement || prev.arrangement,
-        publisher: d.publisher || prev.publisher,
-        year: d.year || prev.year,
-      }));
+      if (d.id && activeTrack?.id && String(d.id) !== String(activeTrack.id)) return;
+      setActiveTrack((prev: any) => {
+        if (!prev) return prev;
+        if (d.id && prev.id && String(d.id) !== String(prev.id)) return prev;
+        return {
+          ...prev,
+          leadSinger: d.leadSinger !== undefined ? d.leadSinger : prev.leadSinger,
+          writer: d.writer !== undefined ? d.writer : prev.writer,
+          program: (d.program || d.subtitle) !== undefined ? (d.program || d.subtitle) : prev.program,
+          arrangement: d.arrangement !== undefined ? d.arrangement : prev.arrangement,
+          publisher: d.publisher !== undefined ? d.publisher : prev.publisher,
+          year: d.year !== undefined ? d.year : prev.year,
+        };
+      });
     },
     !!activeTrack?.id
   );
 
-  const formatTime = (millis: number) => {
-
-    if (!millis || isNaN(millis)) return "0:00";
-    const totalSeconds = Math.floor(millis / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-  };
 
   return (
     <View style={styles.container}>

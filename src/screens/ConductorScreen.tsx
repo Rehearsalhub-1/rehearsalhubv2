@@ -14,7 +14,6 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
 import { formatLyricsHtml } from '../utils/lyricsFormatter';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import Svg, { Path } from 'react-native-svg';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAnnotationsAndNotes } from '../hooks/useAnnotationsAndNotes';
@@ -28,7 +27,14 @@ export default function ConductorScreen({ route, navigation }: any) {
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
-  const [activeTrack, setActiveTrack] = useState(initialTrack);
+  const paramTrack = route.params?.activeTrack;
+  const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack);
+
+  useEffect(() => {
+    if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+      setActiveTrack(paramTrack);
+    }
+  }, [paramTrack]);
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
 
@@ -54,7 +60,6 @@ export default function ConductorScreen({ route, navigation }: any) {
     });
   };
 
-  const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack, skipToNext, skipToPrevious } = useTrackPlayer();
 
   const {
     isPrivileged,
@@ -78,28 +83,25 @@ export default function ConductorScreen({ route, navigation }: any) {
     'songs',
     activeTrack?.id || '',
     (data: unknown) => {
-      const d = data as any;
+      const d = (data as any)?.data || (data as any);
       if (!d) return;
-      setActiveTrack((prev: any) => ({
-        ...prev,
-        conductorGuide: d.solfas || d.conductorGuide || d.guide || prev.conductorGuide,
-        key: d.key || prev.key,
-        tempo: d.tempo || prev.tempo,
-        conductor: d.conductor || prev.conductor,
-        title: d.title || prev.title,
-      }));
+      if (d.id && activeTrack?.id && String(d.id) !== String(activeTrack.id)) return;
+      setActiveTrack((prev: any) => {
+        if (!prev) return prev;
+        if (d.id && prev.id && String(d.id) !== String(prev.id)) return prev;
+        return {
+          ...prev,
+          conductorGuide: (d.solfas || d.conductorGuide || d.guide) !== undefined ? (d.solfas || d.conductorGuide || d.guide) : prev.conductorGuide,
+          key: d.key !== undefined ? d.key : prev.key,
+          tempo: d.tempo !== undefined ? d.tempo : prev.tempo,
+          conductor: d.conductor !== undefined ? d.conductor : prev.conductor,
+          title: d.title !== undefined ? d.title : prev.title,
+        };
+      });
     },
     !!activeTrack?.id
   );
 
-  const formatTime = (millis: number) => {
-
-    if (!millis || isNaN(millis)) return "0:00";
-    const totalSeconds = Math.floor(millis / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-  };
 
   return (
     <View style={styles.container}>

@@ -13,7 +13,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
 
@@ -24,34 +23,37 @@ export default function CommentsScreen({ route, navigation }: any) {
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
-  const [activeTrack, setActiveTrack] = useState(initialTrack);
+  const paramTrack = route.params?.activeTrack;
+  const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack);
+
+  useEffect(() => {
+    if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
+      setActiveTrack(paramTrack);
+    }
+  }, [paramTrack]);
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
-  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
-  const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack, skipToNext, skipToPrevious } = useTrackPlayer();
-
+  const [isTitleExpanded, setIsTitleExpanded] = useState(false);
+
   useWebSocket(
     'songs',
     activeTrack?.id || '',
     (data: unknown) => {
-      const d = data as any;
+      const d = (data as any)?.data || (data as any);
       if (!d) return;
-      setActiveTrack((prev: any) => ({
-        ...prev,
-        comments: d.comments || prev.comments,
-        title: d.title || prev.title,
-      }));
+      if (d.id && activeTrack?.id && String(d.id) !== String(activeTrack.id)) return;
+      setActiveTrack((prev: any) => {
+        if (!prev) return prev;
+        if (d.id && prev.id && String(d.id) !== String(prev.id)) return prev;
+        return {
+          ...prev,
+          comments: d.comments !== undefined ? d.comments : prev.comments,
+          title: d.title !== undefined ? d.title : prev.title,
+        };
+      });
     },
     !!activeTrack?.id
   );
 
-  const formatTime = (millis: number) => {
-
-    if (!millis || isNaN(millis)) return "0:00";
-    const totalSeconds = Math.floor(millis / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-  };
 
   return (
     <View style={styles.container}>

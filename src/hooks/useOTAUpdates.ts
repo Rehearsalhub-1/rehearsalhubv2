@@ -27,12 +27,12 @@ export interface OTACheckResult {
  * The update is applied automatically on the NEXT cold launch — no modal, no interruption.
  * A hard 8-second timeout prevents slow EAS network responses from hanging the app.
  */
-export function useOTAUpdates() {
+export function useOTAUpdates(enabled = true) {
   const lastCheckedAt = useRef<number>(0);
   const isChecking = useRef<boolean>(false);
 
   const runBackgroundCheck = async () => {
-    if (__DEV__ || !Updates.isEnabled) return;
+    if (!enabled || __DEV__ || !Updates.isEnabled) return;
     if (isChecking.current) return;
 
     const now = Date.now();

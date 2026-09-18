@@ -139,6 +139,7 @@ let globalRepeatMode: 'off' | 'track' | 'playlist' = 'off';
 let globalPlaybackRate = 1.0;
 let globalIsLoading = false;
 let globalIsFetching = false;
+let lastQueueEndedHandledTime = 0;
 let globalABLoop: { start: number | null; end: number | null; active: boolean } = {
   start: null,
   end: null,
@@ -391,10 +392,14 @@ export const useTrackPlayer = () => {
       } catch (e) {
         console.error('Failed to update active track from RNTP event:', e);
       }
-    }
+    }
     if (event.type === Event.PlaybackQueueEnded) {
       if ((global as any).isChatAudio) return;
-      if (globalRepeatMode === 'track' && globalCurrentTrack) {
+      const now = Date.now();
+      if (now - lastQueueEndedHandledTime < 800) return;
+      lastQueueEndedHandledTime = now;
+
+      if (globalRepeatMode === 'track' && globalCurrentTrack) {
         setTimeout(async () => {
           try {
             await TrackPlayer.seekTo(0);
@@ -403,7 +408,7 @@ export const useTrackPlayer = () => {
             notifySubscribers();
           } catch {}
         }, 200);
-      } else if (globalRepeatMode === 'playlist') {
+      } else if (globalRepeatMode === 'playlist') {
         const nextIndex = globalQueueIndex + 1;
         const targetTrack = nextIndex < globalQueue.length ? globalQueue[nextIndex] : globalQueue[0];
         if (targetTrack) {
@@ -414,27 +419,15 @@ export const useTrackPlayer = () => {
           globalIsPlaying = false;
           notifySubscribers();
         }
-      } else if (globalQueue.length > 1) {
-        const nextIndex = globalQueueIndex + 1;
-        if (nextIndex < globalQueue.length) {
-          const nextTrack = globalQueue[nextIndex];
-          if (nextTrack) {
-            setTimeout(() => {
-              (async () => { await play(nextTrack); })();
-            }, 300);
-          }
-        } else {
-          globalIsPlaying = false;
-          notifySubscribers();
-        }
-      } else {
+      } else {
+        // Repeat mode is 'off' — do NOT automatically advance songs!
         globalIsPlaying = false;
         notifySubscribers();
       }
     }
   });
 
-  const play = useCallback(async (track?: any, queue?: any[], autoplay: boolean = true) => {
+  const play = useCallback(async (track?: any, queue?: any[], autoplay: boolean = true) => {
     if (queue && queue.length > 0) {
       globalOriginalQueue = queue;
       if (globalIsShuffle) {
