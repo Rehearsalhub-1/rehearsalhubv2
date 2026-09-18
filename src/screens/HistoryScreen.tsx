@@ -33,11 +33,11 @@ export default function HistoryScreen({ route, navigation }: any) {
   const { theme } = useTheme();
   const styles = getStyles(theme);
 
-  const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
+  const { activeTrack: initialTrack, bgColor = '#825a1e', initialTab = 'audio' } = route.params || {};
   const [activeTrack, setActiveTrack] = useState(initialTrack);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState('lyrics');
-  const [expandedId, setExpandedId] = useState<string | null>('lyrics-1');
+  const [activeTab, setActiveTab] = useState(initialTab || 'audio');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const { isPlaying: isGlobalPlaying, togglePlayback, play: playGlobal, currentTrack } = useTrackPlayer();
 
   const handlePlayHistoryAudio = async (trackItem: any, url: string) => {
@@ -94,6 +94,9 @@ export default function HistoryScreen({ route, navigation }: any) {
             return timeB - timeA;
           });
           setHistoryEntries(entries);
+          if (entries.length > 0) {
+            setExpandedId(entries[0].id);
+          }
         } else {
           setHistoryEntries([]);
         }
@@ -241,7 +244,8 @@ export default function HistoryScreen({ route, navigation }: any) {
     }
 
     // Otherwise, render formatted text/HTML (lyrics, conductor guide, comments)
-    const formattedHtml = formatLyricsHtml(rawNewVal);
+    const textToRender = rawNewVal || entry?.notes || entry?.description || '';
+    const formattedHtml = formatLyricsHtml(textToRender);
 
     return (
       <RenderHtml
@@ -260,8 +264,8 @@ export default function HistoryScreen({ route, navigation }: any) {
   };
 
   const tabs = [
-  { id: 'lyrics', label: 'Lyrics History' },
   { id: 'audio', label: 'Audio History' },
+  { id: 'lyrics', label: 'Lyrics History' },
   { id: 'conductor', label: 'Conductor History' },
   { id: 'solfa', label: 'Solfa History' },
   { id: 'comments', label: 'Comments History' },
@@ -325,24 +329,27 @@ export default function HistoryScreen({ route, navigation }: any) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.tabScrollContainer}>
             
-            {tabs.map((tab) =>
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tabPill, activeTab === tab.id && styles.tabPillActive]}
-              onPress={() => {
-                setActiveTab(tab.id);
+            {tabs.map((tab) => {
+              const count = getHistoryData(tab.id).length;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  style={[styles.tabPill, activeTab === tab.id && styles.tabPillActive]}
+                  onPress={() => {
+                    setActiveTab(tab.id);
 
-                const items = getHistoryData(tab.id);
-                const firstItem = items?.[0];
-                setExpandedId(firstItem ? firstItem.id : null);
-              }}
-              activeOpacity={0.8}>
-              
-                <Text style={[styles.tabPillText, activeTab === tab.id && styles.tabPillTextActive]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            )}
+                    const items = getHistoryData(tab.id);
+                    const firstItem = items?.[0];
+                    setExpandedId(firstItem ? firstItem.id : null);
+                  }}
+                  activeOpacity={0.8}>
+                  
+                  <Text style={[styles.tabPillText, activeTab === tab.id && styles.tabPillTextActive]}>
+                    {tab.label}{count > 0 ? ` (${count})` : ''}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
