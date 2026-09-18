@@ -50,26 +50,24 @@ import { useUserStore } from '../hooks/useUser';
 import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useLiveSongStore, isLiveSong } from '../stores/liveSongStore';
+import { PlayerOptionsMenuModal } from '../components/player/modals/PlayerOptionsMenuModal';
+import { PlayerSpeedModal } from '../components/player/modals/PlayerSpeedModal';
+import { PlayerSleepTimerModal } from '../components/player/modals/PlayerSleepTimerModal';
+import { PlayerQueueModal } from '../components/player/modals/PlayerQueueModal';
+import { PlayerMoreAssetsModal } from '../components/player/modals/PlayerMoreAssetsModal';
+import { PlayerAddToPlaylistModal } from '../components/player/modals/PlayerAddToPlaylistModal';
+import { PlayerAudioPartsModal } from '../components/player/modals/PlayerAudioPartsModal';
+import { ABLooperStrip } from '../components/player/ABLooperStrip';
+import { PlayerPreviewContent } from '../components/player/PlayerPreviewContent';
+import { PlayerBottomTabBar } from '../components/player/PlayerBottomTabBar';
+import { ExpandableText } from '../components/player/ExpandableText';
+import { ToastHUD, DoubleTapOverlay, PlayerProgressSlider } from '../components/player/PlayerHUDOverlays';
+import { PlayerControlsRow } from '../components/player/PlayerControlsRow';
+import { PlayerAnnotationFAB } from '../components/player/PlayerAnnotationFAB';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const SPEED_OPTIONS = [
-  { label: '0.75x', value: 0.75, description: 'Very Slow (Practice tempo)' },
-  { label: '0.85x', value: 0.85, description: 'Slow' },
-  { label: '1.0x', value: 1.0, description: 'Normal Speed' },
-  { label: '1.15x', value: 1.15, description: 'Slightly Faster' },
-  { label: '1.25x', value: 1.25, description: 'Faster' },
-  { label: '1.5x', value: 1.5, description: 'Quick Listen' },
-];
-
-const SLEEP_TIMER_OPTIONS = [
-  { label: 'Off', minutes: 0 },
-  { label: '15 minutes', minutes: 15 },
-  { label: '30 minutes', minutes: 30 },
-  { label: '45 minutes', minutes: 45 },
-  { label: '60 minutes', minutes: 60 },
-  { label: 'End of current song', minutes: -1 },
-];
+// SPEED_OPTIONS and SLEEP_TIMER_OPTIONS live in their respective modal components.
 
 const isConductorGuideText = (text: string | null | undefined): boolean => {
   if (!text) return false;
@@ -92,243 +90,7 @@ const isConductorGuideText = (text: string | null | undefined): boolean => {
   );
 };
 
-const ExpandableText = ({ style, children, gradientColors }: { style: any, children: React.ReactNode, gradientColors?: readonly [string, string, ...string[]] }) => {
-  const [expanded, setExpanded] = useState(false);
-  const textProps = {
-    numberOfLines: expanded ? undefined : 1,
-    ellipsizeMode: "tail" as const,
-    onPress: () => setExpanded(!expanded),
-    suppressHighlighting: true,
-  };
-
-  const textElement = (
-    <Text style={style} {...textProps}>
-      {children}
-    </Text>
-  );
-
-  if (gradientColors && gradientColors.length > 0) {
-    return (
-      <MaskedView maskElement={textElement} style={style}>
-        <LinearGradient
-          colors={gradientColors}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <Text style={[style, { opacity: 0 }]} {...textProps}>
-          {children}
-        </Text>
-      </MaskedView>
-    );
-  }
-
-  return textElement;
-};
-
-// Floating HUD Toast for Mode/Gesture Feedback
-const ToastHUD = ({ message, opacity, theme }: { message: { text: string; icon?: string } | null; opacity: Animated.Value; theme: any }) => {
-  if (!message) return null;
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        top: 92,
-        alignSelf: 'center',
-        zIndex: 999,
-        opacity,
-        transform: [{
-          translateY: opacity.interpolate({
-            inputRange: [0, 1],
-            outputRange: [-12, 0]
-          })
-        }],
-        backgroundColor: 'rgba(15, 15, 25, 0.92)',
-        paddingHorizontal: 16,
-        paddingVertical: 9,
-        borderRadius: 24,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.18)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.5,
-        shadowRadius: 10,
-        elevation: 12,
-      }}
-    >
-      {message.icon && (
-        <Ionicons name={message.icon as any} size={18} color={theme.colors.accent} />
-      )}
-      <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '700', letterSpacing: 0.3 }}>
-        {message.text}
-      </Text>
-    </Animated.View>
-  );
-};
-
-// Double-Tap Jump Overlay
-const DoubleTapOverlay = ({ side, anim, theme }: { side: 'left' | 'right' | null; anim: Animated.Value; theme: any }) => {
-  if (!side) return null;
-  const isLeft = side === 'left';
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFill,
-        {
-          justifyContent: 'center',
-          alignItems: isLeft ? 'flex-start' : 'flex-end',
-          paddingHorizontal: 32,
-          zIndex: 50,
-          opacity: anim,
-        }
-      ]}
-    >
-      <Animated.View
-        style={{
-          width: 68,
-          height: 68,
-          borderRadius: 34,
-          backgroundColor: 'rgba(0, 0, 0, 0.72)',
-          borderWidth: 1.5,
-          borderColor: theme.colors.accent,
-          alignItems: 'center',
-          justifyContent: 'center',
-          transform: [{
-            scale: anim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.75, 1.05]
-            })
-          }],
-          shadowColor: theme.colors.accent,
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.6,
-          shadowRadius: 12,
-        }}
-      >
-        <Ionicons name={isLeft ? "play-back" : "play-forward"} size={26} color={theme.colors.accent} />
-        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '800', marginTop: 2 }}>
-          {isLeft ? '-10s' : '+10s'}
-        </Text>
-      </Animated.View>
-    </Animated.View>
-  );
-};
-
-const PlayerProgressSlider = ({
-  theme,
-  styles,
-  formatTime,
-  seekTo,
-  hasAudio,
-  abLoop,
-}: any) => {
-  const progress = useTrackPlayerProgress(200);
-  const duration = hasAudio ? progress.duration : 0;
-  const position = hasAudio ? progress.position : 0;
-  const [isSeeking, setIsSeeking] = useState(false);
-  const [seekDisplayValue, setSeekDisplayValue] = useState(0);
-
-  const handleSlidingStart = () => {
-    setIsSeeking(true);
-    setSeekDisplayValue(position);
-  };
-
-  const handleSlidingComplete = async (val: number) => {
-    await seekTo(val);
-    setTimeout(() => {
-      setIsSeeking(false);
-    }, 150);
-  };
-
-  const currentValue = isSeeking ? seekDisplayValue : position;
-
-  const startPercent = (duration > 0 && abLoop?.start !== null) ? Math.min(100, Math.max(0, (abLoop.start / duration) * 100)) : null;
-  const endPercent = (duration > 0 && abLoop?.end !== null) ? Math.min(100, Math.max(0, (abLoop.end / duration) * 100)) : null;
-
-  return (
-    <View style={styles.progressContainer}>
-      <View style={{ position: 'relative', width: '100%', justifyContent: 'center' }}>
-        {/* Loop Region Highlight on Scrubber */}
-        {startPercent !== null && endPercent !== null && endPercent > startPercent && (
-          <View
-            style={{
-              position: 'absolute',
-              left: `${startPercent}%`,
-              width: `${endPercent - startPercent}%`,
-              height: 4,
-              backgroundColor: theme.colors.accent,
-              borderRadius: 2,
-              top: 18,
-              zIndex: 1,
-              opacity: 0.6,
-            }}
-          />
-        )}
-
-        {/* Marker A Flag */}
-        {startPercent !== null && (
-          <View
-            style={{
-              position: 'absolute',
-              left: `${startPercent}%`,
-              top: 8,
-              width: 3,
-              height: 24,
-              backgroundColor: '#38bdf8',
-              borderRadius: 2,
-              zIndex: 3,
-              marginLeft: -1.5,
-            }}
-          />
-        )}
-
-        {/* Marker B Flag */}
-        {endPercent !== null && (
-          <View
-            style={{
-              position: 'absolute',
-              left: `${endPercent}%`,
-              top: 8,
-              width: 3,
-              height: 24,
-              backgroundColor: '#ec4899',
-              borderRadius: 2,
-              zIndex: 3,
-              marginLeft: -1.5,
-            }}
-          />
-        )}
-
-        <Slider
-          style={{ width: '100%', height: 40 }}
-          minimumValue={0}
-          maximumValue={duration > 0 ? duration : 100}
-          value={currentValue}
-          minimumTrackTintColor={hasAudio ? theme.colors.trackMin : theme.colors.textMuted}
-          maximumTrackTintColor={theme.colors.trackMax}
-          thumbTintColor={hasAudio ? theme.colors.thumbTint : 'transparent'}
-          onSlidingStart={handleSlidingStart}
-          onValueChange={(val) => {
-            setSeekDisplayValue(val);
-          }}
-          onSlidingComplete={handleSlidingComplete}
-          disabled={!hasAudio}
-        />
-      </View>
-      <View style={styles.timeRow}>
-        <Text style={styles.timeText}>{hasAudio ? formatTime(currentValue) : '--:--'}</Text>
-        <Text style={styles.timeText}>
-          {hasAudio && duration > 0 ? `-${formatTime(Math.max(0, duration - currentValue))}` : '--:--'}
-        </Text>
-      </View>
-    </View>
-  );
-};
+// ToastHUD, DoubleTapOverlay, and PlayerProgressSlider live in PlayerHUDOverlays.tsx
 
 export default function PlayerScreen({ route, navigation }: any) {
   const { theme } = useTheme();
@@ -374,11 +136,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     }
   }, [paramTrack]);
 
-  // Hydrate full song data from API when track is missing details (e.g. opened from chat share)
+  // Always hydrate latest full song data from API to ensure updates (lyrics, solfas, key, tempo, audio stems) are reflected
   useEffect(() => {
     if (!activeTrack?.id) return;
-    const isStub = !activeTrack.lyrics && !activeTrack.audioUrl;
-    if (!isStub) return;
 
     let active = true;
     api.songs.getById(String(activeTrack.id)).then(res => {
@@ -390,10 +150,10 @@ export default function PlayerScreen({ route, navigation }: any) {
         setActiveTrack((prev: any) => ({
           ...prev,
           ...song,
-          audioUrl: songAudioUrl || prev?.audioUrl,
-          lyrics: song.lyrics || prev?.lyrics,
-          solfa: song.notation || song.solfas || song.solfa || prev?.solfa,
-          conductorGuide: song.conductorGuide || song.guide || prev?.conductorGuide,
+          audioUrl: songAudioUrl || song.audioFile || prev?.audioUrl,
+          lyrics: song.lyrics !== undefined ? song.lyrics : prev?.lyrics,
+          solfa: (song.notation || song.solfas || song.solfa) !== undefined ? (song.notation || song.solfas || song.solfa) : prev?.solfa,
+          conductorGuide: (song.conductorGuide || song.guide) !== undefined ? (song.conductorGuide || song.guide) : prev?.conductorGuide,
         }));
       }
     }).catch(err => {
@@ -1260,337 +1020,57 @@ export default function PlayerScreen({ route, navigation }: any) {
               </View>
             </View>
 
-                   {/* Solfa vs Conductor resolved data */}
-          {(() => {
-            const resolvedConductorGuide = activeTrack.conductorGuide || (isConductorGuideText(activeTrack.solfa) ? activeTrack.solfa : '');
-            const resolvedSolfa = isConductorGuideText(activeTrack.solfa) ? '' : (activeTrack.solfa || '');
-            const resolvedHistory = songHistorySummary || activeTrack.history || (activeTrack.program ? `**Ministered at ${activeTrack.program}**\n\n- **Lead Singer:** ${activeTrack.leadSinger || 'Loveworld Singers'}\n- **Conductor:** ${activeTrack.conductor || '—'}\n- **Key:** ${activeTrack.key || '—'} · **Tempo:** ${activeTrack.tempo || '—'}\n- **Rehearsal Count:** x${activeTrack.rehearsalCount ?? 0}` : '');
+          {/* Tab content: Lyrics / Conductor / Solfa / History / Comments / Details */}
+          <PlayerPreviewContent
+            activePreviewTab={activePreviewTab}
+            activeTrack={activeTrack}
+            songHistorySummary={songHistorySummary}
+            fromAllSongs={fromAllSongs}
+            isHQ={isHQ}
+            contentWidth={width - 100}
+            parseMarkdown={parseMarkdown}
+            isConductorGuideText={isConductorGuideText}
+            navigation={navigation}
+            theme={theme}
+          />
 
-            return (
-              <>
-                {activePreviewTab === 'Lyrics' && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Lyrics preview</Text>
-                      {activeTrack.lyrics ? (
-                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                          <RenderHtml
-                            contentWidth={width - 100}
-                            source={{ html: parseMarkdown(activeTrack.lyrics) }}
-                            baseStyle={{ ...theme.typography.htmlBase }}
-                            tagsStyles={{
-                              p: { margin: 0, padding: 0 },
-                              strong: { color: theme.colors.accent, fontWeight: '800' },
-                              b: { color: theme.colors.accent, fontWeight: '800' }
-                            }}
-                          />
-                        </ScrollView>
-                      ) : (
-                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
-                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No lyrics available.</Text>
-                        </View>
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        navigation.navigate('Lyrics', { activeTrack, backgroundColor: "#8b5cf6" });
-                      }}>
-                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {activePreviewTab === 'Conductor' && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Conductor preview</Text>
-                      {resolvedConductorGuide ? (
-                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                          <RenderHtml
-                            contentWidth={width - 100}
-                            source={{ html: parseMarkdown(resolvedConductorGuide) }}
-                            baseStyle={{ ...theme.typography.htmlBase }}
-                            tagsStyles={{
-                              p: { margin: 0, padding: 0 },
-                              strong: { color: theme.colors.accent, fontWeight: '800' },
-                              b: { color: theme.colors.accent, fontWeight: '800' }
-                            }}
-                          />
-                        </ScrollView>
-                      ) : (
-                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
-                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No conductor guide provided.</Text>
-                        </View>
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        navigation.navigate('Conductor', { activeTrack, backgroundColor: "#8b5cf6" });
-                      }}>
-                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {activePreviewTab === 'Solfa' && (!fromAllSongs || isHQ) && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Solfa preview</Text>
-                      {resolvedSolfa ? (
-                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                          <RenderHtml
-                            contentWidth={width - 100}
-                            source={{ html: parseMarkdown(resolvedSolfa) }}
-                            baseStyle={{ ...theme.typography.htmlBase }}
-                            tagsStyles={{
-                              p: { margin: 0, padding: 0 },
-                              strong: { color: theme.colors.accent, fontWeight: '800' },
-                              b: { color: theme.colors.accent, fontWeight: '800' }
-                            }}
-                          />
-                        </ScrollView>
-                      ) : (
-                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
-                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No solfa notation available.</Text>
-                        </View>
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        navigation.navigate('Solfa', { activeTrack, backgroundColor: "#8b5cf6" });
-                      }}>
-                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {activePreviewTab === 'History' && (!fromAllSongs || isHQ) && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>History preview</Text>
-                      {resolvedHistory ? (
-                        <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                          <RenderHtml
-                            contentWidth={width - 100}
-                            source={{ html: parseMarkdown(resolvedHistory) }}
-                            baseStyle={{ ...theme.typography.htmlBase }}
-                            tagsStyles={{
-                              p: { margin: 0, padding: 0 },
-                              strong: { color: theme.colors.accent, fontWeight: '800' },
-                              b: { color: theme.colors.accent, fontWeight: '800' }
-                            }}
-                          />
-                        </ScrollView>
-                      ) : (
-                        <View style={{ minHeight: 100, justifyContent: 'center' }}>
-                          <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No history available.</Text>
-                        </View>
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        navigation.navigate('History', { activeTrack, backgroundColor: "#8b5cf6" });
-                      }}>
-                      <Ionicons name="expand" size={22} color={theme.colors.accent} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
-            );
-          })()}
-
-
-
-          {activePreviewTab === 'Comments' && !fromAllSongs && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20, paddingHorizontal: 4 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Comments preview</Text>
-                {activeTrack.comments ? (
-                  <ScrollView nestedScrollEnabled style={{ maxHeight: 320, minHeight: 130 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
-                    <RenderHtml
-                      contentWidth={width - 100}
-                      source={{ html: parseMarkdown(activeTrack.comments) }}
-                      baseStyle={{ ...theme.typography.htmlBase }}
-                      tagsStyles={{
-                        p: { margin: 0, padding: 0 },
-                        strong: { color: theme.colors.accent, fontWeight: '800' },
-                        b: { color: theme.colors.accent, fontWeight: '800' }
-                      }}
-                    />
-                  </ScrollView>
-                ) : (
-                  <View style={{ minHeight: 100, justifyContent: 'center' }}>
-                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>No comments available.</Text>
-                  </View>
-                )}
-              </View>
-              <TouchableOpacity
-                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                activeOpacity={0.8}
-                onPress={() => {
-                  navigation.navigate('Comments', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                <Ionicons name="expand" size={22} color={theme.colors.accent} />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {activePreviewTab === 'Details' && !fromAllSongs && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Song Details</Text>
-                <View style={{ maxHeight: 120, overflow: 'hidden' }}>
-                  <ExpandableText style={{ fontSize: 13, color: theme.colors.textPrimary, fontWeight: '500' }}>
-                    <Text style={{ fontWeight: '700', color: theme.colors.accent }}>Lead: </Text>{activeTrack.leadSinger || 'Unknown'}
-                  </ExpandableText>
-                  <ExpandableText style={{ fontSize: 13, color: theme.colors.textPrimary, fontWeight: '500' }}>
-                    <Text style={{ fontWeight: '700', color: theme.colors.accent }}>Album: </Text>{activeTrack.program || 'Unknown'}
-                  </ExpandableText>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={{ padding: 14, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 24, marginLeft: 16 }}
-                activeOpacity={0.8}
-                onPress={() => {
-                  navigation.navigate('Details', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                <Ionicons name="expand" size={22} color={theme.colors.accent} />
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Simple & Intuitive Section Looper (A-B) */}
-          {(showABLooperStrip || abLoop.active || abLoop.start !== null) && (
-            <View style={styles.abLooperStrip}>
-              {/* Header: Title and Reset */}
-              <View style={styles.abLooperHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Ionicons name="infinite" size={16} color={theme.colors.accent} />
-                  <Text style={styles.abLooperTitle}>A-B Loop</Text>
-                  {abLoop.active && (
-                    <View style={{ backgroundColor: theme.colors.accent + '25', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                      <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '800' }}>ACTIVE</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  {(abLoop.start !== null || abLoop.end !== null) && (
-                    <TouchableOpacity
-                      onPress={() => {
-                        clearABLoop();
-                        showToast('Loop Reset', 'trash-outline');
-                      }}
-                      style={styles.abResetBtn}
-                    >
-                      <Ionicons name="trash-outline" size={12} color="#ff453a" />
-                      <Text style={styles.abResetText}>Reset</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity
-                    onPress={() => setShowABLooperStrip(false)}
-                    style={{ padding: 4 }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Simple 2-Point Set Buttons + Loop Toggle */}
-              <View style={styles.abPointsRow}>
-                {/* Point A */}
-                <TouchableOpacity
-                  style={[
-                    styles.abPointBox,
-                    { flex: 1 },
-                    abLoop.start !== null && { borderColor: '#38bdf8', backgroundColor: 'rgba(56, 189, 248, 0.15)' }
-                  ]}
-                  onPress={async () => {
-                    const posSec = await TrackPlayer.getPosition().catch(() => 0);
-                    const posMs = Math.floor(posSec * 1000);
-                    await setLoopPointA(posMs);
-                    showToast(`Start (A): ${formatTime(posMs)}`, 'flag');
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="flag" size={12} color={abLoop.start !== null ? '#38bdf8' : theme.colors.textMuted} />
-                    <Text style={styles.abPointLabel}>START (A)</Text>
-                  </View>
-                  <Text style={[styles.abPointTime, abLoop.start !== null && { color: '#38bdf8' }]}>
-                    {abLoop.start !== null ? formatTime(abLoop.start) : 'Set Current'}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Point B */}
-                <TouchableOpacity
-                  style={[
-                    styles.abPointBox,
-                    { flex: 1 },
-                    abLoop.end !== null && { borderColor: '#ec4899', backgroundColor: 'rgba(236, 72, 153, 0.15)' }
-                  ]}
-                  onPress={async () => {
-                    const posSec = await TrackPlayer.getPosition().catch(() => 0);
-                    const posMs = Math.floor(posSec * 1000);
-                    if (abLoop.start !== null && posMs <= abLoop.start) {
-                      showToast('End (B) must be after Start (A)', 'alert-circle');
-                      return;
-                    }
-                    await setLoopPointB(posMs);
-                    showToast(`End (B): ${formatTime(posMs)}`, 'flag');
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="flag" size={12} color={abLoop.end !== null ? '#ec4899' : theme.colors.textMuted} />
-                    <Text style={styles.abPointLabel}>END (B)</Text>
-                  </View>
-                  <Text style={[styles.abPointTime, abLoop.end !== null && { color: '#ec4899' }]}>
-                    {abLoop.end !== null ? formatTime(abLoop.end) : 'Set Current'}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Loop / Play Toggle */}
-                <TouchableOpacity
-                  style={[
-                    styles.abLoopToggleBtn,
-                    abLoop.active && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
-                    !(abLoop.start !== null && abLoop.end !== null && abLoop.end > abLoop.start) && { opacity: 0.45 },
-                  ]}
-                  disabled={!(abLoop.start !== null && abLoop.end !== null && abLoop.end > abLoop.start)}
-                  onPress={() => {
-                    toggleABLoop();
-                    if (!abLoop.active) {
-                      showToast(`Looping ${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)}`, 'infinite');
-                    } else {
-                      showToast('Section Loop Paused', 'pause-circle-outline');
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={abLoop.active ? "infinite" : "play"}
-                    size={18}
-                    color={abLoop.active ? theme.colors.backgroundDark : theme.colors.textPrimary}
-                  />
-                  <Text style={[
-                    styles.abLoopToggleText,
-                    abLoop.active && { color: theme.colors.backgroundDark }
-                  ]}>
-                    {abLoop.active ? 'Looping' : 'Loop'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+          {/* A-B Section Looper Strip */}
+          <ABLooperStrip
+            visible={showABLooperStrip || abLoop.active || abLoop.start !== null}
+            abLoop={abLoop}
+            onClearLoop={() => {
+              clearABLoop();
+              showToast('Loop Reset', 'trash-outline');
+            }}
+            onClose={() => setShowABLooperStrip(false)}
+            onSetPointA={async () => {
+              const posSec = await TrackPlayer.getPosition().catch(() => 0);
+              const posMs = Math.floor(posSec * 1000);
+              await setLoopPointA(posMs);
+              showToast(`Start (A): ${formatTime(posMs)}`, 'flag');
+            }}
+            onSetPointB={async () => {
+              const posSec = await TrackPlayer.getPosition().catch(() => 0);
+              const posMs = Math.floor(posSec * 1000);
+              if (abLoop.start !== null && posMs <= abLoop.start) {
+                showToast('End (B) must be after Start (A)', 'alert-circle');
+                return;
+              }
+              await setLoopPointB(posMs);
+              showToast(`End (B): ${formatTime(posMs)}`, 'flag');
+            }}
+            onToggleLoop={() => {
+              toggleABLoop();
+              if (!abLoop.active) {
+                showToast(`Looping ${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)}`, 'infinite');
+              } else {
+                showToast('Section Loop Paused', 'pause-circle-outline');
+              }
+            }}
+            formatTime={formatTime}
+            theme={theme}
+            styles={styles}
+          />
 
           {/* Clean, Spacious Player Controls & Progress */}
           <View style={{ marginTop: 'auto', marginBottom: 8 }}>
@@ -1603,642 +1083,159 @@ export default function PlayerScreen({ route, navigation }: any) {
               abLoop={abLoop}
             />
 
-            {/* Pristine 5-Button Controls Row */}
-            <View style={styles.controlsRow}>
-              {/* Shuffle Button */}
-              <TouchableOpacity onPress={handleToggleShuffle} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="shuffle" size={24} color={isShuffle ? theme.colors.accent : theme.colors.textPrimary} />
-              </TouchableOpacity>
-              
-              {/* Previous Track */}
-              <TouchableOpacity onPress={async () => {
-                await skipToPrevious();
-              }} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="play-skip-back" size={28} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              
-              {/* Main Play / Pause Button */}
-              <TouchableOpacity
-                style={styles.playPauseBtn}
-                onPress={handlePlayPause}
-                activeOpacity={0.8}>
-                
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.backgroundDark} />
-                ) : (
-                  <Ionicons name={!activeTrack?.audioUrl ? "alert-circle" : isPlaying ? "pause" : "play"} size={28} color={theme.colors.backgroundDark} style={{ marginLeft: isPlaying || !activeTrack?.audioUrl ? 0 : 3 }} />
-                )}
-              </TouchableOpacity>
-              
-              {/* Next Track */}
-              <TouchableOpacity onPress={async () => {
-                await skipToNext();
-              }} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Ionicons name="play-skip-forward" size={28} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              
-              {/* Repeat / Loop Button */}
-              <TouchableOpacity onPress={handleToggleRepeat} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="repeat" size={24} color={repeatMode !== 'off' ? theme.colors.accent : theme.colors.textSecondary} />
-                  {repeatMode === 'track' && (
-                    <View style={{
-                      position: 'absolute',
-                      backgroundColor: theme.colors.accent,
-                      borderRadius: 6,
-                      width: 12,
-                      height: 12,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      top: -4,
-                      right: -6
-                    }}>
-                      <Text style={{ color: theme.colors.backgroundDark, fontSize: 8, fontWeight: '900' }}>1</Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            </View>
+            {/* Playback Controls */}
+            <PlayerControlsRow
+              isShuffle={isShuffle}
+              onToggleShuffle={handleToggleShuffle}
+              onSkipPrevious={skipToPrevious}
+              isLoading={isLoading}
+              isPlaying={isPlaying}
+              hasAudio={!!activeTrack?.audioUrl}
+              onPlayPause={handlePlayPause}
+              onSkipNext={skipToNext}
+              repeatMode={repeatMode}
+              onToggleRepeat={handleToggleRepeat}
+              theme={theme}
+              styles={styles}
+            />
           </View>
           </View>
         </ScrollView>
         
         {AnnotationLayer}
 
-        {isPrivileged && (
-          <View style={{ position: 'absolute', bottom: 110, right: 20, flexDirection: 'row', alignItems: 'flex-end', zIndex: 101, gap: 12 }} pointerEvents="box-none">
-            {isAnnotationMode && showColorPalette && (
-              <View style={{ flexDirection: 'row', gap: 10, backgroundColor: 'rgba(0,0,0,0.85)', padding: 8, borderRadius: 24, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, marginBottom: 6 }}>
-                {['#ff3b30', '#34c759', '#007aff', '#ffcc00', '#af52de', '#ffffff'].map(c => {
-                  const isCurrent = (selectedColor || getMyColor()) === c;
-                  return (
-                    <TouchableOpacity
-                      key={c}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
-                        backgroundColor: c,
-                        borderWidth: isCurrent ? 2.5 : 0,
-                        borderColor: '#fff',
-                        transform: [{ scale: isCurrent ? 1.15 : 1 }]
-                      }}
-                      onPress={() => setSelectedColor(c)}
-                    />
-                  );
-                })}
-              </View>
-            )}
-            <View style={{ alignItems: 'center', gap: 10 }} pointerEvents="box-none">
-              {isAnnotationMode && (
-                <>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: 'rgba(255,59,48,0.95)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }}
-                    onPress={handleClearMyAnnotations}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="trash-outline" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: showColorPalette ? theme.colors.accent : 'rgba(0,0,0,0.7)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, borderWidth: 1, borderColor: showColorPalette ? theme.colors.accent : 'rgba(255,255,255,0.1)' }}
-                    onPress={() => setShowColorPalette(!showColorPalette)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="color-palette-outline" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: annotationTool === 'eraser' ? theme.colors.accent : 'rgba(0,0,0,0.7)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, borderWidth: 1, borderColor: annotationTool === 'eraser' ? theme.colors.accent : 'rgba(255,255,255,0.1)' }}
-                    onPress={() => setAnnotationTool('eraser')}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons name="eraser" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: annotationTool === 'pen' ? theme.colors.accent : 'rgba(0,0,0,0.7)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, borderWidth: 1, borderColor: annotationTool === 'pen' ? theme.colors.accent : 'rgba(255,255,255,0.1)' }}
-                    onPress={() => setAnnotationTool('pen')}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="create-outline" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                </>
-              )}
-              <TouchableOpacity
-                style={{
-                  backgroundColor: isAnnotationMode ? theme.colors.accent : 'rgba(0,0,0,0.6)',
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 6,
-                  elevation: 8,
-                  borderWidth: 1,
-                  borderColor: isAnnotationMode ? theme.colors.accent : 'rgba(255,255,255,0.1)'
-                }}
-                onPress={() => setIsAnnotationMode(!isAnnotationMode)}
-                activeOpacity={0.8}
-              >
-                <Ionicons 
-                  name="brush" 
-                  size={24} 
-                  color="#ffffff" 
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        {/* Annotation FAB */}
+        <PlayerAnnotationFAB
+          isPrivileged={isPrivileged}
+          isAnnotationMode={isAnnotationMode}
+          onToggleAnnotationMode={() => setIsAnnotationMode(!isAnnotationMode)}
+          showColorPalette={showColorPalette}
+          onToggleColorPalette={() => setShowColorPalette(!showColorPalette)}
+          selectedColor={selectedColor}
+          getMyColor={getMyColor}
+          onSelectColor={setSelectedColor}
+          annotationTool={annotationTool}
+          onSelectTool={setAnnotationTool}
+          onClearMyAnnotations={handleClearMyAnnotations}
+          theme={theme}
+        />
         </View>
 
-        {/* Clean Bottom Actions Bar */}
-        <View style={[styles.playerTabBar, { paddingBottom: Platform.OS === 'android' ? Math.max(10, insets.bottom - 16) : Math.max(insets.bottom, 12) }]}>
-          <TouchableOpacity style={styles.playerTabButton} onPress={() => setShowQueueModal(true)}>
-            <Ionicons name="list-outline" size={20} color={theme.colors.textSecondary} />
-            <Text style={styles.playerTabLabel}>Queue</Text>
-          </TouchableOpacity>
-
-          {/* 1-Tap / 2-Tap A-B Section Loop Button */}
-          <TouchableOpacity
-            style={styles.playerTabButton}
-            onPress={handleABLoopPress}
-            onLongPress={() => {
-              if (abLoop.start !== null || abLoop.active) {
-                clearABLoop();
-                showToast('Section Loop Cleared', 'trash-outline');
-              }
-            }}
-          >
-            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons
-                name={abLoop.active ? "infinite" : abLoop.start !== null ? "flag" : "infinite-outline"}
-                size={20}
-                color={abLoop.active || abLoop.start !== null ? theme.colors.accent : theme.colors.textSecondary}
-              />
-              {abLoop.active && (
-                <View style={{
-                  position: 'absolute',
-                  width: 6,
-                  height: 6,
-                  borderRadius: 3,
-                  backgroundColor: theme.colors.accent,
-                  top: -2,
-                  right: -4
-                }} />
-              )}
-            </View>
-            <Text style={[
-              styles.playerTabLabel,
-              (abLoop.active || abLoop.start !== null) && { color: theme.colors.accent, fontWeight: '800' }
-            ]}>
-              {abLoop.active
-                ? `${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)}`
-                : abLoop.start !== null
-                ? `Set End (B)`
-                : `A-B Loop`}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.playerTabButton} onPress={() => setShowSpeedModal(true)}>
-            <Ionicons name="speedometer-outline" size={20} color={playbackRate !== 1.0 ? theme.colors.accent : theme.colors.textSecondary} />
-            <Text style={[styles.playerTabLabel, playbackRate !== 1.0 && { color: theme.colors.accent, fontWeight: '800' }]}>
-              {playbackRate === 1.0 ? 'Speed' : `${playbackRate}x`}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.playerTabButton} onPress={() => setShowAudioPartsModal(true)}>
-            <Ionicons name="musical-notes-outline" size={20} color={theme.colors.textSecondary} />
-            <Text style={styles.playerTabLabel}>Parts</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.playerTabButton} onPress={() => { navigation.navigate('Karaoke', { activeTrack }); }}>
-            <Ionicons name="mic-outline" size={20} color={theme.colors.textSecondary} />
-            <Text style={styles.playerTabLabel}>Practice</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Bottom Tab Bar */}
+        <PlayerBottomTabBar
+          onOpenQueue={() => setShowQueueModal(true)}
+          abLoop={abLoop}
+          onABLoopPress={handleABLoopPress}
+          onClearABLoop={() => {
+            if (abLoop.start !== null || abLoop.active) {
+              clearABLoop();
+              showToast('Section Loop Cleared', 'trash-outline');
+            }
+          }}
+          formatTime={formatTime}
+          playbackRate={playbackRate}
+          onOpenSpeed={() => setShowSpeedModal(true)}
+          onOpenAudioParts={() => setShowAudioPartsModal(true)}
+          onOpenKaraoke={() => navigation.navigate('Karaoke', { activeTrack })}
+          insets={insets}
+          theme={theme}
+          styles={styles}
+        />
       </SafeAreaView>
 
       {/* More Options Modal */}
-      <Modal visible={showOptionsModal} transparent animationType="fade" onRequestClose={() => setShowOptionsModal(false)}>
-        <BlurView intensity={40} tint="dark" style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowOptionsModal(false)} />
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHeader}>
-              <Text style={styles.bottomSheetTitle}>More Options</Text>
-              <TouchableOpacity onPress={() => setShowOptionsModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Section Looper Option */}
-            <TouchableOpacity style={styles.optionItem} onPress={() => {
-              setShowOptionsModal(false);
-              setShowABLooperStrip(true);
-            }}>
-              <View style={styles.optionIconBox}>
-                <Ionicons name="infinite" size={22} color={abLoop.active ? theme.colors.accent : theme.colors.textPrimary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.optionItemText}>Section Looper (A-B)</Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                  {abLoop.active ? `Active: ${formatTime(abLoop.start!)} – ${formatTime(abLoop.end!)}` : 'Set A-B repeat region'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-
-            {/* Clear Section Loop if active */}
-            {(abLoop.active || abLoop.start !== null) && (
-              <TouchableOpacity style={styles.optionItem} onPress={() => {
-                setShowOptionsModal(false);
-                clearABLoop();
-                showToast('Section Loop Off', 'close-circle-outline');
-              }}>
-                <View style={styles.optionIconBox}>
-                  <Ionicons name="trash-outline" size={22} color="#ff453a" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionItemText, { color: '#ff453a' }]}>Reset Section Loop</Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                    {abLoop.active ? `${formatTime(abLoop.start!)} – ${formatTime(abLoop.end!)}` : 'Point A is set'}
-                  </Text>
-                </View>
-                <Ionicons name="close" size={20} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            )}
-
-            {/* Download for Offline Playback */}
-            {activeTrack?.audioUrl && (
-              <TouchableOpacity style={styles.optionItem} onPress={handleToggleOfflineDownload} disabled={isDownloadingOffline}>
-                <View style={[styles.optionIconBox, isDownloadedOffline && { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
-                  {isDownloadingOffline ? (
-                    <ActivityIndicator size="small" color={theme.colors.accent} />
-                  ) : (
-                    <Ionicons
-                      name={isDownloadedOffline ? "checkmark-circle" : "cloud-download-outline"}
-                      size={22}
-                      color={isDownloadedOffline ? "#22c55e" : theme.colors.accent}
-                    />
-                  )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionItemText, isDownloadedOffline && { color: '#22c55e', fontWeight: '700' }]}>
-                    {isDownloadedOffline ? 'Downloaded (Offline Ready)' : 'Download for Offline Playback'}
-                  </Text>
-                  <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                    {isDownloadedOffline ? 'Tap to remove from device' : 'Save track to play without internet'}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            )}
-
-            {/* Sleep Timer Option */}
-            <TouchableOpacity style={styles.optionItem} onPress={() => {
-              setShowOptionsModal(false);
-              setTimeout(() => setShowSleepTimerModal(true), 300);
-            }}>
-              <View style={styles.optionIconBox}>
-                <Ionicons name="moon-outline" size={22} color={theme.colors.textPrimary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.optionItemText}>Sleep Timer</Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                  {sleepTimerRemaining !== null ? `${Math.ceil(sleepTimerRemaining / 60)} mins remaining` : 'Off'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-
-            {/* Add to Playlist */}
-            <TouchableOpacity style={styles.optionItem} onPress={() => {
-              setShowOptionsModal(false);
-              setTimeout(() => setShowPlaylistModal(true), 300);
-            }}>
-              <View style={styles.optionIconBox}>
-                <Ionicons name="list-outline" size={22} color={theme.colors.textPrimary} />
-              </View>
-              <Text style={styles.optionItemText}>Add to Playlist</Text>
-              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-            </TouchableOpacity>
-
-            <View style={{ height: 24 }} />
-          </View>
-        </BlurView>
-      </Modal>
+      <PlayerOptionsMenuModal
+        visible={showOptionsModal}
+        onClose={() => setShowOptionsModal(false)}
+        abLoop={abLoop}
+        onOpenABLooper={() => setShowABLooperStrip(true)}
+        onClearABLoop={() => {
+          clearABLoop();
+          showToast('Section Loop Off', 'close-circle-outline');
+        }}
+        activeTrack={activeTrack}
+        isDownloadedOffline={isDownloadedOffline}
+        isDownloadingOffline={isDownloadingOffline}
+        onToggleOfflineDownload={handleToggleOfflineDownload}
+        sleepTimerRemaining={sleepTimerRemaining}
+        onOpenSleepTimer={() => setShowSleepTimerModal(true)}
+        onOpenPlaylist={() => setShowPlaylistModal(true)}
+        formatTime={formatTime}
+        theme={theme}
+        styles={styles}
+      />
 
       {/* Playback Speed Modal */}
-      <Modal visible={showSpeedModal} transparent animationType="slide" onRequestClose={() => setShowSpeedModal(false)}>
-        <BlurView intensity={40} tint="dark" style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowSpeedModal(false)} />
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHeader}>
-              <Text style={styles.bottomSheetTitle}>Playback Speed</Text>
-              <TouchableOpacity onPress={() => setShowSpeedModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
-              {SPEED_OPTIONS.map(opt => {
-                const isSelected = Math.abs(playbackRate - opt.value) < 0.01;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[styles.playlistItem, isSelected && { backgroundColor: theme.colors.accent + '15', borderRadius: 14 }]}
-                    onPress={() => handleSelectSpeed(opt.value)}
-                  >
-                    <View style={[styles.playlistIconBox, isSelected && { backgroundColor: theme.colors.accent + '33' }]}>
-                      <Ionicons name="speedometer" size={22} color={isSelected ? theme.colors.accent : theme.colors.textPrimary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.playlistItemName, isSelected && { color: theme.colors.accent, fontWeight: '800' }]}>
-                        {opt.label}
-                      </Text>
-                      <Text style={styles.playlistItemCount}>{opt.description}</Text>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </BlurView>
-      </Modal>
+      <PlayerSpeedModal
+        visible={showSpeedModal}
+        onClose={() => setShowSpeedModal(false)}
+        playbackRate={playbackRate}
+        onSelectSpeed={handleSelectSpeed}
+        theme={theme}
+        styles={styles}
+      />
 
       {/* Sleep Timer Modal */}
-      <Modal visible={showSleepTimerModal} transparent animationType="slide" onRequestClose={() => setShowSleepTimerModal(false)}>
-        <BlurView intensity={40} tint="dark" style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowSleepTimerModal(false)} />
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHeader}>
-              <Text style={styles.bottomSheetTitle}>Sleep Timer</Text>
-              <TouchableOpacity onPress={() => setShowSleepTimerModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
-              {SLEEP_TIMER_OPTIONS.map(opt => {
-                const isSelected = sleepTimerMinutes === opt.minutes;
-                return (
-                  <TouchableOpacity
-                    key={opt.minutes}
-                    style={[styles.playlistItem, isSelected && { backgroundColor: theme.colors.accent + '15', borderRadius: 14 }]}
-                    onPress={() => handleSelectSleepTimer(opt.minutes)}
-                  >
-                    <View style={[styles.playlistIconBox, isSelected && { backgroundColor: theme.colors.accent + '33' }]}>
-                      <Ionicons name="moon" size={22} color={isSelected ? theme.colors.accent : theme.colors.textPrimary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.playlistItemName, isSelected && { color: theme.colors.accent, fontWeight: '800' }]}>
-                        {opt.label}
-                      </Text>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </BlurView>
-      </Modal>
+      <PlayerSleepTimerModal
+        visible={showSleepTimerModal}
+        onClose={() => setShowSleepTimerModal(false)}
+        sleepTimerMinutes={sleepTimerMinutes}
+        onSelectSleepTimer={handleSelectSleepTimer}
+        theme={theme}
+        styles={styles}
+      />
 
       {/* Up Next Queue Modal */}
-      <Modal visible={showQueueModal} transparent animationType="slide" onRequestClose={() => setShowQueueModal(false)}>
-        <BlurView intensity={40} tint="dark" style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowQueueModal(false)} />
-          <View style={[styles.bottomSheet, { maxHeight: '80%' }]}>
-            <View style={styles.bottomSheetHeader}>
-              <View>
-                <Text style={styles.bottomSheetTitle}>Up Next Queue</Text>
-                <Text style={{ color: theme.colors.textMuted, fontSize: 13, marginTop: 2 }}>
-                  {displayQueue.length} {displayQueue.length === 1 ? 'song' : 'songs'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowQueueModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
-              {displayQueue.map((song: any, index: number) => {
-                const isCurrent = String(song.id) === String(activeTrack?.id);
-                return (
-                  <TouchableOpacity
-                    key={song.id || index}
-                    style={[
-                      styles.playlistItem,
-                      isCurrent && { backgroundColor: theme.colors.accent + '15', borderRadius: 14 }
-                    ]}
-                    onPress={async () => {
-                      setShowQueueModal(false);
-                      await skipToTrack(song);
-                      showToast(`Playing: ${song.title}`, 'musical-notes');
-                    }}
-                  >
-                    <View style={[styles.playlistIconBox, isCurrent && { backgroundColor: theme.colors.accent + '33' }]}>
-                      <Text style={{ color: isCurrent ? theme.colors.accent : theme.colors.textMuted, fontWeight: '700', fontSize: 14 }}>
-                        {index + 1}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.playlistItemName, isCurrent && { color: theme.colors.accent, fontWeight: '800' }]} numberOfLines={1}>
-                        {song.title}
-                      </Text>
-                      <Text style={styles.playlistItemCount} numberOfLines={1}>
-                        {song.leadSinger || song.writer || 'Loveworld Singers'}
-                      </Text>
-                    </View>
-                    {isCurrent && (
-                      <Ionicons name="volume-high" size={22} color={theme.colors.accent} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </BlurView>
-      </Modal>
+      <PlayerQueueModal
+        visible={showQueueModal}
+        onClose={() => setShowQueueModal(false)}
+        displayQueue={displayQueue}
+        activeTrack={activeTrack}
+        onSelectTrack={async (song) => {
+          setShowQueueModal(false);
+          await skipToTrack(song);
+          showToast(`Playing: ${song.title}`, 'musical-notes');
+        }}
+        theme={theme}
+        styles={styles}
+      />
 
       {/* Song Resources Modal */}
-      <Modal visible={showMoreAssetsModal} transparent animationType="fade" onRequestClose={() => setShowMoreAssetsModal(false)}>
-        <BlurView intensity={40} tint="dark" style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowMoreAssetsModal(false)} />
-          <View style={styles.bottomSheet}>
-            <View style={styles.bottomSheetHeader}>
-              <Text style={styles.bottomSheetTitle}>Song Resources</Text>
-              <TouchableOpacity onPress={() => setShowMoreAssetsModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            {(!fromAllSongs || isHQ) && (
-              <>
-                <TouchableOpacity style={styles.optionItem} onPress={() => {
-                  setShowMoreAssetsModal(false);
-                  navigation.navigate('History', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                  <View style={styles.optionIconBox}>
-                    <Ionicons name="time-outline" size={22} color={theme.colors.textPrimary} />
-                  </View>
-                  <Text style={styles.optionItemText}>Song History</Text>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.optionItem} onPress={() => {
-                  setShowMoreAssetsModal(false);
-                  navigation.navigate('Solfa', { activeTrack, backgroundColor: "#8b5cf6" });
-                }}>
-                  <View style={styles.optionIconBox}>
-                    <Ionicons name="musical-note-outline" size={22} color={theme.colors.textPrimary} />
-                  </View>
-                  <Text style={styles.optionItemText}>Solfa Notation</Text>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              </>
-            )}
-
-            <View style={{ height: 24 }} />
-          </View>
-        </BlurView>
-      </Modal>
+      <PlayerMoreAssetsModal
+        visible={showMoreAssetsModal}
+        onClose={() => setShowMoreAssetsModal(false)}
+        canViewHistory={!fromAllSongs || isHQ}
+        onOpenHistory={() => navigation.navigate('History', { activeTrack, backgroundColor: '#8b5cf6' })}
+        onOpenSolfa={() => navigation.navigate('Solfa', { activeTrack, backgroundColor: '#8b5cf6' })}
+        theme={theme}
+        styles={styles}
+      />
 
       {/* Save to Playlist Modal */}
-      <Modal visible={showPlaylistModal} transparent animationType="slide" onRequestClose={() => setShowPlaylistModal(false)}>
-        <View style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowPlaylistModal(false)} />
-          <View style={[styles.bottomSheet, { maxHeight: '80%' }]}>
-            <View style={styles.bottomSheetHeader}>
-              <Text style={styles.bottomSheetTitle}>Save to Playlist</Text>
-              <TouchableOpacity onPress={() => setShowPlaylistModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.newPlaylistRow}>
-              <TextInput
-                style={styles.playlistInput}
-                placeholder="New Playlist Name"
-                placeholderTextColor={theme.colors.textMuted}
-                value={newPlaylistName}
-                onChangeText={setNewPlaylistName}
-              />
-              <TouchableOpacity
-                style={[styles.createPlaylistBtn, !newPlaylistName.trim() && { opacity: 0.5 }]}
-                disabled={!newPlaylistName.trim() || isCreatingPlaylist}
-                onPress={handleCreatePlaylist}
-              >
-                {isCreatingPlaylist ? (
-                  <ActivityIndicator size="small" color={theme.colors.textPrimary} />
-                ) : (
-                  <Text style={styles.createPlaylistBtnText}>Create</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 16 }}>
-              {playlists.length === 0 ? (
-                <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 20 }}>No playlists yet.</Text>
-              ) : (
-                playlists.map(pl => {
-                  const songList = (pl.songs || pl.songIds || []).map((s: any) => String(s?.id || s));
-                  const inPlaylist = activeTrack?.id ? songList.includes(String(activeTrack.id)) : false;
-                  return (
-                    <TouchableOpacity
-                      key={pl.id}
-                      style={styles.playlistItem}
-                      onPress={() => handleAddToPlaylist(pl.id)}
-                    >
-                      <View style={styles.playlistIconBox}>
-                        <Ionicons name="musical-notes-outline" size={24} color={theme.colors.textPrimary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.playlistItemName}>{pl.name || pl.title || 'Untitled'}</Text>
-                        <Text style={styles.playlistItemCount}>{songList.length} {songList.length === 1 ? 'song' : 'songs'}</Text>
-                      </View>
-                      {inPlaylist && <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />}
-                    </TouchableOpacity>
-                  );
-                })
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <PlayerAddToPlaylistModal
+        visible={showPlaylistModal}
+        onClose={() => setShowPlaylistModal(false)}
+        newPlaylistName={newPlaylistName}
+        onChangeNewPlaylistName={setNewPlaylistName}
+        isCreatingPlaylist={isCreatingPlaylist}
+        onCreatePlaylist={handleCreatePlaylist}
+        playlists={playlists}
+        activeTrack={activeTrack}
+        onAddToPlaylist={handleAddToPlaylist}
+        theme={theme}
+        styles={styles}
+      />
 
       {/* Audio Parts Modal */}
-      <Modal visible={showAudioPartsModal} transparent animationType="slide" onRequestClose={() => setShowAudioPartsModal(false)}>
-        <View style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowAudioPartsModal(false)} />
-          <View style={[styles.bottomSheet, { maxHeight: '70%' }]}>
-            <View style={styles.bottomSheetHeader}>
-              <Text style={styles.bottomSheetTitle}>Select Audio Part</Text>
-              <TouchableOpacity onPress={() => setShowAudioPartsModal(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 8 }}>
-              <TouchableOpacity
-                style={styles.playlistItem}
-                onPress={() => {
-                  play(activeTrack);
-                  setShowAudioPartsModal(false);
-                }}
-              >
-                <View style={styles.playlistIconBox}>
-                  <Ionicons name="musical-notes" size={24} color={theme.colors.textPrimary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.playlistItemName}>Main Track</Text>
-                  <Text style={styles.playlistItemCount}>Full recording</Text>
-                </View>
-                {(currentTrack?.audioUrl === activeTrack.audioUrl || currentTrack?.url === activeTrack.audioUrl) && (
-                  <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
-                )}
-              </TouchableOpacity>
-              {(() => {
-                const parts = resolveSongAudioUrls(activeTrack);
-                const entries = Object.entries(parts).filter(([partName, url]) => (
-                  url && typeof url === 'string' && partName.toLowerCase() !== 'full'
-                ));
-                if (entries.length === 0) {
-                  return (
-                    <Text style={{ color: theme.colors.textMuted, textAlign: 'center', marginTop: 24, fontSize: 13, fontWeight: '500' }}>
-                      No isolated parts available for this song.
-                    </Text>
-                  );
-                }
-                return entries.map(([partName, url]) => {
-                  const isSelected = currentTrack?.audioUrl === url || currentTrack?.url === url;
-                  return (
-                    <TouchableOpacity
-                      key={partName}
-                      style={styles.playlistItem}
-                      onPress={() => {
-                        play({ ...activeTrack, audioUrl: url as string });
-                        setShowAudioPartsModal(false);
-                      }}
-                    >
-                      <View style={styles.playlistIconBox}>
-                        <Ionicons name="mic-outline" size={24} color={theme.colors.textPrimary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.playlistItemName}>{partName.charAt(0).toUpperCase() + partName.slice(1)}</Text>
-                        <Text style={styles.playlistItemCount}>Isolated part</Text>
-                      </View>
-                      {isSelected && (
-                        <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                });
-              })()}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <PlayerAudioPartsModal
+        visible={showAudioPartsModal}
+        onClose={() => setShowAudioPartsModal(false)}
+        activeTrack={activeTrack}
+        currentTrack={currentTrack}
+        onSelectTrack={(trackToPlay) => play(trackToPlay)}
+        theme={theme}
+        styles={styles}
+      />
 
       <ShareToChatSheet
         visible={showShareSheet}

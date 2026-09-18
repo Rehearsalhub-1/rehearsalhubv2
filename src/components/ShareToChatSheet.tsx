@@ -188,7 +188,6 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
             `👤 *Contact: ${profileShare.name || profileShare.displayName || 'Singer'}*`,
             profileShare.role ? `Role: ${profileShare.role}` : '',
             profileShare.zoneName ? `Zone: ${profileShare.zoneName}` : '',
-            targetUserId ? `Link: https://rehearsalhub.com/profile/${targetUserId}` : '',
             profileNote ? `\n💬 ${profileNote}` : '',
           ].filter(Boolean).join('\n');
           await apiClient.post(`/chats/${chat.id}/messages`, {
@@ -212,7 +211,6 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
           let playlistNote = commentMode === 'at_once' ? note.trim() : '';
           let text = [
             `💽 *Playlist: ${playlist.name}*`,
-            `Link: https://rehearsalhub.com/playlist/${playlist.id}`,
             `${playlist.songs.length} songs`,
             playlistNote ? `\n💬 ${playlistNote}` : '',
           ].filter(Boolean).join('\n');
@@ -235,7 +233,6 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
 
             let text = [
               `🎵 *${currentSong.title}*`,
-              `Link: https://rehearsalhub.com/song/${currentSong.id}`,
               currentSong.leadSinger ? `👤 ${currentSong.leadSinger}` : '',
               currentSong.program ? `📀 ${currentSong.program}` : '',
               currentSong.key ? `🎼 Key: ${currentSong.key}` : '',

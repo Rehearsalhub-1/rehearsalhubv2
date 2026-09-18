@@ -36,11 +36,13 @@ const HIDDEN_SCREENS = new Set([
 export default function GlobalLiveSongWidget() {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { currentZone } = useZone();
+  const { currentZone, isLoading: isZoneLoading } = useZone();
   const { play, currentTrack } = useTrackPlayer();
 
   // Use stable primitive selectors so Zustand doesn't return new refs every render
   const activeSongs = useLiveSongStore((state) => state.activeSongs);
+  const hasInitialFetched = useLiveSongStore((state) => state.hasInitialFetched);
+  const isLiveStoreLoading = useLiveSongStore((state) => state.isLoading);
   const handleSongUpdate = useLiveSongStore(useCallback((state) => state.handleSongUpdate, []));
   const fetchActiveSongs = useLiveSongStore(useCallback((state) => state.fetchActiveSongs, []));
 
@@ -116,13 +118,16 @@ export default function GlobalLiveSongWidget() {
     };
   }, []);
 
-  // Real-time WebSocket subscription across the entire app
+  // Real-time WebSocket subscriptions across the entire app
+  // 'live_song' is the fast, dedicated event — no scanning needed
+  useWebSocket('live_song', 'all', handleSongUpdate, true);
   useWebSocket('song', 'all', handleSongUpdate, true);
 
-  // Initial & Zone-based fetch of active songs
+  // Initial & Zone-based fetch of active songs (wait until zone finishes loading)
   useEffect(() => {
+    if (isZoneLoading) return;
     fetchActiveSongs(currentZone?.id);
-  }, [currentZone?.id, fetchActiveSongs]);
+  }, [currentZone?.id, isZoneLoading, fetchActiveSongs]);
 
   // Refetch when app returns from background — debounced to avoid racing with WebSocket updates
   useEffect(() => {
@@ -170,6 +175,8 @@ export default function GlobalLiveSongWidget() {
 
   const isHidden =
     isHiddenScreen ||
+    !hasInitialFetched ||
+    isLiveStoreLoading ||
     !activeSongs ||
     activeSongs.length === 0;
 
@@ -196,10 +203,7 @@ export default function GlobalLiveSongWidget() {
   };
 
   const primarySong = activeSongs[0];
-  const titleText =
-    activeSongs.length === 1
-      ? primarySong?.title || 'Live Rehearsal'
-      : `${activeSongs.length} Songs Live`;
+  const titleText = primarySong?.title || 'Live Rehearsal';
 
   return (
     <>

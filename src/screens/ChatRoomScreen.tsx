@@ -30,7 +30,6 @@ import {
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import * as DocumentPicker from 'expo-document-picker';
 import Slider from '@react-native-community/slider';
 
@@ -48,94 +47,6 @@ import { useWebSocket } from '../hooks/useWebSocket';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-function ChatVideoModal({ uri, onClose }: { uri: string | null; onClose: () => void }) {
-  if (!uri) return null;
-  return <ChatVideoPlayerInner uri={uri} onClose={onClose} />;
-}
-
-function ChatVideoPlayerInner({ uri, onClose }: { uri: string; onClose: () => void }) {
-  useEffect(() => {
-    TrackPlayer.pause().catch(() => {});
-  }, []);
-
-  const player = useVideoPlayer(uri, p => {
-    p.loop = true;
-    p.play();
-  });
-  const insets = useSafeAreaInsets();
-
-  return (
-    <Modal visible={Boolean(uri)} transparent={false} animationType="fade" onRequestClose={onClose} statusBarTranslucent={true}>
-      <View style={{ flex: 1, backgroundColor: '#000000' }}>
-        <StatusBar style="light" />
-        {/* Top Header */}
-        <View style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          paddingTop: Math.max(insets.top, 16),
-          paddingBottom: 12,
-          paddingHorizontal: 16,
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          zIndex: 20,
-        }}>
-          <TouchableOpacity
-            onPress={onClose}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }} numberOfLines={1}>
-            Video
-          </Text>
-          <TouchableOpacity
-            onPress={onClose}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: 'rgba(255,255,255,0.18)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="close" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Video Canvas strictly inset from top and bottom bars */}
-        <View style={{
-          flex: 1,
-          width: '100%',
-          paddingTop: Math.max(insets.top, 16) + 50,
-          paddingBottom: Math.max(insets.bottom, 16) + 10,
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}>
-          <VideoView
-            style={{ width: '100%', height: '100%' }}
-            player={player}
-            nativeControls={true}
-            contentFit="contain"
-          />
-        </View>
-      </View>
-    </Modal>
-  );
-}
 import {
   ChatMessage,
   getSenderColor,
@@ -150,131 +61,20 @@ import {
   ProfileShareCard,
   GroupCallCard,
   VoiceNoteCard,
-  cleanSenderName
+  cleanSenderName,
 } from '../components/chat';
-const renderTextWithLinks = (text: string, color: string) => {
-  if (!text) return null;
-  const urlRegex = /(https?:\/\/[^\s]+|rehearsalhub:\/\/[^\s]+|exp:\/\/[^\s]+)/gi;
-  const parts = text.split(urlRegex);
-  return parts.map((part, i) => {
-    if (part.match(urlRegex)) {
-      return (
-        <Text key={i} style={{ color: '#60a5fa', textDecorationLine: 'underline' }} onPress={() => Linking.openURL(part)}>
-          {part}
-        </Text>
-      );
-    }
-    return <Text key={i} style={{ color }}>{part}</Text>;
-  });
-};
-const CustomLinkPreview = React.memo(({ url, isMe, accentColor }: {
-  url: string;
-  isMe: boolean;
-  accentColor: string;
-  bubbleColor?: string;
-}) => {
-  const [meta, setMeta] = React.useState<{ title?: string; description?: string; image?: string; siteName?: string } | null>(null);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    const fetchMeta = async () => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(url, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; bot)' },
-        });
-        clearTimeout(timeout);
-        const html = await res.text();
-        const getTag = (prop: string) => {
-          const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
-                  || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
-          return m?.[1]?.trim() || '';
-        };
-        const titleM = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-        const hostname = (() => { try { return new URL(url).hostname.replace('www.', ''); } catch { return url.split('/')[0]; } })();
-        if (!cancelled) {
-          const title = getTag('og:title') || getTag('twitter:title') || titleM?.[1]?.trim() || '';
-          const description = getTag('og:description') || getTag('twitter:description') || getTag('description') || '';
-          const image = getTag('og:image') || getTag('twitter:image') || '';
-          const siteName = getTag('og:site_name') || hostname;
-          setMeta(title ? { title, description, image, siteName } : null);
-        }
-      } catch {
-        if (!cancelled) setMeta(null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchMeta();
-    return () => { cancelled = true; };
-  }, [url]);
-
-  if (loading) {
-    return (
-      <View style={{
-        marginTop: 6,
-        borderLeftWidth: 3,
-        borderLeftColor: accentColor,
-        borderRadius: 8,
-        backgroundColor: 'rgba(0,0,0,0.15)',
-        padding: 10,
-        minHeight: 44,
-        justifyContent: 'center',
-      }}>
-        <ActivityIndicator size="small" color={accentColor} />
-      </View>
-    );
-  }
-
-  if (!meta?.title && !meta?.description) return null;
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={() => Linking.openURL(url).catch(() => {})}
-      style={{
-        marginTop: 6,
-        borderRadius: 10,
-        overflow: 'hidden',
-        borderLeftWidth: 3,
-        borderLeftColor: accentColor,
-        backgroundColor: isMe ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.1)',
-      }}
-    >
-      {!!meta?.image && (
-        <Image
-          source={{ uri: meta.image }}
-          style={{ width: '100%', height: 160 }}
-          contentFit="cover"
-        />
-      )}
-      <View style={{ padding: 10, gap: 3 }}>
-        {!!meta?.siteName && (
-          <Text style={{ fontSize: 11, color: accentColor, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }} numberOfLines={1}>
-            {meta.siteName}
-          </Text>
-        )}
-        {!!meta?.title && (
-          <Text style={{ fontSize: 13, color: '#ffffff', fontWeight: '700', lineHeight: 18 }} numberOfLines={2}>
-            {meta.title}
-          </Text>
-        )}
-        {!!meta?.description && (
-          <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', lineHeight: 16 }} numberOfLines={2}>
-            {meta.description}
-          </Text>
-        )}
-        <Text style={{ fontSize: 11, color: accentColor, marginTop: 2 }} numberOfLines={1}>
-          {url.length > 50 ? url.slice(0, 50) + '…' : url}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-});
+import ChatVideoModal from '../components/chat/ChatVideoModal';
+import CustomLinkPreview, { renderTextWithLinks } from '../components/chat/CustomLinkPreview';
+import ChatImageViewerModal from '../components/chat/ChatImageViewerModal';
+import ChatViewOnceModal from '../components/chat/ChatViewOnceModal';
+import ChatAttachMenuModal from '../components/chat/ChatAttachMenuModal';
+import ChatMediaPreviewModal from '../components/chat/ChatMediaPreviewModal';
+import ChatMessageActionSheet from '../components/chat/ChatMessageActionSheet';
+import ChatMessageInfoModal from '../components/chat/ChatMessageInfoModal';
+import ChatOptionsMenuModal from '../components/chat/ChatOptionsMenuModal';
+import ChatInputDeck from '../components/chat/ChatInputDeck';
+import ChatHeaderBar from '../components/chat/ChatHeaderBar';
+import ChatMessageBubble from '../components/chat/ChatMessageBubble';
 
 export default function ChatRoomScreen({ route, navigation }: any) {
 
@@ -2152,622 +1952,44 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (h > 0) return `${h}:${m<10?'0':''}${m}:${sec<10?'0':''}${sec}`;
     return `${m}:${sec<10?'0':''}${sec}`;
   };
-  const TickIcon = ({ status }: { status: ChatMessage['status'] }) => {
-    if (status === 'sending')
-      return <Ionicons name="time-outline" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-    if (status === 'failed')
-      return <Ionicons name="alert-circle-outline" size={13} color="#ef4444" style={{ marginLeft: 3 }} />;
-    if (status === 'read')
-      return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColorRead} style={{ marginLeft: 3 }} />;
-    if (status === 'delivered')
-      return <Ionicons name="checkmark-done" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-    return <Ionicons name="checkmark" size={13} color={APP_THEME.tickColor} style={{ marginLeft: 3 }} />;
-  };
-  const ReplyPreview = ({ replyTo, onPress }: { replyTo: NonNullable<ChatMessage['replyTo']>, onPress?: () => void }) => (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.quoteBox}>
-      <Text style={[styles.quoteName, { color: APP_THEME.primaryAccent }]}>{replyTo.senderName}</Text>
-      {replyTo.imageUrl ? (
-        <View style={{ flexDirection:'row', alignItems:'center', gap:6 }}>
-          <Image source={{ uri: replyTo.imageUrl }} style={{ width:36, height:36, borderRadius:4 }} contentFit="cover" />
-          <Text style={[styles.quoteText, { color: APP_THEME.secondaryText }]}>📷 Photo</Text>
-        </View>
-      ) : (
-        <Text style={[styles.quoteText, { color: APP_THEME.secondaryText }]} numberOfLines={2}>{replyTo.text || '🎤 Voice note'}</Text>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderParsedText = (text: string, defaultColor: string, isMe: boolean) => {
-    if (!text) return null;
-    const urlRegex = /(https?:\/\/[^\s]+|rehearsalhub:\/\/[^\s]+|exp:\/\/[^\s]+)/gi;
-    const parts = text.split(urlRegex);
-    if (parts.length === 1) {
-      return renderBoldText(text);
-    }
-    return parts.map((part, index) => {
-      if (part.match(urlRegex)) {
-        const isSongLink = part.toLowerCase().includes('/song/') || part.toLowerCase().includes('/songs/') || part.toLowerCase().includes('rehearsalhub://song/');
-        const isPlaylistLink = part.toLowerCase().includes('/playlist/') || part.toLowerCase().includes('/playlists/') || part.toLowerCase().includes('rehearsalhub://playlist/');
-        const isProfileLink = part.toLowerCase().includes('/profile/') || part.toLowerCase().includes('/profiles/') || part.toLowerCase().includes('/user/') || part.toLowerCase().includes('rehearsalhub://user/');
-        
-        let label = part;
-        let onPress = () => {
-          Linking.openURL(part).catch(() => {});
-        };
-
-        if (isSongLink) {
-          const songId = part.split('/').filter(Boolean).pop()?.split('?')[0] || '';
-          label = `🎵 Listen to Song`;
-          onPress = () => {
-            navigation.navigate('Player', {
-              activeTrack: { id: songId },
-              fromAllSongs: true,
-            });
-          };
-        } else if (isPlaylistLink) {
-          const playlistId = part.split('/').filter(Boolean).pop()?.split('?')[0] || '';
-          label = `💽 Open Playlist`;
-          onPress = () => {
-            navigation.navigate('Playlists', {
-              openPlaylistId: playlistId,
-            });
-          };
-        } else if (isProfileLink) {
-          const userId = part.split('/').filter(Boolean).pop()?.split('?')[0] || '';
-          label = `👤 View Profile`;
-          onPress = () => {
-            navigation.navigate('UserProfile', {
-              userId,
-            });
-          };
-        }
-
-        return (
-          <Text
-            key={`link-${index}`}
-            style={{
-              color: isMe ? '#ffffff' : APP_THEME.primaryAccent,
-              textDecorationLine: 'underline',
-              fontWeight: 'bold',
-            }}
-            onPress={onPress}
-          >
-            {label}
-          </Text>
-        );
-      }
-      return renderBoldText(part);
-    });
-  };
-
-  const renderBoldText = (text: string) => {
-    const boldRegex = /\*([^*]+)\*/g;
-    const parts = text.split(boldRegex);
-    if (parts.length === 1) {
-      return text;
-    }
-    return parts.map((part, idx) => {
-      if (idx % 2 === 1) {
-        return (
-          <Text key={`bold-${idx}`} style={{ fontWeight: 'bold' }}>
-            {part}
-          </Text>
-        );
-      }
-      return part;
-    });
-  };
-  const renderTextBubble = (msg: ChatMessage) => {
-
-    const fullText = msg.text;
-    const isLong = fullText.length > COLLAPSE_THRESHOLD;
-    const isExpanded = expandedMsgs.has(msg.id);
-    const displayText = isLong && !isExpanded
-      ? fullText.slice(0, COLLAPSE_THRESHOLD).trimEnd() + '…'
-      : fullText;
-    const textColor = msg.isMe ? APP_THEME.outgoingText : APP_THEME.incomingText;
-    const subTextColor = msg.isMe ? `${APP_THEME.outgoingText}aa` : APP_THEME.secondaryText;
-
-    return (
-      <View>
-        <View style={{ flexDirection:'row', flexWrap:'wrap', alignItems:'flex-end' }}>
-          <Text style={[styles.msgText, { color: textColor, flexShrink: 1 }]}>
-            {renderParsedText(displayText, textColor, msg.isMe)}
-          </Text>
-          {(!isLong || isExpanded) && (
-            <View style={styles.tsBubbleRow}>
-              {msg.edited && (
-                <Text style={[styles.tsText, { color: subTextColor, fontStyle:'italic', marginRight:3 }]}>
-                  edited
-                </Text>
-              )}
-              <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
-              {msg.isMe && <TickIcon status={msg.status} />}
-            </View>
-          )}
-        </View>
-        {msg.status === 'failed' && (
-          <TouchableOpacity onPress={() => retryMessage(msg.id)} style={{ marginTop: 4 }}>
-            <Text style={{ color: '#fecaca', fontSize: 11, fontWeight: '700' }}>Tap to retry</Text>
-          </TouchableOpacity>
-        )}
-        {(() => {
-          const urlMatch = fullText.match(/(https?:\/\/[^\s]+)/) 
-                        || fullText.match(/\b([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.([a-zA-Z]{2,})(\/[^\s]*)?)\b/);
-          if (!urlMatch) return null;
-          const rawUrl = urlMatch[1];
-          const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
-          return (
-            <CustomLinkPreview
-              url={url}
-              isMe={msg.isMe}
-              accentColor={APP_THEME.primaryAccent}
-              bubbleColor={msg.isMe ? APP_THEME.outgoingBubble : APP_THEME.incomingBubble}
-            />
-          );
-        })()}
-
-        {isLong && (
-          <TouchableOpacity
-            onPress={() => {
-              setExpandedMsgs(prev => {
-                const next = new Set(prev);
-                if (next.has(msg.id)) next.delete(msg.id);
-                else next.add(msg.id);
-                return next;
-              });
-            }}
-            style={styles.readMoreRow}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.readMoreText, { color: APP_THEME.primaryAccent }]}>
-              {isExpanded ? 'Read less' : 'Read more'}
-            </Text>
-            {!isExpanded && (
-              <View style={[styles.tsBubbleRow, { marginLeft: 'auto' as any }]}>
-                {msg.edited && (
-                  <Text style={[styles.tsText, { color: APP_THEME.secondaryText, fontStyle:'italic', marginRight:3 }]}>
-                    edited
-                  </Text>
-                )}
-                <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
-                {msg.isMe && <TickIcon status={msg.status} />}
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  };
   const renderMessage = ({ item: msg, index }: { item: ChatMessage; index: number }) => {
-    if (!msg || msg.isSystem) return null;
-    const ts = (msg.timestampObj && typeof msg.timestampObj.getTime === 'function' && !isNaN(msg.timestampObj.getTime()))
-      ? msg.timestampObj
-      : ((msg as any).createdAt ? new Date((msg as any).createdAt) : new Date());
-    const curDate = ts.toDateString();
-
-    const nextMsg = index < memoizedMessages.length - 1 ? memoizedMessages[index + 1] : null;
-    const nextTs = (nextMsg?.timestampObj && typeof nextMsg.timestampObj.getTime === 'function' && !isNaN(nextMsg.timestampObj.getTime()))
-      ? nextMsg.timestampObj
-      : ((nextMsg as any)?.createdAt ? new Date((nextMsg as any).createdAt) : null);
-    const prevDate = nextTs ? nextTs.toDateString() : '';
-
-    const showDate = curDate !== prevDate && msg.status !== 'sending';
-    const now = new Date();
-    const yest = new Date(now); yest.setDate(now.getDate()-1);
-    let dateLbl = curDate === now.toDateString() ? 'TODAY' : curDate === yest.toDateString() ? 'YESTERDAY'
-      : ts.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'}).toUpperCase();
-
-    const reactionEntries = Object.entries(msg?.reactions || {});
-    const reactionSummary = [...new Set(Object.values(msg?.reactions || {}))].join('');
-
     return (
-      <View style={{ transform: [{ scaleY: -1 }] }}>
-        {showDate && (
-          <View style={styles.datePillWrap}>
-            <View style={[styles.datePill, { backgroundColor: APP_THEME.datePill }]}>
-              <Text style={[styles.datePillText, { color: APP_THEME.secondaryText }]}>{dateLbl}</Text>
-            </View>
-          </View>
-        )}
-        <Swipeable
-          ref={(ref) => { swipeRefs.current[msg.id] = ref; }}
-          onSwipeableWillOpen={() => {
-            setReplyingTo(msg);
-            swipeRefs.current[msg.id]?.close();
-          }}
-          renderLeftActions={(progress, dragX) => {
-            const trans = dragX.interpolate({
-              inputRange: [0, 50, 100, 101],
-              outputRange: [-20, 0, 0, 1],
-            });
-            return (
-              <View style={{ justifyContent: 'center', alignItems: 'center', width: 60 }}>
-                <Animated.View style={{ transform: [{ translateX: trans }] }}>
-                  <View style={{ backgroundColor: 'rgba(0,0,0,0.2)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' }}>
-                    <Ionicons name="arrow-undo" size={20} color={theme.colors.textPrimary} />
-                  </View>
-                </Animated.View>
-              </View>
-            );
-          }}
-          friction={2}
-          leftThreshold={40}
-        >
-          <React.Fragment>
-        {msg.isSystem ? null : (
-          <>
-            {reactionEntries.length > 0 && (
-              <View style={[styles.reactionPillRow, msg.isMe ? { justifyContent:'flex-end', paddingRight:8 } : { justifyContent:'flex-start', paddingLeft: isGroup ? 42 : 8 }]}>
-                <TouchableOpacity
-                  style={styles.reactionPill}
-                  onPress={() => { setSelectedMsg(msg); setActionVisible(true); }}
-                >
-                  <Text style={styles.reactionPillText}>
-                    {reactionSummary}
-                    {reactionEntries.length > 1 && <Text style={styles.reactionCount}> {reactionEntries.length}</Text>}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={[
-              styles.msgRow, 
-              msg.isMe ? styles.msgRowMe : styles.msgRowThem,
-              selectedMessageIds.has(msg.id) && { backgroundColor: 'rgba(99, 102, 241, 0.18)', borderRadius: 8, paddingVertical: 2 }
-            ]}>
-              {selectedMessageIds.size > 0 && (
-                <TouchableOpacity 
-                  onPress={() => toggleSelectMessage(msg.id)}
-                  style={{ paddingHorizontal: 6, alignSelf: 'center' }}
-                >
-                  <Ionicons 
-                    name={selectedMessageIds.has(msg.id) ? "checkmark-circle" : "ellipse-outline"} 
-                    size={22} 
-                    color={selectedMessageIds.has(msg.id) ? "#25D366" : "rgba(255,255,255,0.4)"} 
-                  />
-                </TouchableOpacity>
-              )}
-              {!msg.isMe && isGroup && (
-                <View style={{ marginRight:6, alignSelf:'flex-end', marginBottom:4 }}>
-                  <SyncAvatar userId={msg.senderId} fallbackName={msg.sender} size={28} isGroup={false} />
-                </View>
-              )}
-
-              <TouchableOpacity
-                activeOpacity={0.92}
-                onPress={() => {
-                  if (selectedMessageIds.size > 0) {
-                    toggleSelectMessage(msg.id);
-                  }
-                }}
-                onLongPress={() => {
-                  if (selectedMessageIds.size > 0) {
-                    toggleSelectMessage(msg.id);
-                  } else {
-                    setSelectedMsg(msg); 
-                    setActionVisible(true);
-                  }
-                }}
-                style={[
-                  styles.bubble,
-                  msg.isMe ? { backgroundColor: isOnlyEmojis(msg.text) ? 'transparent' : APP_THEME.outgoingBubble, alignSelf:'flex-end' }
-                           : { backgroundColor: isOnlyEmojis(msg.text) ? 'transparent' : APP_THEME.incomingBubble, alignSelf:'flex-start' },
-                  msg.type === 'image' && (!msg.text && !msg.viewOnce ? { backgroundColor: 'transparent', padding: 0 } : { padding: 3, borderRadius: 12 }),
-                  (msg.type === 'song_share' || msg.type === 'playlist_share' || msg.type === 'profile_share' || msg.type === 'contact_share' || msg.type === 'group_call' || msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) && { backgroundColor: 'transparent', padding: 0, paddingHorizontal: 0, paddingVertical: 0 },
-                  isOnlyEmojis(msg.text) && { paddingHorizontal:2, paddingVertical:2 },
-                  highlightedMsgId === msg.id && {
-                    backgroundColor: theme.colors.accent + '55',
-                    shadowColor: theme.colors.accent,
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: 0.9,
-                    shadowRadius: 8,
-                    elevation: 4,
-                  }
-                ]}
-              >
-                {!msg.isMe && isGroup && <Text style={[styles.senderName, { color: msg.senderColor }]}>{msg.sender}</Text>}
-                {msg.replyTo && (
-                  (() => {
-                    const replyVal = msg.replyTo;
-                    return (
-                      <ReplyPreview 
-                        replyTo={replyVal} 
-                        onPress={() => {
-                          const idx = messages.findIndex(m => m.id === replyVal.id);
-                          if (idx !== -1) {
-                            setHighlightedMsgId(replyVal.id);
-                            flashRef.current?.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
-                            setTimeout(() => {
-                              setHighlightedMsgId(null);
-                            }, 1800);
-                          } else {
-                            Alert.alert('Message not found', 'This message is too old or was deleted.');
-                          }
-                        }}
-                      />
-                    );
-                  })()
-                )}
-                {(msg as any).forwarded && (
-                  <View style={styles.forwardedLabel}>
-                    <Ionicons name="arrow-redo-outline" size={11} color={theme.colors.textMuted} />
-                    <Text style={styles.forwardedText}>Forwarded</Text>
-                  </View>
-                )}
-                {msg.isDeleted ? (
-                  <View style={styles.deletedRow}>
-                    <Ionicons name="ban-outline" size={14} color={APP_THEME.secondaryText} style={{ marginRight:5 }} />
-                    <Text style={[styles.msgText, { color:APP_THEME.secondaryText, fontStyle:'italic', opacity:0.7 }]}>This message was deleted</Text>
-                    <Text style={[styles.tsText, { color:APP_THEME.secondaryText, marginLeft:6 }]}>{msg.time}</Text>
-                  </View>
-                ) : msg.type === 'image' && msg.imageUrl ? (
-                  msg.viewOnce ? (
-                    msg.viewOnceViewed ? (
-                      <View style={styles.viewOnceViewed}>
-                        <Ionicons name="eye-off-outline" size={20} color={APP_THEME.secondaryText} />
-                        <Text style={[styles.msgText, { color:APP_THEME.secondaryText, marginLeft:6 }]}>Opened</Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity style={styles.viewOnceBadge} onPress={() => openViewOnce(msg)}>
-                        <Ionicons name="eye-outline" size={22} color={theme.colors.textPrimary} />
-                        <Text style={styles.viewOnceLabel}>View once</Text>
-                      </TouchableOpacity>
-                    )
-                  ) : (
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (selectedMessageIds.size > 0) {
-                          toggleSelectMessage(msg.id);
-                        } else {
-                          setImgViewerUri(msg.imageUrl);
-                          setImgViewerVisible(true);
-                        }
-                      }}
-                      onLongPress={() => onMessageLongPress(msg)}
-                      delayLongPress={250}
-                    >
-                      <Image source={{ uri: msg.imageUrl }} style={{ width: SCREEN_WIDTH*0.65, height: SCREEN_WIDTH*0.65, borderRadius:8 }} contentFit="cover" />
-                      {msg.text ? <Text style={[styles.msgText, { color:APP_THEME.primaryText, marginTop:6, paddingHorizontal:4, paddingBottom: 2 }]}>{msg.text}</Text> : null}
-                      <View style={msg.text ? { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', marginRight: 4, marginBottom: 2 } : styles.tsOverlay}>
-                        <Text style={[styles.tsText, { color: msg.text ? APP_THEME.secondaryText : theme.colors.textPrimary }]}>{msg.time}</Text>
-                        {msg.isMe && <TickIcon status={msg.status} />}
-                      </View>
-                    </TouchableOpacity>
-                  )
-                ) : msg.isVoiceNote ? (
-                  <TouchableOpacity
-                    activeOpacity={0.95}
-                    onPress={() => {
-                      if (selectedMessageIds.size > 0) toggleSelectMessage(msg.id);
-                    }}
-                    onLongPress={() => onMessageLongPress(msg)}
-                    delayLongPress={250}
-                  >
-                    <VoiceNoteCard
-                      msg={{ ...msg, audioUrl: msg.audioUrl || msg.documentUrl || null }}
-                      playingId={playingId}
-                      isAudioPlaying={isAudioPlaying}
-                      playAudio={playAudio}
-                      seekAudio={seekAudio}
-                      waveformData={waveformData}
-                      theme={theme}
-                      APP_THEME={APP_THEME}
-                      styles={styles}
-                    />
-                  </TouchableOpacity>
-                ) : (msg.type === 'audio' || (msg.type === 'document' && !!(msg.documentName || msg.text)?.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i))) ? (
-                  <TouchableOpacity
-                    activeOpacity={0.95}
-                    onPress={() => {
-                      if (selectedMessageIds.size > 0) toggleSelectMessage(msg.id);
-                    }}
-                    onLongPress={() => onMessageLongPress(msg)}
-                    delayLongPress={250}
-                  >
-                    <AudioFileCard
-                      msg={msg}
-                      playingId={playingId}
-                      isAudioPlaying={isAudioPlaying}
-                      playAudio={playAudio}
-                      seekAudio={seekAudio}
-                      theme={theme}
-                      APP_THEME={APP_THEME}
-                      styles={styles}
-                    />
-                  </TouchableOpacity>
-                ) : msg.type === 'song_share' ? (
-                  <SongShareCard
-                    msg={{
-                      ...msg,
-                      songData: msg.songData || (msg as any).data?.songData || (msg as any).metadata?.songData || {
-                        id: (msg.text?.match(/song\/([a-zA-Z0-9_-]+)/i)?.[1]) || 'song_1',
-                        title: (msg.text?.match(/🎵\s*\*([^*]+)\*/i)?.[1]?.trim()) || 'Shared Song',
-                        leadSinger: (msg.text?.match(/👤\s*([^\n\r]+)/i)?.[1]?.trim()) || 'Singer',
-                      }
-                    }}
-                    playingId={playingId}
-                    isAudioPlaying={isAudioPlaying}
-                    playAudio={playAudio}
-                    seekAudio={seekAudio}
-                    navigation={navigation}
-                    theme={theme}
-                    APP_THEME={APP_THEME}
-                    styles={styles}
-                  />
-                ) : msg.type === 'playlist_share' ? (
-                  <PlaylistShareCard
-                    msg={{
-                      ...msg,
-                      playlistData: msg.playlistData || (msg as any).data?.playlistData || (msg as any).metadata?.playlistData || {
-                        id: (msg.text?.match(/playlist\/([a-zA-Z0-9_-]+)/i)?.[1]) || 'favs',
-                        name: (msg.text?.match(/💽\s*\*Playlist:\s*([^*]+)\*/i)?.[1]?.trim()) || 'Shared Playlist',
-                        songCount: parseInt(msg.text?.match(/(\d+)\s+songs/i)?.[1] || '0'),
-                        songs: [],
-                      }
-                    }}
-                    navigation={navigation}
-                    theme={theme}
-                    APP_THEME={APP_THEME}
-                    styles={styles}
-                  />
-                ) : (msg.type === 'profile_share' || msg.type === 'contact_share') ? (
-                  <ProfileShareCard
-                    msg={msg}
-                    navigation={navigation}
-                    theme={theme}
-                    APP_THEME={APP_THEME}
-                    styles={styles}
-                  />
-                ) : msg.type === 'group_call' ? (
-                  <GroupCallCard
-                    msg={msg}
-                    navigation={navigation}
-                    room={room}
-                    theme={theme}
-                    APP_THEME={APP_THEME}
-                    styles={styles}
-                  />
-                ) : msg.type === 'poll' ? (
-                  <View style={{ padding: 4, minWidth: 240, maxWidth: SCREEN_WIDTH * 0.75 }}>
-                    <Text style={{ color: APP_THEME.primaryText, fontSize: 16, fontWeight: '700', marginBottom: 12, lineHeight: 22 }}>📊 {msg.text}</Text>
-                    <View style={{ backgroundColor: 'transparent', borderRadius: 8 }}>
-                      {(msg as any).pollOptions?.map((opt: any, idx: number) => {
-                        const totalVotes = (msg as any).pollOptions.reduce((acc: number, o: any) => acc + (o.votes?.length || 0), 0);
-                        const myVotes = opt.votes?.length || 0;
-                        const percent = totalVotes > 0 ? (myVotes / totalVotes) * 100 : 0;
-                        const hasVoted = opt.votes?.includes(currentUser?.uid || '');
-                        return (
-                          <TouchableOpacity 
-                            key={idx} 
-                            style={{ marginBottom: 6, position: 'relative', overflow: 'hidden', borderRadius: 6, backgroundColor: theme.colors.background === '#000000' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }} 
-                            activeOpacity={0.7}
-                            onPress={() => handlePollVote(msg.id, idx, (msg as any).pollOptions)}>
-                            {totalVotes > 0 && (
-                              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${percent}%`, backgroundColor: hasVoted ? APP_THEME.primaryAccent + '40' : (theme.colors.background === '#000000' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)') }} />
-                            )}
-                            
-                            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10, paddingVertical: 12 }}>
-                              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: hasVoted ? APP_THEME.primaryAccent : APP_THEME.secondaryText, marginRight: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: hasVoted ? APP_THEME.primaryAccent : 'transparent' }}>
-                                {hasVoted && <Ionicons name="checkmark" size={14} color="#fff" />}
-                              </View>
-                              <Text style={{ color: APP_THEME.primaryText, fontSize: 15, flex: 1, fontWeight: hasVoted ? '600' : '400' }}>{opt.text}</Text>
-                              {totalVotes > 0 && (
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-                                  {myVotes > 0 && (
-                                    <View style={{ flexDirection: 'row-reverse', marginRight: 4 }}>
-                                      {opt.votes.slice(0, 3).map((vid: string, vi: number) => (
-                                        <View key={vid} style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: APP_THEME.secondaryText, marginLeft: -6, borderWidth: 1, borderColor: msg.isMe ? APP_THEME.outgoingBubble : APP_THEME.incomingBubble, overflow: 'hidden' }}>
-                                          <SyncAvatar userId={vid} fallbackName="?" size={16} isGroup={false} />
-                                        </View>
-                                      ))}
-                                    </View>
-                                  )}
-                                </View>
-                              )}
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                    
-                    <View style={[styles.tsBubbleRow, { marginTop: 4 }]}>
-                      <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>
-                        {((msg as any).pollOptions || []).reduce((acc: number, o: any) => acc + (o.votes?.length || 0), 0)} votes
-                      </Text>
-                      <View style={{ flex: 1 }} />
-                      <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
-                      {msg.isMe && <TickIcon status={msg.status} />}
-                    </View>
-                  </View>
-
-                ) : msg.type === 'video' && (msg.videoUrl || (msg as any).mediaUrl) ? (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => {
-                      if (selectedMessageIds.size > 0) {
-                        toggleSelectMessage(msg.id);
-                      } else {
-                        const vUrl = resolveMediaUrl(msg.videoUrl || (msg as any).mediaUrl);
-                        if (vUrl) setVideoViewerUri(vUrl);
-                      }
-                    }}
-                    onLongPress={() => onMessageLongPress(msg)}
-                    delayLongPress={250}
-                    style={{ position: 'relative' }}
-                  >
-                    <View style={{ width: SCREEN_WIDTH * 0.65, height: SCREEN_WIDTH * 0.4, borderRadius: 10, backgroundColor: '#000', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                      {/* Show thumbnail using expo-image — works with both local URI and remote URL */}
-                      <Image
-                        source={{ uri: resolveMediaUrl(msg.videoUrl) }}
-                        style={{ ...StyleSheet.absoluteFillObject, borderRadius: 10 }}
-                        contentFit="cover"
-                      />
-                      {/* Play button overlay */}
-                      <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}>
-                        {msg.status === 'sending' ? (
-                          <ActivityIndicator size="large" color="#fff" />
-                        ) : (
-                          <Ionicons name="play-circle" size={52} color="rgba(255,255,255,0.92)" />
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.tsOverlay}>
-                      <Text style={[styles.tsText, { color: '#fff' }]}>{msg.time}</Text>
-                      {msg.isMe && <TickIcon status={msg.status} />}
-                    </View>
-                  </TouchableOpacity>
-                ) : msg.type === 'document' ? (
-                  <TouchableOpacity
-                    style={styles.docCard}
-                    onPress={() => {
-                      if (selectedMessageIds.size > 0) {
-                        toggleSelectMessage(msg.id);
-                      } else {
-                        handleDocumentTap(msg);
-                      }
-                    }}
-                    onLongPress={() => onMessageLongPress(msg)}
-                    delayLongPress={250}
-                    activeOpacity={0.75}
-                    disabled={msg.status === 'sending'}
-                  >
-                    <View style={styles.docIconWrap}>
-                      {msg.status === 'sending' ? (
-                        <ActivityIndicator size="small" color={APP_THEME.primaryAccent} />
-                      ) : (
-                        <Ionicons name="document-text" size={24} color={APP_THEME.primaryAccent} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.msgText, { color: APP_THEME.primaryText }]} numberOfLines={1}>{msg.documentName || msg.text || 'Document'}</Text>
-                      <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>
-                        {msg.status === 'sending' ? 'Uploading…' : msg.documentSize ? `${(msg.documentSize / 1024).toFixed(0)} KB` : 'Tap to download'}
-                      </Text>
-                    </View>
-                    <View style={styles.tsBubbleRow}>
-                      <Text style={[styles.tsText, { color: APP_THEME.secondaryText }]}>{msg.time}</Text>
-                      {msg.isMe && <TickIcon status={msg.status} />}
-                    </View>
-                  </TouchableOpacity>
-                ) : isOnlyEmojis(msg.text) ? (
-                  <View>
-                    <Text style={{ fontSize:40, lineHeight:48 }}>{msg.text}</Text>
-                    <View style={{ flexDirection:'row', alignItems:'center', alignSelf:'flex-end', marginTop:2 }}>
-                      <Text style={[styles.tsText, { color:APP_THEME.secondaryText }]}>{msg.time}</Text>
-                      {msg.isMe && <TickIcon status={msg.status} />}
-                    </View>
-                  </View>
-                ) : (
-                  renderTextBubble(msg)
-                )}
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-      </React.Fragment>
-      </Swipeable>
-      </View>
+      <ChatMessageBubble
+        msg={msg}
+        index={index}
+        memoizedMessages={memoizedMessages}
+        isGroup={isGroup}
+        theme={theme}
+        APP_THEME={APP_THEME}
+        styles={styles}
+        currentUser={currentUser}
+        selectedMessageIds={selectedMessageIds}
+        highlightedMsgId={highlightedMsgId}
+        expandedMsgs={expandedMsgs}
+        playingId={playingId}
+        isAudioPlaying={isAudioPlaying}
+        waveformData={waveformData}
+        navigation={navigation}
+        room={room}
+        swipeRefs={swipeRefs}
+        flashRef={flashRef}
+        toggleSelectMessage={toggleSelectMessage}
+        setSelectedMsg={setSelectedMsg}
+        setActionVisible={setActionVisible}
+        setReplyingTo={setReplyingTo}
+        setHighlightedMsgId={setHighlightedMsgId}
+        setExpandedMsgs={setExpandedMsgs}
+        setImgViewerUri={setImgViewerUri}
+        setImgViewerVisible={setImgViewerVisible}
+        setVideoViewerUri={setVideoViewerUri}
+        openViewOnce={openViewOnce}
+        onMessageLongPress={onMessageLongPress}
+        handleDocumentTap={handleDocumentTap}
+        handlePollVote={handlePollVote}
+        retryMessage={retryMessage}
+        playAudio={playAudio}
+        seekAudio={seekAudio}
+      />
     );
   };
   return (
@@ -2786,109 +2008,54 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         style={StyleSheet.absoluteFill} />
 
       <SafeAreaView style={{ flex:1 }}>
-        <ThemedHeader style={styles.header}>
-          {selectedMessageIds.size > 0 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <TouchableOpacity onPress={() => setSelectedMessageIds(new Set())} style={{ padding: 6 }}>
-                  <Ionicons name="close" size={24} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: theme.gradients.headerTextColor }}>
-                  {selectedMessageIds.size}
-                </Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                <TouchableOpacity 
-                  onPress={() => {
-                    const allIds = new Set(messages.map(m => m.id));
-                    setSelectedMessageIds(allIds);
-                  }} 
-                  style={{ padding: 6 }}
-                >
-                  <Ionicons name="checkmark-done" size={22} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleDeleteSelected} style={{ padding: 6 }}>
-                  <Ionicons name="trash-outline" size={22} color="#ef4444" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : isSearching ? (
-            <View style={styles.searchBar}>
-              <TouchableOpacity onPress={() => { setIsSearching(false); setSearchQuery(''); }} style={{ padding:6 }}>
-                <Ionicons name="arrow-back" size={22} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <TextInput style={[styles.searchInput, { color:theme.colors.inputText }]} placeholder="Search messages…"
-                placeholderTextColor={theme.colors.inputPlaceholder} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding:6 }}>
-                  <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            <>
-              <View style={styles.headerLeft}>
-                <TouchableOpacity
-                  onPress={() => {
-                    if (navigation.canGoBack()) navigation.goBack();
-                    else navigation.navigate('ChatList');
-                  }}
-                  style={styles.backBtn}
-                >
-                  <Ionicons name="chevron-back" size={26} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-                <View style={[styles.avatarBorder, { borderColor: APP_THEME.primaryAccent }]}>
-                  <SyncAvatar userId={!isGroup ? room?.id?.split('_')?.find((id:string)=>id!==currentUser?.uid) : undefined}
-                    initialAvatar={roomAvatarUri} fallbackName={roomTitle} isGroup={isGroup} size={36}
-                    bgColor={isGroup ? '#00a884' : APP_THEME.primaryAccent} />
-                </View>
-                <TouchableOpacity style={{ flex:1, marginLeft:8 }} onPress={() => navigation.navigate('ChatInfo', { room })}>
-                  <Text style={[styles.headerTitle, { color:theme.gradients.headerTextColor }]} numberOfLines={1}>{roomTitle}</Text>
-                  <Text style={[styles.headerSub, { color: typingUsers.length > 0 ? '#c4b5fd' : 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>
-                    {typingUsers.length > 0 ? `${typingUsers.map(u=>u.userName).join(', ')} typing…` : isGroup ? `${room?.memberCount||''} members` : 'tap for info'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => { setIsSearching(true); }}>
-                  <Ionicons name="search-outline" size={22} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => startCall('video')}>
-                  <Ionicons name="videocam-outline" size={23} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => startCall('voice')}>
-                  <Ionicons name="call-outline" size={22} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => setChatMenuVisible(true)}>
-                  <Ionicons name="ellipsis-vertical" size={22} color={theme.gradients.headerTextColor} />
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </ThemedHeader>
-        <Modal visible={chatMenuVisible} transparent animationType="fade" onRequestClose={() => setChatMenuVisible(false)}>
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setChatMenuVisible(false)}>
-            <View style={{ position: 'absolute', top: 50, right: 10, backgroundColor: theme.colors.cardBackground, borderRadius: 8, padding: 8, elevation: 5, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, minWidth: 180 }}>
-              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); navigation.navigate('ChatInfo', { room }); }}>
-                <Text style={{ color: theme.colors.textPrimary }}>{isGroup ? 'Group Info' : 'Contact Info'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleArchiveChat(); }}>
-                <Text style={{ color: theme.colors.textPrimary }}>{isArchived ? 'Unarchive Chat' : 'Archive Chat'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleMarkUnread(); }}>
-                <Text style={{ color: theme.colors.textPrimary }}>Mark as Unread</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleClearChat(); }}>
-                <Text style={{ color: '#ef4444' }}>Clear Messages</Text>
-              </TouchableOpacity>
-              {!isGroup && (
-                <TouchableOpacity style={{ padding: 12 }} onPress={() => { setChatMenuVisible(false); handleBlockUser(); }}>
-                  <Text style={{ color: isBlocked ? APP_THEME.primaryAccent : '#ef4444' }}>{isBlocked ? 'Unblock User' : 'Block User'}</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </TouchableOpacity>
-        </Modal>
+        <ChatHeaderBar
+          selectedMessageIds={selectedMessageIds}
+          messages={messages}
+          onClearSelection={() => setSelectedMessageIds(new Set())}
+          onSelectAll={() => {
+            const allIds = new Set(messages.map(m => m.id));
+            setSelectedMessageIds(allIds);
+          }}
+          onDeleteSelected={handleDeleteSelected}
+          isSearching={isSearching}
+          searchQuery={searchQuery}
+          onStartSearch={() => setIsSearching(true)}
+          onCloseSearch={() => {
+            setIsSearching(false);
+            setSearchQuery('');
+          }}
+          onChangeSearchQuery={setSearchQuery}
+          room={room}
+          roomTitle={roomTitle}
+          roomAvatarUri={roomAvatarUri}
+          isGroup={isGroup}
+          currentUser={currentUser}
+          typingUsers={typingUsers}
+          onBack={() => {
+            if (navigation.canGoBack()) navigation.goBack();
+            else navigation.navigate('ChatList');
+          }}
+          onOpenChatInfo={() => navigation.navigate('ChatInfo', { room })}
+          onStartCall={startCall}
+          onOpenMenu={() => setChatMenuVisible(true)}
+          theme={theme}
+          APP_THEME={APP_THEME}
+          styles={styles}
+        />
+        <ChatOptionsMenuModal
+          visible={chatMenuVisible}
+          onClose={() => setChatMenuVisible(false)}
+          isGroup={isGroup}
+          isArchived={isArchived}
+          isBlocked={isBlocked}
+          theme={theme}
+          APP_THEME={APP_THEME}
+          onNavigateChatInfo={() => navigation.navigate('ChatInfo', { room })}
+          onArchiveChat={handleArchiveChat}
+          onMarkUnread={handleMarkUnread}
+          onClearChat={handleClearChat}
+          onBlockUser={handleBlockUser}
+        />
         {toastMsg && (
           <Animated.View style={[styles.toast, { opacity: toastAnim, transform:[{ translateY: toastAnim.interpolate({ inputRange:[0,1], outputRange:[-10,0] }) }] }]}>
             <Ionicons name="information-circle" size={18} color={APP_THEME.primaryAccent} style={{ marginRight:6 }} />
@@ -3012,690 +2179,145 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               </View>
             )}
           </View>
-          {(replyingTo || editingMsg) && (
-            <View style={[styles.contextBar, { backgroundColor: APP_THEME.cardBg, borderLeftColor: APP_THEME.primaryAccent }]}>
-              <Ionicons name={editingMsg ? 'pencil' : 'arrow-undo'} size={18} color={APP_THEME.primaryAccent} style={{ marginRight:8 }} />
-              <View style={{ flex:1 }}>
-                <Text style={[styles.contextName, { color:APP_THEME.primaryAccent }]}>{editingMsg ? 'Editing' : replyingTo?.sender}</Text>
-                <Text style={[styles.contextText, { color:APP_THEME.secondaryText }]} numberOfLines={1}>
-                  {editingMsg ? editingMsg.text : (replyingTo?.isVoiceNote ? '🎤 Voice note' : replyingTo?.imageUrl ? '📷 Photo' : replyingTo?.text)}
-                </Text>
-              </View>
-              <TouchableOpacity 
-                onPress={() => {
-                  setReplyingTo(null);
-                  if (editingMsg) {
-                    setEditingMsg(null);
-                    setInputText('');
-                  }
-                }} 
-                style={{ padding:6 }}
-              >
-                <Ionicons name="close-circle" size={20} color={APP_THEME.secondaryText} />
-              </TouchableOpacity>
-            </View>
-          )}
-          {mentionQuery !== null && mentionSuggestions.length > 0 && (
-            <View style={{ backgroundColor: APP_THEME.cardBg, borderRadius: 8, marginHorizontal: 16, marginBottom: 8, elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, maxHeight: 150 }}>
-              <ScrollView keyboardShouldPersistTaps="handled">
-                {mentionSuggestions.map(user => (
-                  <TouchableOpacity key={user.id} style={{ padding: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: APP_THEME.inputBg }} onPress={() => insertMention(user)}>
-                    <Text style={{ color: APP_THEME.primaryText, fontWeight: '500' }}>{user.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-          {isDirectRequest && !hasAccepted && (
-            <View style={{
-              backgroundColor: theme.colors.cardBackgroundLight,
-              padding: 16,
-              marginHorizontal: 10,
-              marginBottom: 8,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: APP_THEME.border,
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: APP_THEME.primaryText, fontSize: 14, fontWeight: '700', marginBottom: 4 }}>
-                {roomTitle} sent you a message request
-              </Text>
-              <Text style={{ color: APP_THEME.secondaryText, fontSize: 12, marginBottom: 14, textAlign: 'center' }}>
-                You can preview this message safely. They will not know you have seen it until you accept.
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 8, width: '100%' }}>
-                <TouchableOpacity 
-                  style={{ flex: 1, backgroundColor: APP_THEME.primaryAccent, paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-                  onPress={async () => {
-                    try {
-                      setHasAccepted(true);
-                      if (room) {
-                        room.isAccepted = true;
-                        (room as any).isRequest = false;
-                      }
-                      if (currentUser?.uid && room?.id) {
-                        await AsyncStorage.setItem(`chat_accepted_${currentUser.uid}_${room.id}`, 'true').catch(() => {});
-                      }
-                      await api.chats.acceptRequest(room?.id);
-                      showToast('Request accepted');
-                    } catch {
-                      setHasAccepted(true);
-                    }
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Accept</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-                  onPress={async () => {
-                    try {
-                      await api.chats.declineRequest(room?.id);
-                      navigation.goBack();
-                    } catch {
-                      navigation.goBack();
-                    }
-                  }}
-                >
-                  <Text style={{ color: APP_THEME.primaryText, fontWeight: '600', fontSize: 14 }}>Decline</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ flex: 1, backgroundColor: 'rgba(239,68,68,0.15)', paddingVertical: 10, borderRadius: 8, alignItems: 'center' }}
-                  onPress={handleBlockUser}
-                >
-                  <Text style={{ color: '#ef4444', fontWeight: '700', fontSize: 14 }}>Block</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          <View style={[styles.inputDeck, { backgroundColor:'transparent' }]}>
-            <TouchableOpacity
-              style={styles.plusBtn}
-              onPress={pickDocument}
-              onLongPress={() => setAttachMenuVisible(true)}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="document-text-outline" size={24} color={APP_THEME.secondaryText} />
-            </TouchableOpacity>
-
-            <View style={[styles.inputBox, { backgroundColor: APP_THEME.inputBg }]}>
-              {isRecording ? (
-                <View style={{ flex:1, flexDirection:'row', alignItems:'center', paddingHorizontal:10, gap:8 }}>
-                  <View style={{ width:8, height:8, borderRadius:4, backgroundColor:'#ef4444' }} />
-                  <View style={styles.liveWaveContainer}>
-                    {liveBars.map((amp, i) => {
-                      const barH = amp < 0.02 ? 2 : Math.max(3, amp * 26);
-                      return (
-                        <View key={i} style={[styles.liveWaveBar, {
-                          height: barH,
-                          opacity: 0.4 + 0.6 * (i / liveBars.length), // fade in from left
-                        }]} />
-                      );
-                    })}
-                  </View>
-                  <Text style={{ color:'#ef4444', fontWeight:'700', fontSize:13, minWidth:36 }}>{fmtDur(recDuration)}</Text>
-                  <TouchableOpacity onPress={cancelRecording} style={{ padding:4 }}>
-                    <Ionicons name="trash-outline" size={20} color={APP_THEME.secondaryText} />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TextInput style={[styles.inputField, { color:APP_THEME.primaryText }]}
-                  placeholder="Message" placeholderTextColor={APP_THEME.secondaryText}
-                  value={inputText} onChangeText={handleInputChange} multiline />
-              )}
-            </View>
-
-            <View style={styles.rightBtns}>
-              {!isRecording && !inputText.trim() && (
-                <TouchableOpacity style={styles.iconBtn} onPress={() => pickImage(false)}>
-                  <Ionicons name="camera-outline" size={26} color={APP_THEME.secondaryText} />
-                </TouchableOpacity>
-              )}
-              {inputText.trim() ? (
-                <TouchableOpacity style={[styles.sendBtn, { backgroundColor: APP_THEME.primaryAccent }]} onPress={handleSend} disabled={isUploading}>
-                  <Ionicons name="send" size={18} color={theme.colors.textPrimary} style={{ marginLeft:2 }} />
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.iconBtn} onPress={isRecording ? stopRecording : startRecording} disabled={isUploading}>
-                  <Ionicons name={isRecording ? 'send' : 'mic-outline'} size={26} color={isRecording ? APP_THEME.primaryAccent : APP_THEME.secondaryText} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-        <Modal visible={actionVisible} transparent animationType="none" onRequestClose={() => setActionVisible(false)}>
-          <TouchableOpacity
-            style={styles.sheetOverlay}
-            activeOpacity={1}
-            onPress={() => setActionVisible(false)}
+          <ChatInputDeck
+            inputText={inputText}
+            onChangeText={handleInputChange}
+            onSend={handleSend}
+            isRecording={isRecording}
+            liveBars={liveBars}
+            recDuration={recDuration}
+            startRecording={startRecording}
+            stopRecording={stopRecording}
+            cancelRecording={cancelRecording}
+            pickDocument={pickDocument}
+            openAttachMenu={() => setAttachMenuVisible(true)}
+            pickImage={pickImage}
+            isUploading={isUploading}
+            replyingTo={replyingTo}
+            editingMsg={editingMsg}
+            onCancelReplyOrEdit={() => {
+              setReplyingTo(null);
+              if (editingMsg) {
+                setEditingMsg(null);
+                setInputText('');
+              }
+            }}
+            mentionQuery={mentionQuery}
+            mentionSuggestions={mentionSuggestions}
+            onInsertMention={insertMention}
+            isDirectRequest={isDirectRequest}
+            hasAccepted={hasAccepted}
+            roomTitle={roomTitle}
+            onAcceptRequest={async () => {
+              try {
+                setHasAccepted(true);
+                if (room) {
+                  room.isAccepted = true;
+                  (room as any).isRequest = false;
+                }
+                if (currentUser?.uid && room?.id) {
+                  await AsyncStorage.setItem(`chat_accepted_${currentUser.uid}_${room.id}`, 'true').catch(() => {});
+                }
+                await api.chats.acceptRequest(room?.id);
+                showToast('Request accepted');
+              } catch {
+                setHasAccepted(true);
+              }
+            }}
+            onDeclineRequest={async () => {
+              try {
+                await api.chats.declineRequest(room?.id);
+                navigation.goBack();
+              } catch {
+                navigation.goBack();
+              }
+            }}
+            onBlockUser={handleBlockUser}
+            theme={theme}
+            APP_THEME={APP_THEME}
+            styles={styles}
           />
-          <Animated.View style={[
-            styles.actionSheet,
-            {
-              transform: [{
-                translateY: sheetAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }),
-              }],
-              opacity: sheetAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 1] }),
+        </KeyboardAvoidingView>
+        <ChatMessageActionSheet
+          visible={actionVisible}
+          onClose={() => setActionVisible(false)}
+          sheetAnim={sheetAnim}
+          selectedMsg={selectedMsg}
+          currentUser={currentUser}
+          isGroup={isGroup}
+          APP_THEME={APP_THEME}
+          styles={styles}
+          onReact={handleReact}
+          onReply={(msg) => { setReplyingTo(msg); setActionVisible(false); }}
+          onForward={handleForward}
+          onSelect={(msgId) => {
+            setActionVisible(false);
+            if (msgId) {
+              setSelectedMessageIds(new Set([msgId]));
             }
-          ]}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.reactionRow}>
-              {['❤️','👍','😂','😮','😢','🙏','🔥','👏'].map(e => {
-                const isSelected = selectedMsg?.reactions[currentUser?.uid||''] === e;
-                return (
-                  <TouchableOpacity
-                    key={e}
-                    onPress={() => handleReact(e)}
-                    style={[styles.reactionBtn, isSelected && styles.reactionBtnActive]}
-                  >
-                    <Text style={styles.reactionEmoji}>{e}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <View style={styles.sheetDivider} />
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
-              <TouchableOpacity style={styles.actionItem} onPress={() => { setReplyingTo(selectedMsg); setActionVisible(false); }}>
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="arrow-undo-outline" size={20} color={APP_THEME.primaryText} />
-                </View>
-                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Reply</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionItem} onPress={handleForward}>
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="arrow-redo-outline" size={20} color={APP_THEME.primaryText} />
-                </View>
-                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Forward</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.actionItem} 
-                onPress={() => { 
-                  setActionVisible(false); 
-                  if (selectedMsg?.id) {
-                    setSelectedMessageIds(new Set([selectedMsg.id]));
-                  }
-                }}
-              >
-                <View style={styles.actionIconWrap}>
-                  <Ionicons name="checkbox-outline" size={20} color={APP_THEME.primaryText} />
-                </View>
-                <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Select</Text>
-              </TouchableOpacity>
-
-              {selectedMsg?.type === 'text' && !selectedMsg.isDeleted && (
-                <TouchableOpacity style={styles.actionItem} onPress={handleCopy}>
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons name="copy-outline" size={20} color={APP_THEME.primaryText} />
-                  </View>
-                  <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Copy</Text>
-                </TouchableOpacity>
-              )}
-
-              {selectedMsg?.isMe && !selectedMsg.isVoiceNote && !selectedMsg.isDeleted && (
-                (() => {
-                  const canEdit = Date.now() - selectedMsg.timestampObj.getTime() < 5 * 60 * 1000;
-                  if (!canEdit) return null;
-                  return (
-                    <TouchableOpacity style={styles.actionItem} onPress={() => {
-                      setEditingMsg(selectedMsg); setInputText(selectedMsg.text); setActionVisible(false);
-                    }}>
-                      <View style={styles.actionIconWrap}>
-                        <Ionicons name="pencil-outline" size={20} color={APP_THEME.primaryText} />
-                      </View>
-                      <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Edit</Text>
-                    </TouchableOpacity>
-                  );
-                })()
-              )}
-
-              {selectedMsg?.isMe && isGroup && !selectedMsg.isDeleted && (
-                <TouchableOpacity style={styles.actionItem} onPress={() => { setActionVisible(false); setShowMessageInfo(true); }}>
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons name="information-circle-outline" size={20} color={APP_THEME.primaryText} />
-                  </View>
-                  <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Info</Text>
-                </TouchableOpacity>
-              )}
-
-              {!selectedMsg?.isDeleted && (
-                <TouchableOpacity style={styles.actionItem} onPress={handleDelete}>
-                  <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(239,68,68,0.12)' }]}>
-                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                  </View>
-                  <Text style={[styles.actionText, { color: '#ef4444' }]}>
-                    Delete
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {!selectedMsg?.isMe && !selectedMsg?.isDeleted && !selectedMsg?.isSystem && (
-                <TouchableOpacity style={styles.actionItem} onPress={handleReport}>
-                  <View style={[styles.actionIconWrap, { backgroundColor: 'rgba(245,158,11,0.12)' }]}>
-                    <Ionicons name="warning-outline" size={20} color="#f59e0b" />
-                  </View>
-                  <Text style={[styles.actionText, { color: '#f59e0b' }]}>Report</Text>
-                </TouchableOpacity>
-              )}
-              
-              {selectedMsg?.type === 'image' && selectedMsg?.imageUrl && !selectedMsg?.viewOnce && (
-                <TouchableOpacity style={styles.actionItem} onPress={() => { setActionVisible(false); saveImageToDevice(selectedMsg.imageUrl!); }}>
-                  <View style={styles.actionIconWrap}>
-                    <Ionicons name="download-outline" size={20} color={APP_THEME.primaryText} />
-                  </View>
-                  <Text style={[styles.actionText, { color: APP_THEME.primaryText }]}>Save to Gallery</Text>
-                </TouchableOpacity>
-              )}
-              <View style={{ height: 24 }} />
-            </ScrollView>
-          </Animated.View>
-        </Modal>
-        <Modal visible={showMessageInfo} transparent animationType="slide" onRequestClose={() => setShowMessageInfo(false)}>
-          <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-            <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
-            <DoodleBackground />
-            <LinearGradient colors={theme.gradients.bgGlow} locations={theme.gradients.bgGlowLocations} start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }} style={StyleSheet.absoluteFill} />
-            <View style={{ flex: 1, paddingTop: Math.max(insets?.top || 0, Platform.OS === 'android' ? (RNStatusBar.currentHeight || 28) : 44) }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: APP_THEME.border }}>
-                <TouchableOpacity onPress={() => setShowMessageInfo(false)} style={{ padding: 6 }}>
-                  <Ionicons name="chevron-back" size={26} color={APP_THEME.primaryText} />
-                </TouchableOpacity>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: APP_THEME.primaryText }}>Message Info</Text>
-                <View style={{ width: 38 }} />
-              </View>
-              <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={true}>
-                <View style={{ padding: 16, backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: 16, marginHorizontal: 16, borderRadius: 12 }}>
-                  {selectedMsg?.imageUrl && (
-                    <Image
-                      source={{ uri: selectedMsg.imageUrl }}
-                      style={{ width: '100%', height: 180, borderRadius: 8, marginBottom: 8 }}
-                      contentFit="cover"
-                    />
-                  )}
-                  {selectedMsg?.isVoiceNote && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <Ionicons name="mic" size={18} color={APP_THEME.primaryAccent} />
-                      <Text style={{ color: APP_THEME.primaryAccent, fontWeight: '600', fontSize: 13 }}>Voice Note</Text>
-                    </View>
-                  )}
-                  {selectedMsg?.documentName && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <Ionicons name="document-text-outline" size={18} color={APP_THEME.primaryAccent} />
-                      <Text style={{ color: APP_THEME.primaryText, fontWeight: '600', fontSize: 14 }}>{selectedMsg.documentName}</Text>
-                    </View>
-                  )}
-                  {selectedMsg?.text ? (
-                    <Text style={{ color: APP_THEME.primaryText, fontSize: 15, lineHeight: 21 }}>{selectedMsg.text}</Text>
-                  ) : null}
-                  <Text style={{ color: APP_THEME.secondaryText, fontSize: 12, marginTop: 6 }}>{selectedMsg?.time}</Text>
-                </View>
-
-                {(() => {
-                  const readers: any[] = [];
-                  const delivered: any[] = [];
-                  const isRead = selectedMsg?.status === 'read';
-                  const readByList: string[] = Array.isArray(selectedMsg?.readBy) ? selectedMsg.readBy : [];
-
-                  if (chatData?.participantDetails) {
-                    Object.keys(chatData.participantDetails || {}).forEach(uid => {
-                      if (uid === currentUser?.uid) return;
-                      const details = chatData.participantDetails[uid];
-                      const hasRead = readByList.includes(uid) || (isRead && readByList.length === 0);
-                      if (hasRead) {
-                        readers.push({ uid, ...details });
-                      } else {
-                        delivered.push({ uid, ...details });
-                      }
-                    });
-                  }
-                  
-                  return (
-                    <>
-                      <Text style={{ color: APP_THEME.primaryAccent, paddingHorizontal: 16, paddingBottom: 8, fontWeight: 'bold' }}>
-                        Read by ({readers.length})
-                      </Text>
-                      {readers.map(r => (
-                        <View key={r.uid} style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-                          <SyncAvatar userId={r.uid} fallbackName={r.name} size={40} isGroup={false} />
-                          <View style={{ marginLeft: 12, flex: 1 }}>
-                            <Text style={{ color: APP_THEME.primaryText, fontSize: 16 }} numberOfLines={1}>{r.name}</Text>
-                          </View>
-                          <Ionicons name="checkmark-done" size={18} color="#38bdf8" />
-                        </View>
-                      ))}
-                      {readers.length === 0 && <Text style={{ color: APP_THEME.secondaryText, paddingHorizontal: 16, paddingBottom: 16 }}>No one has read this yet.</Text>}
-
-                      <Text style={{ color: APP_THEME.primaryAccent, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, fontWeight: 'bold' }}>
-                        Delivered to ({delivered.length})
-                      </Text>
-                      {delivered.map(r => (
-                        <View key={r.uid} style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: theme.colors.border }}>
-                          <SyncAvatar userId={r.uid} fallbackName={r.name} size={40} isGroup={false} />
-                          <View style={{ marginLeft: 12, flex: 1 }}>
-                            <Text style={{ color: APP_THEME.primaryText, fontSize: 16 }} numberOfLines={1}>{r.name}</Text>
-                          </View>
-                          <Ionicons name="checkmark" size={18} color={APP_THEME.secondaryText} />
-                        </View>
-                      ))}
-                      {delivered.length === 0 && <Text style={{ color: APP_THEME.secondaryText, paddingHorizontal: 16, paddingBottom: 16 }}>No one else in group.</Text>}
-                    </>
-                  );
-                })()}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+          }}
+          onCopy={handleCopy}
+          onEdit={(msg) => {
+            setEditingMsg(msg);
+            setInputText(msg.text);
+            setActionVisible(false);
+          }}
+          onInfo={() => {
+            setActionVisible(false);
+            setShowMessageInfo(true);
+          }}
+          onDelete={handleDelete}
+          onReport={handleReport}
+          onSaveToGallery={(uri) => {
+            setActionVisible(false);
+            saveImageToDevice(uri);
+          }}
+        />
+        <ChatMessageInfoModal
+          visible={showMessageInfo}
+          onClose={() => setShowMessageInfo(false)}
+          selectedMsg={selectedMsg}
+          chatData={chatData}
+          currentUser={currentUser}
+          insets={insets}
+          theme={theme}
+          APP_THEME={APP_THEME}
+        />
         <ChatVideoModal uri={videoViewerUri} onClose={() => setVideoViewerUri(null)} />
-        <Modal visible={imgViewerVisible} transparent={false} animationType="fade" statusBarTranslucent onRequestClose={() => setImgViewerVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: '#000000' }}>
-            <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
-                <TouchableOpacity
-                  onPress={() => setImgViewerVisible(false)}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-                </TouchableOpacity>
-                <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>Photo</Text>
-                <TouchableOpacity
-                  onPress={() => imgViewerUri && saveImageToDevice(imgViewerUri)}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="download-outline" size={22} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-              <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                {imgViewerUri && (
-                  <Image
-                    source={{ uri: imgViewerUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="contain"
-                  />
-                )}
-              </View>
-            </SafeAreaView>
-          </View>
-        </Modal>
-        <Modal visible={viewOnceVisible} transparent={false} animationType="fade" statusBarTranslucent onRequestClose={() => setViewOnceVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: '#000000' }}>
-            <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, zIndex: 10 }}>
-                <TouchableOpacity
-                  onPress={() => setViewOnceVisible(false)}
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: 'rgba(255,255,255,0.15)',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="close" size={24} color="#FFFFFF" />
-                </TouchableOpacity>
-                <View style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 14, backgroundColor: 'rgba(192,132,252,0.25)' }}>
-                  <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 15 }}>{viewOnceTimer}s</Text>
-                </View>
-                <View style={{ width: 40 }} />
-              </View>
-              <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                {viewOnceUri && (
-                  <Image
-                    source={{ uri: viewOnceUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    contentFit="contain"
-                  />
-                )}
-              </View>
-              <View style={{ paddingBottom: 24, alignItems: 'center' }}>
-                <Ionicons name="eye-outline" size={22} color="rgba(255,255,255,0.6)" />
-                <Text style={{ color: 'rgba(255,255,255,0.6)', marginTop: 4, fontSize: 13 }}>
-                  View once — disappears in {viewOnceTimer}s
-                </Text>
-              </View>
-            </SafeAreaView>
-          </View>
-        </Modal>
-        <Modal visible={attachMenuVisible} transparent animationType="slide" onRequestClose={() => setAttachMenuVisible(false)}>
-          {/* Full-screen dismiss area - sits behind the menu card */}
-          <View style={[styles.overlay, { justifyContent: 'flex-end' }]}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFillObject}
-              activeOpacity={1}
-              onPress={() => setAttachMenuVisible(false)}
-            />
-            {/* Menu card stops event propagation so button taps don't dismiss the modal */}
-            <View
-              style={[styles.attachMenu, { backgroundColor: theme.colors.backgroundDark, marginBottom: 90, marginHorizontal: 16, alignSelf: 'stretch' }]}
-              onStartShouldSetResponder={() => true}
-              onTouchEnd={e => e.stopPropagation()}
-            >
-              <View style={styles.attachRow}>
-                {[
-                  { icon:'document', color:'#7f66ff', label:'Document', onPress: pickDocument },
-                  { icon:'camera', color:'#ff2e74', label:'Camera', onPress:()=>pickImage(true) },
-                  { icon:'image', color:'#00a884', label:'Gallery', onPress:()=>pickImage(false) },
-                  { icon:'videocam', color:'#f59e0b', label:'Video', onPress: pickVideo },
-                ].map(item => (
-                  <TouchableOpacity key={item.label} style={styles.attachBtn} onPress={item.onPress} activeOpacity={0.75}>
-                    <View style={[styles.attachIcon, { backgroundColor:item.color }]}>
-                      <Ionicons name={item.icon as any} size={24} color={theme.colors.textPrimary} />
-                    </View>
-                    <Text style={styles.attachLabel}>{item.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          </View>
-        </Modal>
-        <Modal
+        <ChatImageViewerModal
+          visible={imgViewerVisible}
+          uri={imgViewerUri}
+          onClose={() => setImgViewerVisible(false)}
+          onSave={(uri) => saveImageToDevice(uri)}
+        />
+        <ChatViewOnceModal
+          visible={viewOnceVisible}
+          uri={viewOnceUri}
+          timer={viewOnceTimer}
+          onClose={() => setViewOnceVisible(false)}
+        />
+        <ChatAttachMenuModal
+          visible={attachMenuVisible}
+          onClose={() => setAttachMenuVisible(false)}
+          onPickDocument={pickDocument}
+          onPickCamera={() => pickImage(true)}
+          onPickGallery={() => pickImage(false)}
+          onPickVideo={pickVideo}
+          theme={theme}
+          styles={styles}
+        />
+        <ChatMediaPreviewModal
           visible={!!previewMediaList}
-          transparent={false}
-          animationType="fade"
-          onRequestClose={() => setPreviewMediaList(null)}
-          statusBarTranslucent={true}
-        >
-          <View style={{ flex: 1, backgroundColor: '#0B141A' }}>
-            <StatusBar style="light" />
-            <KeyboardAvoidingView
-              style={{ flex: 1 }}
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            >
-              <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-                {/* WhatsApp Top Header */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingHorizontal: 16,
-                  paddingVertical: 12,
-                  backgroundColor: '#0B141A',
-                  zIndex: 10,
-                }}>
-                  <TouchableOpacity
-                    onPress={() => setPreviewMediaList(null)}
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: 'rgba(255,255,255,0.12)',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="close" size={24} color="#FFFFFF" />
-                  </TouchableOpacity>
-
-                  <View style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 5,
-                    borderRadius: 14,
-                    backgroundColor: 'rgba(255,255,255,0.1)',
-                  }}>
-                    <Text style={{ color: '#E9EDEF', fontSize: 14, fontWeight: '600' }}>
-                      {previewMediaList?.length === 1 ? 'Preview' : `${previewMediaList?.length || 0} items`}
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    onPress={() => setPreviewViewOnce(p => !p)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 6,
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 16,
-                      backgroundColor: previewViewOnce ? 'rgba(0, 168, 132, 0.25)' : 'rgba(255, 255, 255, 0.12)',
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={previewViewOnce ? 'eye' : 'eye-outline'}
-                      size={18}
-                      color={previewViewOnce ? '#00A884' : '#E9EDEF'}
-                    />
-                    <Text style={{
-                      color: previewViewOnce ? '#00A884' : '#E9EDEF',
-                      fontSize: 12,
-                      fontWeight: '600',
-                    }}>
-                      {previewViewOnce ? 'View once' : 'Standard'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Centered Media Canvas - Fits 100% within screen, never overflowing */}
-                <View style={{ flex: 1, width: '100%', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                  {previewMediaList && previewMediaList.length > 0 && (
-                    <FlatList
-                      data={previewMediaList}
-                      horizontal
-                      pagingEnabled
-                      showsHorizontalScrollIndicator={false}
-                      keyExtractor={(_, index) => index.toString()}
-                      style={{ flex: 1, width: '100%' }}
-                      contentContainerStyle={{ flexGrow: 1, alignItems: 'center' }}
-                      renderItem={({ item }) => (
-                        <View style={{ width: SCREEN_WIDTH, flex: 1, justifyContent: 'center', alignItems: 'center', padding: 8 }}>
-                          <Image
-                            source={{ uri: item.uri }}
-                            style={{ width: SCREEN_WIDTH - 16, height: '100%' }}
-                            contentFit="contain"
-                          />
-                        </View>
-                      )}
-                    />
-                  )}
-                </View>
-
-                {/* WhatsApp Caption Input and Send Button Deck */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingHorizontal: 12,
-                  paddingTop: 8,
-                  paddingBottom: 10,
-                  backgroundColor: '#0B141A',
-                  gap: 10,
-                }}>
-                  <View style={{
-                    flex: 1,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: 'rgba(32, 44, 51, 0.95)',
-                    borderRadius: 24,
-                    paddingHorizontal: 16,
-                    paddingVertical: Platform.OS === 'ios' ? 8 : 4,
-                    minHeight: 46,
-                  }}>
-                    <TextInput
-                      style={{
-                        flex: 1,
-                        color: '#FFFFFF',
-                        fontSize: 15,
-                        maxHeight: 90,
-                        paddingVertical: 4,
-                      }}
-                      placeholder={previewMediaList?.length && previewMediaList.length > 1 ? "Add a caption to first item…" : "Add a caption…"}
-                      placeholderTextColor="#8696A0"
-                      value={previewCaption}
-                      onChangeText={setPreviewCaption}
-                      multiline
-                    />
-                    <TouchableOpacity
-                      onPress={() => setPreviewViewOnce(p => !p)}
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 14,
-                        borderWidth: 1.5,
-                        borderColor: previewViewOnce ? '#00A884' : '#8696A0',
-                        backgroundColor: previewViewOnce ? 'rgba(0, 168, 132, 0.25)' : 'transparent',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        marginLeft: 8,
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={{
-                        color: previewViewOnce ? '#00A884' : '#8696A0',
-                        fontSize: 13,
-                        fontWeight: '700',
-                      }}>
-                        1
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 24,
-                      backgroundColor: '#00A884',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      shadowColor: '#000',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.35,
-                      shadowRadius: 3,
-                      elevation: 5,
-                    }}
-                    onPress={sendPreviewMedia}
-                    disabled={isUploading}
-                    activeOpacity={0.8}
-                  >
-                    {isUploading ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Ionicons name="send" size={20} color="#FFFFFF" style={{ marginLeft: 2 }} />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </SafeAreaView>
-            </KeyboardAvoidingView>
-          </View>
-        </Modal>
+          mediaList={previewMediaList}
+          caption={previewCaption}
+          isViewOnce={previewViewOnce}
+          isUploading={isUploading}
+          onClose={() => setPreviewMediaList(null)}
+          onChangeCaption={setPreviewCaption}
+          onToggleViewOnce={() => setPreviewViewOnce(p => !p)}
+          onSend={sendPreviewMedia}
+          screenWidth={SCREEN_WIDTH}
+        />
 
 
       </SafeAreaView>

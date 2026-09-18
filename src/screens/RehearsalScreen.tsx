@@ -1122,6 +1122,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
     });
   }, [activeProgramId, programTitle, activeZone?.id]);
 
+  useWebSocket('live_song', 'all', handleLiveSongUpdate, true); // fast direct event
   useWebSocket('song', activeProgramId || '', handleLiveSongUpdate, Boolean(activeProgramId));
   useWebSocket('songs', activeProgramId || '', handleLiveSongUpdate, Boolean(activeProgramId));
   useWebSocket('song', 'all', handleLiveSongUpdate, true);

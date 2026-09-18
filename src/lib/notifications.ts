@@ -88,7 +88,7 @@ export function setupNotifications() {
       }
     });
 
-    const notificationListener = Notifications.addNotificationReceivedListener(notification => {
+    const notificationListener = Notifications.addNotificationReceivedListener((notification: any) => {
       const data = (notification.request.content.data || {}) as any;
       if (data?.screen === 'IncomingCall' || data?.type === 'call' || data?.callId) {
         if (AppState.currentState === 'active') {
@@ -103,7 +103,7 @@ export function setupNotifications() {
       }
     });
 
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const data = (response.notification.request.content.data || {}) as any;
       const user = useUserStore.getState().user;
       if (data?.zoneCode && user) {

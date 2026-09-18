@@ -77,6 +77,8 @@ export interface ChatMessage {
     phone?: string;
   };
   pollOptions?: any[];
+  readBy?: string[];
+  deliveredTo?: string[];
 }
 
 export const SENDER_COLORS_DARK = ['#53bdeb', '#7bc67e', '#fcb97d', '#e06c75', '#c678dd', '#61afef', '#e5c07b', '#98c379'];
