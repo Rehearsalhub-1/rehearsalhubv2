@@ -116,7 +116,12 @@ export async function connect() {
         const key = `${resource}:${id}`;
         if (!subscribedKeys.has(key) && socket?.readyState === WebSocket.OPEN) {
           subscribedKeys.add(key);
-          socket.send(JSON.stringify({ type: 'subscribe', resource, id, since: eventCursors.get(`${resource}:${id}`) || 0 }));
+          const cursor = resource === 'live_song' ? undefined : eventCursors.get(key);
+          const payload: Record<string, any> = { type: 'subscribe', resource, id };
+          if (typeof cursor === 'number' && cursor > 0) {
+            payload.since = cursor;
+          }
+          socket.send(JSON.stringify(payload));
         }
 
         // Also subscribe to singular/plural aliases if defined
@@ -125,7 +130,12 @@ export async function connect() {
           const aliasKey = `${alias}:${id}`;
           if (!subscribedKeys.has(aliasKey) && socket?.readyState === WebSocket.OPEN) {
             subscribedKeys.add(aliasKey);
-            socket.send(JSON.stringify({ type: 'subscribe', resource: alias, id, since: eventCursors.get(`${alias}:${id}`) || 0 }));
+            const aliasCursor = alias === 'live_song' ? undefined : eventCursors.get(aliasKey);
+            const payload: Record<string, any> = { type: 'subscribe', resource: alias, id };
+            if (typeof aliasCursor === 'number' && aliasCursor > 0) {
+              payload.since = aliasCursor;
+            }
+            socket.send(JSON.stringify(payload));
           }
         });
       });

@@ -456,33 +456,28 @@ export const useUserStore = create<UserStore>((set, get) => ({
   },
 
   joinZone: async (code) => {
-    const { user, profile, userZones, refreshZones } = get();
+    const { user, refreshZones } = get();
     if (!user?.uid) return { success: false, message: 'Not logged in' };
+    const cleanCode = String(code || '').trim();
+    if (!cleanCode) return { success: false, message: 'Please enter an invitation code.' };
 
     try {
-      const zone = getZoneByInvitationCode(code);
-      if (!zone) return { success: false, message: 'Invalid invitation code.' };
-      if (userZones.some(z => z.id === zone.id)) {
-        return { success: true, message: `You are already a member of ${zone.name}.` };
-      }
-
-      const userName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || 'Member' : 'Member';
-      const userEmail = profile?.email || '';
-      const isHQ = isHQGroup(zone.id);
-
       const { apiClient } = require('../lib/apiClient');
-      await apiClient.post('/members/zone-join', {
-        zone_id: zone.id,
-        is_hq: isHQ,
-        user_email: userEmail,
-        user_name: userName,
+      const res: any = await apiClient.post('/members/zone-join', {
+        invitationCode: cleanCode,
       });
 
-      await refreshZones();
-      return { success: true, message: `Welcome to ${zone.name}!` };
-    } catch (e) {
+      if (res?.success) {
+        await refreshZones();
+        await get().bootstrap();
+        return { success: true, message: res.message || 'Successfully joined zone!' };
+      } else {
+        return { success: false, message: res?.error || res?.message || 'Invalid invitation code.' };
+      }
+    } catch (e: any) {
       console.error('[useUserStore] Failed to join zone:', e);
-      return { success: false, message: 'Failed to join zone. Please try again.' };
+      const errMsg = e?.response?.data?.error || e?.message || 'Invalid invitation code. Please verify the code and try again.';
+      return { success: false, message: errMsg };
     }
   },
 

@@ -47,6 +47,15 @@ import { api, clearCache } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 import { useLiveSongStore, isLiveSong, isSongExplicitlyOff } from '../stores/liveSongStore';
+import { StandaloneCountdown } from '../components/rehearsal/StandaloneCountdown';
+import { RehearsalSkeletonLoader } from '../components/rehearsal/RehearsalSkeletonLoader';
+import { RehearsalEmptyState } from '../components/rehearsal/RehearsalEmptyState';
+import { RehearsalCategoryRow } from '../components/rehearsal/RehearsalCategoryRow';
+import { RehearsalSongRow } from '../components/rehearsal/RehearsalSongRow';
+import { ProgramSwitcherModal } from '../components/rehearsal/ProgramSwitcherModal';
+import { RehearsalListHeader } from '../components/rehearsal/RehearsalListHeader';
+import { getStyles } from '../components/rehearsal/rehearsalStyles';
+import { isInvalidUserCategory, songBelongsToCategory, isSongHeard, getTrackImage, getRehearsalCount } from '../lib/rehearsalUtils';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
@@ -65,183 +74,6 @@ const _memCache: Record<string, {
   categoryOrder?: string[];
 }> = {};
 
-const isInvalidUserCategory = (cat: string) => {
-  if (!cat || typeof cat !== 'string' || !cat.trim()) return true;
-  const lower = cat.trim().toLowerCase();
-  return lower === 'worship' || lower === 'praise night' || lower === 'uncategorized' || lower === 'none';
-};
-
-const songBelongsToCategory = (song: any, targetCategory: string) => {
-  if (song.categories && Array.isArray(song.categories) && song.categories.length > 0) {
-    return song.categories.some((cat: string) => cat.trim() === targetCategory.trim());
-  }
-  return (song.category || '').trim() === targetCategory.trim();
-};
-
-const isSongHeard = (s: any): boolean => {
-  if (!s) return false;
-  if (s.status === 'heard') return true;
-  if (s.status === 'unheard') return false;
-  if (s.rehearsalStatus === 'heard') return true;
-  if (s.rehearsalStatus === 'unheard') return false;
-  if (s.heard === true || s.isHeard === true) return true;
-  if (s.heard === false || s.isHeard === false) return false;
-  const title = (s.title || '').toLowerCase();
-  if (title.includes('(heard)')) return true;
-  if (title.includes('(unheard)')) return false;
-  return false;
-};
-
-const getTrackImage = (track: any, _index?: number) => {
-  if (track.image && typeof track.image === 'string' && track.image.startsWith('http')) return track.image;
-  if (track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http')) return track.imageUrl;
-  if (track.artworkUrl && typeof track.artworkUrl === 'string' && track.artworkUrl.startsWith('http')) return track.artworkUrl;
-  if (track.coverImage && typeof track.coverImage === 'string' && track.coverImage.startsWith('http')) return track.coverImage;
-  return null;
-};
-
-const getRehearsalCount = (song: any): number => {
-  const raw = song?.rawData || song?.raw_data || song?.metadata || {};
-  const value = song?.rehearsalCount ?? song?.rehearsal_count ?? raw.rehearsalCount ?? raw.rehearsal_count ?? raw.metadata?.rehearsalCount;
-  const count = Number(value);
-  return Number.isFinite(count) && count >= 0 ? count : 0;
-};
-
-const StandaloneCountdown = ({ programDate, programCountdownObj, programUpdatedAt, styles }: any) => {
-  const [countdown, setCountdown] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    let interval: NodeJS.Timeout | null = null;
-
-    const parseProgramDate = (dateStr: string | undefined): Date | null => {
-      if (!dateStr) return null;
-      try {
-        let cleaned = dateStr.replace(/(\d+)(st|nd|rd|th)/i, '$1');
-        cleaned = cleaned.replace(/monday|tuesday|wednesday|thursday|friday|saturday|sunday/gi, '');
-        cleaned = cleaned.replace(/,/g, '').trim();
-
-        const now = new Date();
-        const currentYear = now.getFullYear();
-
-        let date = new Date(cleaned);
-
-        if (isNaN(date.getTime()) || !/\d{4}/.test(cleaned)) {
-
-          const parts = cleaned.split(' ').filter(Boolean);
-          if (parts.length >= 2) {
-            const p1 = parts[0];
-            const p2 = parts[1];
-            const p3 = parts[2] || currentYear;
-
-            if (!isNaN(Number(p1))) {
-              date = new Date(`${p2} ${p1}, ${p3}`);
-            } else {
-              date = new Date(`${p1} ${p2}, ${p3}`);
-            }
-          }
-        }
-
-        if (!isNaN(date.getTime())) {
-
-          if (date.getTime() < now.getTime() - 30 * 24 * 60 * 60 * 1000) {
-            date.setFullYear(date.getFullYear() + 1);
-          }
-          return date;
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
-    };
-
-    const initializeCountdown = async () => {
-      let targetDate: Date | null = null;
-      const now = new Date();
-
-      const parsedProgramDate = parseProgramDate(programDate);
-      if (parsedProgramDate) {
-
-        if (programDate && programDate.indexOf(':') === -1 && parsedProgramDate.getHours() === 0) {
-          parsedProgramDate.setHours(17, 0, 0, 0);
-        }
-        if (parsedProgramDate.getTime() > now.getTime()) {
-          targetDate = parsedProgramDate;
-        }
-      }
-
-      if (!targetDate && programCountdownObj) {
-        const durationMs =
-        (programCountdownObj.days || 0) * 86400000 +
-        (programCountdownObj.hours || 0) * 3600000 +
-        (programCountdownObj.minutes || 0) * 60000 +
-        (programCountdownObj.seconds || 0) * 1000;
-
-        if (durationMs > 0) {
-          const baseDate = programUpdatedAt ? new Date(programUpdatedAt).getTime() : now.getTime();
-          if (!isNaN(baseDate)) {
-            const calculatedTarget = new Date(baseDate + durationMs);
-            if (calculatedTarget.getTime() > now.getTime()) {
-              targetDate = calculatedTarget;
-            }
-          }
-        }
-      }
-
-      if (!active) return;
-
-      if (!targetDate || isNaN(targetDate.getTime())) {
-        setCountdown(null);
-        return;
-      }
-
-      const updateCountdown = () => {
-
-        const now = new Date();
-        const diff = targetDate!.getTime() - now.getTime();
-
-        if (diff <= 0) {
-          setCountdown(null);
-          if (interval) clearInterval(interval);
-          return;
-        }
-
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor(diff / (1000 * 60 * 60) % 24);
-        const mins = Math.floor(diff / 1000 / 60 % 60);
-        const secs = Math.floor(diff / 1000 % 60);
-
-        if (days > 0) {
-          setCountdown(`${days}d ${hours}h ${mins}m ${secs}s`);
-        } else {
-          setCountdown(`${hours}h ${mins}m ${secs}s`);
-        }
-      };
-
-      updateCountdown();
-      interval = setInterval(updateCountdown, 1000);
-    };
-
-    initializeCountdown();
-
-    return () => {
-      active = false;
-      if (interval) clearInterval(interval);
-    };
-  }, [programDate, programCountdownObj, programUpdatedAt]);
-
-  if (!countdown) return null;
-
-  return (
-    <View style={[
-      styles.countdownBadge,
-      { position: 'relative', alignSelf: 'flex-start', bottom: 0, right: 0, marginBottom: 12 }
-    ]}>
-        <Ionicons name="time" size={14} color="#38bdf8" />
-        <Text style={styles.countdownText}>{countdown}</Text>
-    </View>
-  );
-};
 
 export default function RehearsalScreen({ navigation, route }: any) {
   const { theme, themeName } = useTheme();
@@ -456,7 +288,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
     };
   }, [route?.params?.songId, programSongs, activeZone?.id]);
 
-  // auth listener removed — auth state managed via useUserStore
+  // auth listener removed â€” auth state managed via useUserStore
 
   const waveAnim1 = useRef(new Animated.Value(0.3)).current;
   const waveAnim2 = useRef(new Animated.Value(0.6)).current;
@@ -701,7 +533,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           }
         } else {
           try {
-            // Always pass the explicit zoneId — even for zone-001 (HQ) users.
+            // Always pass the explicit zoneId â€” even for zone-001 (HQ) users.
             // The API's HQ-admin bypass (no zone filter) only applies to server-side
             // admin tokens. Regular singers authenticated in zone-001 must still
             // receive zoneId=zone-001 so the backend scopes results correctly.
@@ -1286,46 +1118,13 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
         {isLoading && programSongs.length === 0 ? (
 
-          <ScrollView style={{ flex: 1 }} scrollEnabled={false} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}>
-            <Animated.View style={[{
-              width: '100%', height: SCREEN_WIDTH * 0.52, borderRadius: 12,
-              backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 20,
-            }, { opacity: shimmerOpacity }]} />
-            <Animated.View style={[{ height: 22, width: '60%', borderRadius: 8, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 10 }, { opacity: shimmerOpacity }]} />
-            <Animated.View style={[{ height: 14, width: '40%', borderRadius: 12, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 24 }, { opacity: shimmerOpacity }]} />
-            {[1,2,3,4,5,6].map(i => (
-              <Animated.View key={i} style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }, { opacity: shimmerOpacity }]}>
-                <View style={{ width: 48, height: 48, borderRadius: 4, backgroundColor: theme.colors.cardBackgroundLight, marginRight: 12 }} />
-                <View style={{ flex: 1 }}>
-                  <View style={{ height: 14, width: `${55 + (i % 3) * 15}%`, borderRadius: 12, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 8 }} />
-                  <View style={{ height: 11, width: `${35 + (i % 4) * 10}%`, borderRadius: 5, backgroundColor: theme.colors.cardBackgroundLight }} />
-                </View>
-              </Animated.View>
-            ))}
-            <View style={{ alignItems: 'center', marginTop: 8 }}>
-              <ActivityIndicator size="small" color="rgba(192,132,252,0.5)" />
-              <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 8, fontWeight: '500' }}>
-                Connecting to server…
-              </Text>
-            </View>
-          </ScrollView>
+          <RehearsalSkeletonLoader shimmerOpacity={shimmerOpacity} theme={theme} />
         ) : !isLoading && programSongs.length === 0 ? (
-          <ScrollView
-            contentContainerStyle={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={isRefreshing}
-                onRefresh={handleRefresh}
-                tintColor={theme.colors.accent}
-                colors={[theme.colors.accent]}
-              />
-            }
-          >
-            <Ionicons name="musical-notes-outline" size={64} color={theme.colors.textMuted} />
-            <Text style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 24, textAlign: 'center' }}>No Ongoing Program</Text>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontWeight: '500', marginTop: 8, textAlign: 'center' }}>Check back later for updates.</Text>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontWeight: '400', marginTop: 16, textAlign: 'center' }}>Pull down to retry connecting</Text>
-          </ScrollView>
+          <RehearsalEmptyState
+            isRefreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            theme={theme}
+          />
         ) : (
         <FlatList
           style={styles.content}
@@ -1347,317 +1146,90 @@ export default function RehearsalScreen({ navigation, route }: any) {
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
           ListHeaderComponent={
-            <>
-              <View style={styles.searchRow}>
-                <View style={[styles.searchContainer, { padding: 0, paddingHorizontal: 0, overflow: 'hidden' }]}>
-                  <LinearGradient
-                    colors={['transparent', 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 }}
-                  >
-                    <Ionicons name="search" size={18} color={theme.colors.textMuted} style={styles.searchIcon} />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="Find on this page"
-                      placeholderTextColor={theme.colors.textMuted}
-                      value={searchQuery}
-                      onChangeText={setSearchQuery} />
-                  </LinearGradient>
-                </View>
-                <TouchableOpacity
-                  style={[styles.sortButton, { padding: 0, paddingHorizontal: 0, overflow: 'hidden' }]}
-                  onPress={() => {
-                    setSortAscending(!sortAscending);
-                  }}>
-                  <LinearGradient
-                    colors={['transparent', 'transparent']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18 }}
-                  >
-                    <Text style={styles.sortText}>Sort ({sortAscending ? 'A-Z' : 'Z-A'})</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.heroContainer}>
-                <View style={{ width: SCREEN_WIDTH * 0.92, height: SCREEN_WIDTH * 0.52, borderRadius: 16, overflow: 'hidden' }}>
-                  <Image
-                    source={coverImage}
-                    style={StyleSheet.absoluteFill}
-                    contentFit="contain"
-                    cachePolicy="disk"
-                    transition={300}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.detailsContainer}>
-                  <StandaloneCountdown programDate={programDate} programCountdownObj={programCountdownObj} programUpdatedAt={programUpdatedAt} styles={styles} />
-                <TouchableOpacity
-                  style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}
-                  onPress={() => {
-                    setShowProgramSwitcher(true);
-                  }}
-                  activeOpacity={0.7}>
-                  <Text style={[styles.titleText, { marginBottom: 0, flexShrink: 1, textTransform: 'uppercase' }]} numberOfLines={1}>{programTitle}</Text>
-                  <View style={{ borderRadius: 14, width: 30, height: 30, overflow: 'hidden', marginLeft: 10 }}>
-                    <LinearGradient
-                      colors={['rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0.05)']}
-                      style={{ width: 30, height: 30, alignItems: 'center', justifyContent: 'center' }}
-                    >
-                      <Ionicons name="chevron-down" size={18} color={theme.colors.textPrimary} />
-                    </LinearGradient>
-                  </View>
-                </TouchableOpacity>
-                
-                <View style={styles.authorRow}>
-                  <Text style={styles.authorText}>{programDate}</Text>
-                </View>
-
-                <Text style={styles.aboutText}>{programLocation}</Text>
-              </View>
-
-              <View style={styles.actionRow}>
-                <View style={styles.actionLeft}>
-                  <View style={styles.downloadIconWrapper}>
-                     <Image source={require('../../assets/logo/logo.png')} style={styles.downloadIcon} contentFit="contain" />
-                  </View>
-                  {selectedCategory !== null &&
-                    <>
-                      <TouchableOpacity style={styles.tabIconButton} onPress={() => {setActiveTab('heard');}}>
-                        <Ionicons name={activeTab === 'heard' ? 'headset' : 'headset-outline'} size={24} color={activeTab === 'heard' ? '#10b981' : theme.colors.textMuted} />
-                        <Text style={[styles.tabIconText, { color: activeTab === 'heard' ? '#10b981' : theme.colors.textMuted }]}>
-                          { (activeZone ? isHQGroup(activeZone.id) : contextIsHQ) ? "HEARD" : "REHEARSED" }
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.tabIconButton} onPress={() => {setActiveTab('unheard');}}>
-                        <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name={activeTab === 'unheard' ? 'headset' : 'headset-outline'} size={24} color={activeTab === 'unheard' ? '#10b981' : theme.colors.textMuted} />
-                          <View style={{ position: 'absolute', width: 20, height: 2, backgroundColor: activeTab === 'unheard' ? '#10b981' : theme.colors.textMuted, transform: [{ rotate: '45deg' }] }} />
-                        </View>
-                        <Text style={[styles.tabIconText, { color: activeTab === 'unheard' ? '#10b981' : theme.colors.textMuted }]}>
-                          { (activeZone ? isHQGroup(activeZone.id) : contextIsHQ) ? "UNHEARD" : "UNREHEARSED" }
-                        </Text>
-                      </TouchableOpacity>
-                    </>
-                  }
-                </View>
-                <View style={styles.actionRight}>
-                  <TouchableOpacity style={styles.iconButton} onPress={() => {
-                    if (programSongs.length > 0) {
-                      const randomIdx = Math.floor(Math.random() * programSongs.length);
-                      play(programSongs[randomIdx], programSongs, false);
-                      navigation.navigate('Player', { activeTrack: programSongs[randomIdx], zoneId: activeZone?.id, queue: programSongs });
-                    }
-                  }}>
-                    <Ionicons name="shuffle" size={26} color={theme.colors.accent} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={styles.tabContentContainer}>
-                {isLoading && programSongs.length > 0 && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}>
-                    <ActivityIndicator size="small" color={theme.colors.accent} />
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '500' }}>Updating…</Text>
-                  </View>
-                )}
-                {!isLoading && categories.length === 0 && programSongs.length > 0 && (
-                  <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-                    {[1,2,3].map(i => (
-                      <Animated.View key={i} style={[{
-                        height: 64, borderRadius: 16, backgroundColor: theme.colors.cardBackgroundLight,
-                        marginBottom: 12,
-                      }, { opacity: shimmerOpacity }]} />
-                    ))}
-                  </View>
-                )}
-                {selectedCategory && (
-                  <View style={[styles.trackList, { paddingBottom: 0, marginBottom: 16 }]}>
-                    <View style={styles.categoryHeaderRow}>
-                      <TouchableOpacity
-                        style={styles.backToCategoriesBtn}
-                        onPress={() => {
-                          setSelectedCategory(null);
-                        }}>
-                        <Ionicons name="arrow-back" size={16} color={theme.colors.textPrimary} />
-                        <Text style={styles.backToCategoriesText}>Categories</Text>
-                      </TouchableOpacity>
-                      
-                      <TouchableOpacity style={[styles.backToCategoriesBtn, { backgroundColor: 'transparent' }]}>
-                        <Text style={styles.currentCategoryTitle} numberOfLines={1}>
-                          {selectedCategory ? selectedCategory.length <= 15 ? selectedCategory : selectedCategory.split(' ').length > 2 ? `${selectedCategory.split(' ')[0]} ${selectedCategory.split(' ')[1]}...` : selectedCategory : ''}
-                        </Text>
-                        <Ionicons name="chevron-forward" size={16} color={theme.colors.textPrimary} style={{ marginLeft: 4 }} />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginTop: -8, marginBottom: 8 }}>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>
-                        {programSongs.filter((track: any) => songBelongsToCategory(track, selectedCategory)).length} songs
-                      </Text>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          backgroundColor: isSelectionMode ? 'rgba(192, 132, 252, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                          paddingVertical: 5,
-                          paddingHorizontal: 12,
-                          borderRadius: 20,
-                          borderWidth: 1,
-                          borderColor: isSelectionMode ? theme.colors.accent : 'rgba(255, 255, 255, 0.1)',
-                        }}
-                        onPress={() => {
-                          setIsSelectionMode(!isSelectionMode);
-                          if (isSelectionMode) {
-                            setSelectedTracks(new Set());
-                          }
-                        }}>
-                        <Ionicons
-                          name={isSelectionMode ? "close-circle-outline" : "checkmark-circle-outline"}
-                          size={14}
-                          color={isSelectionMode ? theme.colors.accent : theme.colors.textSecondary}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={{ color: isSelectionMode ? theme.colors.accent : theme.colors.textSecondary, fontSize: 13, fontWeight: '700' }}>
-                          {isSelectionMode ? "Cancel" : "Select"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </>
+            <RehearsalListHeader
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sortAscending={sortAscending}
+              onToggleSort={() => setSortAscending(!sortAscending)}
+              coverImage={coverImage}
+              programTitle={programTitle}
+              programDate={programDate}
+              programLocation={programLocation}
+              programCountdownObj={programCountdownObj}
+              programUpdatedAt={programUpdatedAt}
+              onPressProgramTitle={() => setShowProgramSwitcher(true)}
+              selectedCategory={selectedCategory}
+              activeTab={activeTab}
+              onSetTab={setActiveTab}
+              isHQ={activeZone ? isHQGroup(activeZone.id) : contextIsHQ}
+              programSongs={programSongs}
+              onShuffle={() => {
+                if (programSongs.length > 0) {
+                  const randomIdx = Math.floor(Math.random() * programSongs.length);
+                  play(programSongs[randomIdx], programSongs, false);
+                  navigation.navigate('Player', { activeTrack: programSongs[randomIdx], zoneId: activeZone?.id, queue: programSongs });
+                }
+              }}
+              isLoading={isLoading}
+              shimmerOpacity={shimmerOpacity}
+              categories={categories}
+              onBackToCategories={() => setSelectedCategory(null)}
+              isSelectionMode={isSelectionMode}
+              onToggleSelectionMode={() => { setIsSelectionMode(!isSelectionMode); if (isSelectionMode) setSelectedTracks(new Set()); }}
+              theme={theme}
+              styles={styles}
+            />
           }
           renderItem={({ item, index }) => {
             if (!selectedCategory) {
               const cat = item;
               const songCount = categorySongCounts[cat.id] || 0;
-
               return (
-                <View style={{ paddingHorizontal: 16 }}>
-                  <TouchableOpacity
-                    style={styles.categoryListItem}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      setSelectedCategory(cat.id);
-                      setActiveTab('unheard');
-                    }}>
-                    <View style={styles.categoryItemLeft}>
-                      <View style={styles.categoryIconWrapper}>
-                        <Ionicons name={cat.icon as any} size={20} color={theme.colors.textPrimary} />
-                      </View>
-                      <View style={styles.categoryTextInfo}>
-                        <Text style={styles.categoryListTitle} numberOfLines={1} ellipsizeMode="tail">{cat.name}</Text>
-                        <Text style={styles.categoryListSubtitle} numberOfLines={1} ellipsizeMode="tail">{songCount} songs available</Text>
-                      </View>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
+                <RehearsalCategoryRow
+                  key={cat.id}
+                  cat={cat}
+                  songCount={songCount}
+                  onPress={() => { setSelectedCategory(cat.id); setActiveTab('unheard'); }}
+                  theme={theme}
+                  styles={styles}
+                />
               );
             }
 
             const track = item;
-             const isActiveTrack = activeTrack && (
+            const isActiveTrack = !!(activeTrack && (
               String(activeTrack.id) === String(track.id) ||
               (activeTrack.isHistory && String(activeTrack.originalSongId) === String(track.id))
-            );
+            ));
             const hasAudio = !!track.audioUrl;
             return (
-              <View style={[styles.trackList, { paddingTop: 0, paddingBottom: 0 }]}>
-                <TouchableOpacity
-                  style={[styles.trackItem, selectedTracks.has(track.id) && { backgroundColor: 'rgba(192,132,252,0.12)', borderRadius: 12 }]}
-                  activeOpacity={0.7}
-                  onPress={() => {
-                    if (isSelectionMode) {
-                      toggleSelection(track.id);
-                      return;
-                    }
-
-                    const isSameTrack = activeTrack && (
-                      String(activeTrack.id) === String(track.id) ||
-                      (activeTrack.isHistory && String(activeTrack.originalSongId) === String(track.id))
-                    );
-                    if (!isSameTrack) {
-                      play(track, programSongs, false);
-                    }
+              <RehearsalSongRow
+                track={track}
+                index={index}
+                isActiveTrack={isActiveTrack}
+                isPlaying={isPlaying}
+                isSelectionMode={isSelectionMode}
+                isSelected={selectedTracks.has(track.id)}
+                hasAudio={hasAudio}
+                coverImage={coverImage || COVER_IMAGE}
+                placeholderVideoPlayer={placeholderVideoPlayer}
+                onPress={() => {
+                  if (isSelectionMode) { toggleSelection(track.id); return; }
+                  const isSameTrack = activeTrack && (
+                    String(activeTrack.id) === String(track.id) ||
+                    (activeTrack.isHistory && String(activeTrack.originalSongId) === String(track.id))
+                  );
+                  if (!isSameTrack) {
+                    play(track, programSongs, true);
+                  } else {
                     navigation.navigate('Player', { activeTrack: track, zoneId: activeZone?.id, queue: programSongs });
-                  }}
-                  onLongPress={() => {
-                    if (!isSelectionMode) setIsSelectionMode(true);
-                    toggleSelection(track.id);
-                  }}>
-                  {isSelectionMode ? (
-                    <View style={{ width: 28, alignItems: 'center', marginRight: 8 }}>
-                      <Ionicons name={selectedTracks.has(track.id) ? "checkmark-circle" : "ellipse-outline"} size={20} color={selectedTracks.has(track.id) ? theme.colors.accent : theme.colors.textMuted} />
-                    </View>
-                  ) : isActiveTrack && isPlaying ? (
-                    <View style={{ width: 28, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 2, height: 18, marginRight: 8 }}>
-                      {[1, 0.6, 0.85].map((h, i) => (
-                        <View key={i} style={{ width: 3, height: 18 * h, backgroundColor: theme.colors.accent, borderRadius: 2 }} />
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={{ color: isActiveTrack ? theme.colors.accent : theme.colors.textMuted, fontSize: 12, fontWeight: '700', width: 28, textAlign: 'center', marginRight: 8, fontFamily: 'monospace' }}>
-                      {String(index + 1).padStart(2, '0')}
-                    </Text>
-                  )}
-                  <View style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26', marginRight: 12 }}>
-                    {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
-                      <Image source={{ uri: track.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" />
-                    ) : (
-                      <>
-                        <Image
-                          source={coverImage || COVER_IMAGE}
-                          style={StyleSheet.absoluteFill}
-                          contentFit="cover"
-                          cachePolicy="disk"
-                        />
-                        <VideoView
-                          player={placeholderVideoPlayer}
-                          style={StyleSheet.absoluteFill}
-                          contentFit="cover"
-                          nativeControls={false}
-                        />
-                      </>
-                    )}
-                    {!hasAudio && (
-                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="volume-mute" size={16} color="rgba(255,255,255,0.8)" />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.trackInfo}>
-                    <Text style={[styles.trackTitle, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1} ellipsizeMode="tail">{track.title}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      {!hasAudio ? (
-                        <Ionicons name="volume-mute-outline" size={12} color="#fb923c" style={{ marginRight: 4 }} />
-                      ) : (
-                        <Ionicons name={isActiveTrack ? 'volume-high' : 'musical-notes'} size={12} color={isActiveTrack ? theme.colors.accent : theme.colors.textMuted} style={{ marginRight: 4 }} />
-                      )}
-                      <Text style={[styles.trackSubtitle, { flex: 1 }, isActiveTrack && { color: theme.colors.accent }, !hasAudio && { color: '#fb923c' }]} numberOfLines={1} ellipsizeMode="tail">
-                        {!hasAudio ? 'No audio yet' : `${track.subtitle} • ${track.category}`}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <View style={{ backgroundColor: 'rgba(168, 85, 247, 0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
-                      <Text style={{ color: theme.colors.accent, fontSize: 12, fontWeight: 'bold' }}>x{track.rehearsalCount}</Text>
-                    </View>
-                    {!isSelectionMode && (
-                      <TouchableOpacity style={styles.trackMoreButton} onPress={(e) => {
-                        e.stopPropagation();
-                        setSelectedOptionsTrack(track);
-                        setShowTrackOptions(true);
-                      }}>
-                        <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              </View>
+                  }
+                }}
+                onLongPress={() => { if (!isSelectionMode) setIsSelectionMode(true); toggleSelection(track.id); }}
+                onOptionsPress={() => { setSelectedOptionsTrack(track); setShowTrackOptions(true); }}
+                theme={theme}
+                styles={styles}
+              />
             );
           }}
           ListEmptyComponent={
@@ -1821,60 +1393,25 @@ export default function RehearsalScreen({ navigation, route }: any) {
       </View>
 
       {}
-      <Modal
+      <ProgramSwitcherModal
         visible={showProgramSwitcher}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowProgramSwitcher(false)}>
-        
-        <BlurView intensity={60} tint="dark" style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setShowProgramSwitcher(false)} />
-          
-          <View style={[styles.modalContainer, { paddingBottom: Math.max(24, insets.bottom + 16) }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitleText}>Switch Program</Text>
-              <TouchableOpacity onPress={() => setShowProgramSwitcher(false)} style={styles.closeModalBtn}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
-              {availablePrograms
-                .filter((prog: any) => {
-                  // Mirror the web: only show programs matching the current category tab
-                  const targetCat = (route?.params?.categoryFilter || 'ongoing').toLowerCase().trim();
-                  return (prog.category || '').toLowerCase().trim() === targetCat;
-                })
-                .map((prog) => {
-                const isActive = prog.id === currentActiveTrack?.program || prog.name === programTitle;
-                return (
-                  <TouchableOpacity
-                    key={prog.id}
-                    style={[styles.categoryListItem, isActive && { backgroundColor: 'transparent', borderColor: theme.colors.bottomTabBorder, borderWidth: 1 }]}
-                    onPress={() => {
-                      setSelectedProgramOverride(prog);
-                      setShowProgramSwitcher(false);
-                      setSelectedCategory(null);
-                      setActiveTab('unheard');
-                      triggerReload();
-                    }}>
-                    
-                    <View style={styles.categoryItemLeft}>
-                      <View style={[styles.categoryIconWrapper, isActive && { backgroundColor: 'transparent' }]}>
-                        <Ionicons name="radio" size={20} color={theme.colors.textPrimary} />
-                      </View>
-                      <View style={styles.categoryTextInfo}>
-                        <Text style={[styles.categoryListTitle, isActive && { color: theme.colors.textPrimary }]} numberOfLines={1}>{prog.name || prog.title}</Text>
-                        <Text style={styles.categoryListSubtitle} numberOfLines={1}>{prog.date || new Date(prog.createdAt).toLocaleDateString()}</Text>
-                      </View>
-                    </View>
-                    {isActive && <Ionicons name="checkmark-circle" size={24} color={theme.colors.textPrimary} />}
-                  </TouchableOpacity>);
+        onClose={() => setShowProgramSwitcher(false)}
+        availablePrograms={availablePrograms}
+        programTitle={programTitle}
+        currentActiveTrack={currentActiveTrack}
+        categoryFilter={route?.params?.categoryFilter}
+        onSelectProgram={(prog) => {
+          setSelectedProgramOverride(prog);
+          setShowProgramSwitcher(false);
+          setSelectedCategory(null);
+          setActiveTab('unheard');
+          triggerReload();
+        }}
+        insets={insets}
+        theme={theme}
+        styles={styles}
+      />
 
-              })}
-            </ScrollView>
-          </View>
-        </BlurView>
-      </Modal>
 
       <TrackOptionsModal 
         visible={showTrackOptions} 
@@ -1916,877 +1453,3 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
 }
 
-const getStyles = (theme: any, insets: any) => {
-  const T = theme.colors;
-  return StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background
-  },
-  safeArea: {
-    flex: 1
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center'
-  },
-  content: {
-    flex: 1
-  },
-  scrollContent: {
-    paddingBottom: 40
-  },
-  searchRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 20,
-    alignItems: 'center'
-  },
-  searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    height: 38,
-    borderRadius: 6,
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    marginRight: 12
-  },
-  searchIcon: {
-    marginRight: 8
-  },
-  searchInput: {
-    flex: 1,
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '500'
-  },
-  sortButton: {
-    backgroundColor: theme.colors.cardBackgroundLight,
-    height: 38,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  sortText: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  heroContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 15 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 20
-  },
-  heroImage: {
-    width: SCREEN_WIDTH * 0.92,
-    height: SCREEN_WIDTH * 0.52,
-    borderRadius: 12
-  },
-  countdownBadge: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    gap: 6
-  },
-  countdownText: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  detailsContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 16
-  },
-  titleText: {
-    color: theme.colors.textPrimary,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 12
-  },
-  authorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8
-  },
-  authorLogo: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 8,
-    backgroundColor: theme.colors.background
-  },
-  authorText: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  aboutText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '400',
-    marginBottom: 6,
-    lineHeight: 18
-  },
-  durationText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 24
-  },
-  actionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  downloadIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    marginRight: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden'
-  },
-  downloadIcon: {
-    width: '100%',
-    height: '100%'
-  },
-  iconButton: {
-    marginRight: 20
-  },
-  tabIconButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 20
-  },
-  tabIconText: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5
-  },
-  actionRight: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  playButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    overflow: 'hidden',
-    marginLeft: 20,
-    shadowColor: '#d946ef',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.55,
-    shadowRadius: 14,
-    elevation: 12
-  },
-  trackList: {
-    paddingHorizontal: 16
-  },
-  categoriesListContainer: {
-    paddingHorizontal: 16
-  },
-  categoryListItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    marginBottom: 12
-  },
-  categoryItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16
-  },
-  categoryIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16
-  },
-  categoryTextInfo: {
-    justifyContent: 'center',
-    flex: 1
-  },
-  categoryListTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4
-  },
-  categoryListSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  categoryHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-    paddingHorizontal: 16
-  },
-  backToCategoriesBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20
-  },
-  backToCategoriesText: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-    marginLeft: 4
-  },
-  currentCategoryTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40
-  },
-  emptyText: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    marginTop: 8
-  },
-  trackItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16
-  },
-  trackImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 8
-  },
-  trackInfo: {
-    flex: 1,
-    justifyContent: 'center'
-  },
-  trackTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4
-  },
-  trackSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '400'
-  },
-  trackMoreButton: {
-    padding: 8
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 24,
-    padding: 4,
-    marginHorizontal: 16,
-    marginBottom: 20
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 20,
-    alignItems: 'center'
-  },
-  activeTabButton: {
-    backgroundColor: 'rgba(255,255,255,0.0)', // Transparent so we rely on text color
-  },
-  tabText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  activeTabText: {
-    color: theme.colors.accent,
-    fontWeight: '700'
-  },
-  tabContentContainer: {
-    flex: 1
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    justifyContent: 'space-between'
-  },
-  categoryCard: {
-    width: (SCREEN_WIDTH - 36) / 2,
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    minHeight: 110,
-    justifyContent: 'flex-end',
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6
-  },
-  categoryIcon: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    opacity: 0.3
-  },
-  categoryTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4
-  },
-  categorySubtitle: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  nowPlayingBar: {
-    position: 'absolute',
-    bottom: 66,
-    left: 12,
-    right: 12,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12
-  },
-  nowPlayingCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  nowPlayingImage: {
-    width: 46,
-    height: 46,
-    borderRadius: 10,
-    marginRight: 12
-  },
-  nowPlayingInfo: {
-    flex: 1
-  },
-  nowPlayingTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 3,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3
-  },
-  nowPlayingSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  nowPlayingActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14
-  },
-  nowPlayingBtn: {
-  },
-  bottomTabBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 64,
-    backgroundColor: theme.colors.bottomTabBackground,
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.bottomTabBorder,
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingBottom: 4
-  },
-  bottomTabButton: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%'
-  },
-  activeBottomTabButton: {
-    opacity: 1
-  },
-  bottomTabText: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 4
-  },
-  activeBottomTabText: {
-    color: theme.colors.accent,
-    fontWeight: '700'
-  },
-  dropdownMenuContainer: {
-    backgroundColor: theme.colors.background,
-    marginHorizontal: 16,
-    marginTop: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    paddingVertical: 8,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 16
-  },
-  dropdownHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder,
-    marginBottom: 4
-  },
-  dropdownTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: 'bold'
-  },
-  dropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12
-  },
-  activeDropdownItem: {
-    backgroundColor: theme.colors.cardBackgroundLight
-  },
-  dropdownItemText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '500'
-  },
-  activeDropdownItemText: {
-    color: theme.colors.textPrimary,
-    fontWeight: '700'
-  },
-
-  playerModalContainer: {
-    flex: 1
-  },
-  playerModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16
-  },
-  playerModalHeaderBtn: {
-    padding: 4
-  },
-  playerModalHeaderText: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.3
-  },
-  playerModalArtContainer: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginTop: 16,
-    marginBottom: 24,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.5,
-    shadowRadius: 24,
-    elevation: 20
-  },
-  playerModalArt: {
-    width: '100%',
-    height: '100%'
-  },
-  playerModalLyricsSnippet: {
-    color: theme.colors.textPrimary,
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 28,
-    letterSpacing: -0.5,
-    marginBottom: 32
-  },
-  playerModalInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 32
-  },
-  playerModalTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 4,
-    letterSpacing: -0.5
-  },
-  playerModalArtist: {
-    color: theme.colors.textSecondary,
-    fontSize: 16,
-    fontWeight: '500'
-  },
-  playerModalProgressContainer: {
-    marginBottom: 32
-  },
-  playerModalProgressBar: {
-    width: '100%',
-    height: 4,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 2,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  playerModalProgressFill: {
-    height: '100%',
-    backgroundColor: theme.colors.textPrimary,
-    borderRadius: 2
-  },
-  playerModalProgressThumb: {
-    width: 12,
-    height: 12,
-    borderRadius: 12,
-    backgroundColor: theme.colors.textPrimary,
-    marginLeft: -6
-  },
-  playerModalTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between'
-  },
-  playerModalTimeText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  playerModalControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    marginBottom: 36
-  },
-  playerModalPlayPauseBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: theme.colors.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 12
-  },
-  playerModalBottomActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 32
-  },
-  playerModalLyricsCard: {
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder
-  },
-  playerModalLyricsCardTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 12
-  },
-  playerModalLyricsCardText: {
-    color: theme.colors.textSecondary,
-    fontSize: 18,
-    fontWeight: '600',
-    lineHeight: 26
-  },
-
-  heardPillActive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    borderWidth: 1,
-    borderColor: '#22c55e',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20
-  },
-  heardPillInactive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20
-  },
-  heardPillTextActive: {
-    color: '#22c55e',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  heardPillTextInactive: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  unheardPillActive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(251, 146, 60, 0.15)',
-    borderWidth: 1,
-    borderColor: '#fb923c',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20
-  },
-  unheardPillInactive: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20
-  },
-  unheardPillTextActive: {
-    color: '#fb923c',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  unheardPillTextInactive: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  statusFilterCenterText: {
-    flex: 1,
-    textAlign: 'center',
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '800',
-    paddingHorizontal: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5
-  },
-
-  floatingLiveWidget: {
-    position: 'absolute',
-    bottom: 136,
-    right: 16,
-    borderRadius: 16,
-    backgroundColor: theme.colors.background,
-    borderWidth: 1.5,
-    borderColor: '#22c55e',
-    shadowColor: '#22c55e',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 12,
-    zIndex: 999
-  },
-  liveWidgetGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10
-  },
-  liveIndicatorRing: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: 'rgba(34,197,94,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#22c55e'
-  },
-  liveWidgetInfo: {
-    marginRight: 10,
-    maxWidth: 150
-  },
-  liveTextSmall: {
-    color: '#22c55e',
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 1,
-    marginBottom: 1
-  },
-  liveTextTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  livePulseIcon: {
-    marginLeft: 'auto'
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,10,20,0.85)',
-    justifyContent: 'flex-end'
-  },
-  modalContent: {
-    backgroundColor: theme.colors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: Math.max(24, insets.bottom + 16),
-    maxHeight: '70%',
-    borderTopWidth: 1.5,
-    borderColor: 'rgba(34,197,94,0.3)'
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder,
-    marginBottom: 16
-  },
-  modalTitle: {
-    color: '#22c55e',
-    fontSize: 15,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5
-  },
-  closeModalBtn: {
-    padding: 4
-  },
-  modalList: {
-    width: '100%'
-  },
-  modalListItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.cardBackgroundLight,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder
-  },
-  modalItemBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(34,197,94,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10
-  },
-  modalItemBadgeText: {
-    color: '#22c55e',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  modalItemInfo: {
-    flex: 1,
-    marginRight: 10
-  },
-  modalItemTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 1
-  },
-  modalItemSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: '500'
-  },
-
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end'
-  },
-  modalDismissArea: {
-    flex: 1
-  },
-  modalContainer: {
-    backgroundColor: theme.colors.bottomSheetBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: Math.max(24, insets.bottom + 16),
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 20
-  },
-  modalTitleText: {
-    color: theme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700'
-  }
-});
-};

@@ -33,6 +33,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { useUserStore } from '../hooks/useUser';
 import { getHiddenFeatures } from '../config/roles';
 import { getAccessToken } from '../services/api';
+import { AudiolabWaveformTab } from '../components/audiolab/AudiolabWaveformTab';
+import { AudiolabFeatherTab } from '../components/audiolab/AudiolabFeatherTab';
+import { AudiolabProjectsTab } from '../components/audiolab/AudiolabProjectsTab';
+import { AudiolabSettingsTab } from '../components/audiolab/AudiolabSettingsTab';
+import { AudiolabModalContent } from '../components/audiolab/AudiolabModalContent';
+import { getStyles } from '../components/audiolab/audiolabStyles';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -439,25 +445,21 @@ export default function AudiolabScreen({ navigation }: any) {
       await FileSystem.writeAsStringAsync(tempPath, base64, { encoding: FileSystem.EncodingType.Base64 });
 
       // Step 3: upload the bounced file to R2 via POST /upload
-      const uploadForm = new FormData();
-      uploadForm.append('file', {
-        uri: tempPath,
-        name: `take_${Date.now()}.m4a`,
-        type: 'audio/mp4',
-      } as any);
-      uploadForm.append('folder', 'audiolab/takes');
       const rawBackendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
       const effectiveBackendUrl = (!rawBackendUrl || rawBackendUrl.includes('loveworld-singers-backend.vercel.app'))
         ? 'https://rehearsalhub-api-production-6a17.up.railway.app'
         : rawBackendUrl.replace(/\/+$/, '').replace(/\/api$/, '');
 
-      const uploadRes = await fetch(`${effectiveBackendUrl}/upload`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: uploadForm,
+      const uploadRes = await FileSystem.uploadAsync(`${effectiveBackendUrl}/upload`, tempPath, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        parameters: { folder: 'audiolab/takes' },
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
       });
-      if (!uploadRes.ok) throw new Error('Upload failed');
-      const uploadData = await uploadRes.json();
+
+      if (uploadRes.status < 200 || uploadRes.status >= 300) throw new Error('Upload failed');
+      const uploadData = JSON.parse(uploadRes.body);
       showToast(`Take uploaded ✓`);
       console.log('[AudioLab] Take uploaded to R2:', uploadData?.data?.url);
     } catch (err) {
@@ -658,7 +660,7 @@ export default function AudiolabScreen({ navigation }: any) {
           }
           return t;
         }));
-        showToast(keep === 'left' ? 'Trimmed end ✓' : 'Trimmed start ✓');
+        showToast(keep === 'left' ? 'Trimmed end âœ“' : 'Trimmed start âœ“');
       };
       reader.readAsDataURL(blob);
     } catch (err) {
@@ -753,7 +755,7 @@ export default function AudiolabScreen({ navigation }: any) {
             }
             return newTracks;
           });
-          showToast('Split ✓');
+          showToast('Split âœ“');
         };
         readerR.readAsDataURL(blobRight);
       };
@@ -1147,7 +1149,7 @@ export default function AudiolabScreen({ navigation }: any) {
 
     const previousState = undoStackRef.current.pop()!;
     setTracks(previousState);
-    showToast('Undo ✓');
+    showToast('Undo âœ“');
   };
 
   const performRedo = () => {
@@ -1160,7 +1162,7 @@ export default function AudiolabScreen({ navigation }: any) {
 
     const nextState = redoStackRef.current.pop()!;
     setTracks(nextState);
-    showToast('Redo ✓');
+    showToast('Redo âœ“');
   };
 
   const toggleTrackMute = async (id: string) => {
@@ -1388,435 +1390,96 @@ export default function AudiolabScreen({ navigation }: any) {
               }} />
             </View>
             <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '700', width: 36, textAlign: 'right' }}>
-              {liveMeterLevel > 0 ? `${Math.round(-90 * (1 - liveMeterLevel))} dB` : '–∞'}
+              {liveMeterLevel > 0 ? `${Math.round(-90 * (1 - liveMeterLevel))} dB` : 'â€“âˆž'}
             </Text>
           </View>
         )}
 
         <View style={styles.mainContent}>
           {activeTab === 'waveform' &&
-            <View style={styles.tabContainer}>
-              {tracks.length === 0 ? (
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 24, paddingVertical: 48 }}>
-                  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                    <TouchableOpacity 
-                      style={{ 
-                        width: 90, 
-                        height: 90, 
-                        borderRadius: 45, 
-                        backgroundColor: '#ef4444', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        shadowColor: '#ef4444',
-                        shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: 0.4,
-                        shadowRadius: 12,
-                        elevation: 8
-                      }}
-                      onPress={startRecording}
-                      activeOpacity={0.85}
-                    >
-                      <Ionicons name="mic" size={40} color="#fff" />
-                    </TouchableOpacity>
-                    <Text style={{ color: theme.colors.textPrimary, fontSize: 18, fontWeight: '800', marginTop: 16 }}>
-                      Tap to Start Recording
-                    </Text>
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, textAlign: 'center', marginTop: 6, lineHeight: 20, maxWidth: 280 }}>
-                      Sing, record, and practice your vocal takes. Your session timeline will appear automatically.
-                    </Text>
-                  </View>
-
-                  <View style={{ width: '100%', maxWidth: 280, height: 1, backgroundColor: 'rgba(255,255,255,0.06)' }} />
-                  <TouchableOpacity 
-                    style={{ 
-                      width: '100%', 
-                      maxWidth: 300, 
-                      flexDirection: 'row', 
-                      alignItems: 'center', 
-                      backgroundColor: 'rgba(255,255,255,0.03)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(255,255,255,0.06)',
-                      borderRadius: 14, 
-                      padding: 14, 
-                      gap: 12 
-                    }}
-                    onPress={importAudioFile}
-                  >
-                    <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: 'rgba(52, 199, 89, 0.15)', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="folder-open" size={20} color="#34c759" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 13 }}>Import Audio File</Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 10, marginTop: 1 }}>Import backing tracks or voice stems from your device</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={14} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={{ flex: 1 }}>
-                  <View style={styles.timelineWrapper}>
-                    <View style={styles.trackHeadersColumn}>
-                      <View style={styles.trackHeaderRulerSpacer} />
-                      {tracks.map((track) => (
-                        <View
-                          key={track.id}
-                          style={styles.trackHeaderCard}
-                        >
-                          <View style={[styles.trackAccentStripe, { backgroundColor: track.color || theme.colors.accent, width: 4 }]} />
-                          
-                          <View style={styles.trackHeaderInner}>
-                            <TouchableOpacity
-                              style={styles.trackHeaderTop}
-                              onPress={() => {
-                                setSelectedTrackId(track.id);
-                                setRenameText(track.name);
-                                setActiveModal('trackSettings');
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <View style={[styles.trackIconBox, { backgroundColor: (track.color || theme.colors.accent) + '22' }]}>
-                                <Ionicons
-                                  name={track.type === 'voice' ? 'mic' : 'musical-note'}
-                                  size={13}
-                                  color={track.color || theme.colors.accent}
-                                />
-                              </View>
-                              <Text style={styles.trackTitleText} numberOfLines={1}>
-                                {track.name}
-                              </Text>
-                              <Ionicons name="ellipsis-vertical" size={12} color={theme.colors.textMuted} />
-                            </TouchableOpacity>
-
-                            <View style={styles.trackHeaderControls}>
-                              <TouchableOpacity
-                                style={[styles.trackHeaderControlBtn, track.mute && styles.trackHeaderControlBtnActive]}
-                                onPress={() => toggleTrackMute(track.id)}
-                              >
-                                <Text style={[styles.trackHeaderControlBtnText, track.mute && { color: '#fff' }]}>M</Text>
-                              </TouchableOpacity>
-                              <TouchableOpacity
-                                style={[styles.trackHeaderControlBtn, track.solo && styles.trackHeaderControlBtnActiveSolo]}
-                                onPress={() => toggleTrackSolo(track.id)}
-                              >
-                                <Text style={[styles.trackHeaderControlBtnText, track.solo && { color: '#fff' }]}>S</Text>
-                              </TouchableOpacity>
-                              <Text style={{ fontSize: 9, color: theme.colors.textMuted, marginLeft: 'auto' }}>
-                                {Math.round(track.volume * 100)}%
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-                      ))}
-                      <TouchableOpacity style={styles.addTrackHeaderCard} onPress={() => { setActiveModal('addTrack'); }}>
-                        <Ionicons name="add" size={20} color={theme.colors.accent} />
-                        <Text style={styles.addTrackText}>Add Track</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <ScrollView horizontal style={styles.timelineGridScroll} showsHorizontalScrollIndicator={false}>
-                      {(() => {
-                        const maxDuration = tracks.reduce((max, track) => Math.max(max, (track.startTime || 0) + (track.duration || 25000)), Math.max(60000, playTimeRef.current + 10000));
-                        const timelineWidth = Math.max(SCREEN_WIDTH * 3, 40 + (maxDuration / 1000) * 45);
-                        const totalBeats = Math.ceil(timelineWidth / 118) + 2;
-
-                        return (
-                          <View style={[styles.timelineGridInner, { width: timelineWidth }]}>
-                            <View 
-                              style={styles.beatNumbersRow}
-                              onStartShouldSetResponder={() => true}
-                              onResponderGrant={handleTimelineGrant}
-                              onResponderMove={handleTimelineMove}
-                              onResponderRelease={handleTimelineRelease}
-                            >
-                              {Array.from({ length: totalBeats }).map((_, i) => (
-                                <Text key={i} style={styles.beatNumber} pointerEvents="none">{i + 1}</Text>
-                              ))}
-                            </View>
-                            {tracks.map((track) => {
-                              const regionStartTime = track.startTime || 0;
-                              const regionDuration = track.duration || 25000;
-                              const regionLeft = 20 + (regionStartTime / 1000) * 45;
-                              const regionWidth = (regionDuration / 1000) * 45;
-
-                              const targetBarCount = Math.min(1500, Math.max(40, Math.floor(regionWidth / 6)));
-                              const rawPeaks = track.peaks && track.peaks.length > 0
-                                ? track.peaks
-                                : generateWavePeaks(track.id, track.name);
-                              
-                              const step = rawPeaks.length / targetBarCount;
-                              const displayPeaks = Array.from({ length: targetBarCount }, (_, i) => {
-                                const idx = Math.floor(i * step);
-                                return rawPeaks[Math.min(rawPeaks.length - 1, idx)] || 4;
-                              });
-
-                              return (
-                                <View key={track.id} style={[styles.waveformTrackRow, { position: 'relative' }]}>
-                                  {track.uri ? (
-                                    <View
-                                      style={[
-                                        styles.waveformBlock,
-                                        {
-                                          position: 'absolute',
-                                          left: regionLeft,
-                                          width: regionWidth,
-                                          backgroundColor: (track.color || theme.colors.accent) + '15',
-                                          borderWidth: 1.5,
-                                          borderColor: track.color || theme.colors.accent,
-                                          borderRadius: 12,
-                                          height: 60,
-                                          paddingHorizontal: 6,
-                                          justifyContent: 'center',
-                                          alignItems: 'center',
-                                        }
-                                      ]}
-                                    >
-                                  <View style={[styles.waveVisualContainer, { justifyContent: 'space-between', paddingHorizontal: 2 }]}>
-                                    {displayPeaks.map((h, i) => {
-                                      const barAbsoluteX = regionLeft + (i / targetBarCount) * regionWidth;
-                                      const played = scrubberPosition >= barAbsoluteX;
-                                      const barWidth = Math.max(1, (regionWidth / targetBarCount) - 1.5);
-                                      return (
-                                        <View
-                                          key={i}
-                                          style={{
-                                            height: Math.max(4, Math.min(50, h)),
-                                            width: barWidth,
-                                            borderRadius: 1,
-                                            backgroundColor: played
-                                              ? theme.colors.textPrimary
-                                              : track.color || theme.colors.accentBright,
-                                            opacity: played ? 1 : 0.65,
-                                          }}
-                                        />
-                                      );
-                                    })}
-                                  </View>
-                                </View>
-                              ) : (
-                                <View 
-                                  style={{
-                                    position: 'absolute',
-                                    left: 20,
-                                    width: SCREEN_WIDTH * 3 - 40,
-                                    height: 60,
-                                    borderStyle: 'dashed',
-                                    borderWidth: 1,
-                                    borderColor: theme.colors.textMuted + '66',
-                                    borderRadius: 12,
-                                    justifyContent: 'center',
-                                    alignItems: 'center',
-                                  }}
-                                >
-                                  <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600' }}>
-                                    {track.type === 'voice' ? '🎙️ Tap Record to capture vocals' : '📁 Import audio file'}
-                                  </Text>
-                                </View>
-                              )}
-                            </View>
-                          );
-                        })}
-                        <View style={[styles.scrubberLine, { left: scrubberPosition }]} pointerEvents="none">
-                          <View style={styles.scrubberHead} />
-                        </View>
-                      </View>
-                      );
-                      })()}
-                    </ScrollView>
-                  </View>
-                  <View style={styles.studioToolbar}>
-                    <TouchableOpacity style={styles.studioToolItem} onPress={() => { setActiveModal('addTrack'); }}>
-                      <Ionicons name="add-circle-outline" size={22} color={theme.colors.textSecondary} />
-                      <Text style={styles.studioToolLabel}>Add Track</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.studioToolItem} onPress={() => { setActiveModal('mixer'); }}>
-                      <Ionicons name="options-outline" size={22} color={theme.colors.textSecondary} />
-                      <Text style={styles.studioToolLabel}>Mixer</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.bigRecordBtn}
-                      onPress={toggleRecord}
-                      activeOpacity={0.8}>
-                      <View style={[styles.bigRecordInner, isRecording && styles.bigRecordInnerActive]} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.studioToolItem} onPress={() => { setActiveModal('studioKit'); }}>
-                      <Ionicons name="construct-outline" size={22} color={theme.colors.textSecondary} />
-                      <Text style={styles.studioToolLabel}>Studio Kit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.studioToolItem} onPress={() => { setActiveModal('export'); }}>
-                      <Ionicons name="cloud-upload-outline" size={22} color={theme.colors.textSecondary} />
-                      <Text style={styles.studioToolLabel}>Export</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
+            <AudiolabWaveformTab
+              tracks={tracks}
+              isPlaying={isPlaying}
+              isRecording={isRecording}
+              timecode={timecode}
+              bpm={bpm}
+              loopEnabled={loopEnabled}
+              scrubberPosition={scrubberPosition}
+              undoAvailable={undoStackRef.current.length > 0}
+              redoAvailable={redoStackRef.current.length > 0}
+              liveMeterLevel={liveMeterLevel}
+              onStartRecording={startRecording}
+              onImportAudio={importAudioFile}
+              onTogglePlay={togglePlay}
+              onSeekToStart={() => { setTimecode('00:00.0'); setScrubberPosition(20); playTimeRef.current = 0; TrackPlayer.seekTo(0).catch(() => {}); }}
+              onSkipForward={() => {
+                const newElapsed = playTimeRef.current + 5000;
+                playTimeRef.current = newElapsed;
+                const mins = Math.floor(newElapsed / 60000);
+                const secs = Math.floor((newElapsed % 60000) / 1000);
+                const ms = Math.floor((newElapsed % 1000) / 100);
+                setTimecode(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms}`);
+                setScrubberPosition(20 + (newElapsed / 1000) * 45);
+                if (isPlaying) { stopPlayback(false).then(() => startPlayback(false)); } else { TrackPlayer.seekTo(newElapsed / 1000).catch(() => {}); }
+              }}
+              onUndo={performUndo}
+              onRedo={performRedo}
+              onToggleLoop={() => { const next = !loopEnabled; setLoopEnabled(next); showToast(next ? 'Looping Enabled (12 Bars)' : 'Looping Disabled'); }}
+              onToggleRecord={toggleRecord}
+              onToggleMute={toggleTrackMute}
+              onToggleSolo={toggleTrackSolo}
+              onTrackSettings={(id, name) => { setSelectedTrackId(id); setRenameText(name); setActiveModal('trackSettings'); }}
+              onAddTrack={() => setActiveModal('addTrack')}
+              onOpenMixer={() => setActiveModal('mixer')}
+              onOpenStudioKit={() => setActiveModal('studioKit')}
+              onOpenExport={() => setActiveModal('export')}
+              onTimelineGrant={handleTimelineGrant}
+              onTimelineMove={handleTimelineMove}
+              onTimelineRelease={handleTimelineRelease}
+              generateWavePeaks={generateWavePeaks}
+              theme={theme}
+              styles={styles}
+            />
           }
 
           {activeTab === 'feather' &&
-          <View style={styles.tabContainer}>
-              <View style={styles.notepadHeader}>
-                <Text style={styles.notepadTitle}>Studio Notepad & Lyrics</Text>
-                <TouchableOpacity onPress={() => {setLyricsText('');showToast('Notepad Cleared');}}>
-                  <Text style={styles.clearText}>Clear</Text>
-                </TouchableOpacity>
-              </View>
-              <TextInput
-              style={styles.notepadInput}
-              multiline
-              value={lyricsText}
-              onChangeText={setLyricsText}
-              placeholder="Write your lyrics, chords, or ministration notes here..."
-              placeholderTextColor={theme.colors.textMuted}
-              textAlignVertical="top" />
-            
-            </View>
+            <AudiolabFeatherTab
+              lyricsText={lyricsText}
+              onLyricsChange={setLyricsText}
+              onClear={() => { setLyricsText(''); showToast('Notepad Cleared'); }}
+              theme={theme}
+              styles={styles}
+            />
           }
 
           {activeTab === 'projects' &&
-            <ScrollView style={styles.tabContainer} showsVerticalScrollIndicator={false}>
-              <View style={[styles.settingsCard, { padding: 16, marginBottom: 20 }]}>
-                <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700', marginBottom: 12 }}>Save Current Session</Text>
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <TextInput
-                    style={{
-                      flex: 1,
-                      backgroundColor: theme.colors.cardBackgroundLight,
-                      borderRadius: 8,
-                      paddingHorizontal: 12,
-                      height: 44,
-                      color: theme.colors.textPrimary,
-                      fontSize: 14
-                    }}
-                    placeholder="Enter project name..."
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={newProjectName}
-                    onChangeText={setNewProjectName}
-                  />
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: theme.colors.accent,
-                      borderRadius: 8,
-                      paddingHorizontal: 16,
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      height: 44
-                    }}
-                    onPress={async () => {
-                      if (!newProjectName.trim()) {
-                        showToast('Please type a name first');
-                        return;
-                      }
-                      await saveCurrentProject(newProjectName);
-                      setNewProjectName('');
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.textPrimary, fontWeight: '700' }}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <Text style={styles.sectionHeadingText}>Saved Projects ({savedProjects.length})</Text>
-
-              {savedProjects.length === 0 ? (
-                <View style={{ padding: 30, alignItems: 'center' }}>
-                  <Ionicons name="folder-open-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
-                  <Text style={{ color: theme.colors.textMuted, textAlign: 'center', fontSize: 14 }}>
-                    No saved projects yet. Save your current tracks above to view them here.
-                  </Text>
-                </View>
-              ) : (
-                savedProjects.map((proj) => (
-                  <View key={proj.id} style={[styles.settingsCard, { padding: 16, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
-                    <View style={{ flex: 1, marginRight: 12 }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: '700' }} numberOfLines={1}>{proj.name}</Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 4 }}>
-                        {proj.tracks.length} tracks • {proj.timestamp}
-                      </Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: '#10b981',
-                          paddingVertical: 8,
-                          paddingHorizontal: 12,
-                          borderRadius: 6
-                        }}
-                        onPress={() => loadProject(proj)}
-                      >
-                        <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '700' }}>Load</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={{
-                          backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                          padding: 8,
-                          borderRadius: 6
-                        }}
-                        onPress={() => deleteProject(proj.id)}
-                      >
-                        <Ionicons name="trash" size={16} color="#ef4444" />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))
-              )}
-              <View style={{ height: 120 }} />
-            </ScrollView>
+            <AudiolabProjectsTab
+              savedProjects={savedProjects}
+              newProjectName={newProjectName}
+              onProjectNameChange={setNewProjectName}
+              onSave={async () => {
+                if (!newProjectName.trim()) { showToast('Please type a name first'); return; }
+                await saveCurrentProject(newProjectName);
+                setNewProjectName('');
+              }}
+              onLoad={loadProject}
+              onDelete={deleteProject}
+              theme={theme}
+              styles={styles}
+            />
           }
 
           {activeTab === 'settings' &&
-            <ScrollView style={styles.tabContainer} showsVerticalScrollIndicator={false}>
-              <Text style={styles.sectionHeadingText}>Audio Configuration</Text>
-              <View style={styles.settingsCard}>
-                <TouchableOpacity
-                  style={styles.settingsRowBorder}
-                  onPress={() => {
-                    setCountIn(prev => {
-                      if (prev === 'Off') return '1 Bar';
-                      if (prev === '1 Bar') return '2 Bars';
-                      return 'Off';
-                    });
-                  }}
-                >
-                  <View style={styles.settingsTextCol}>
-                    <Text style={styles.settingsLabel}>Pre-Record Count-In</Text>
-                    <Text style={styles.settingsSubDesc}>Gives you a countdown beat before recording starts</Text>
-                  </View>
-                  <Text style={styles.settingsValueText}>{countIn}</Text>
-                </TouchableOpacity>
-                <View style={styles.settingsRow}>
-                  <View style={styles.settingsTextCol}>
-                    <Text style={styles.settingsLabel}>Speaker Monitoring</Text>
-                    <Text style={styles.settingsSubDesc}>Hear backing tracks through speaker while recording. Use headphones to avoid feedback.</Text>
-                  </View>
-                  <Switch
-                    value={monitorEnabled}
-                    onValueChange={(val) => {
-                      setMonitorEnabled(val);
-                      showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
-                      setAudioModeAsync({
-                        allowsRecording: true,
-                        playsInSilentMode: true,
-                        shouldPlayInBackground: false,
-                        shouldRouteThroughEarpiece: !val,
-                      }).catch(() => {});
-                    }}
-                    trackColor={{ false: '#333', true: theme.colors.accent }}
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.sectionHeadingText}>Studio Tools</Text>
-              <View style={styles.settingsCard}>
-                <TouchableOpacity style={styles.settingsRow} onPress={() => {setActiveModal('tuner');}}>
-                  <View style={styles.settingsTextCol}>
-                    <Text style={styles.settingsLabel}>Vocal & Instrument Tuner</Text>
-                    <Text style={styles.settingsSubDesc}>Tune your vocals or musical instruments in real-time</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-
-              <View style={{ height: 120 }} />
-            </ScrollView>
+            <AudiolabSettingsTab
+              countIn={countIn}
+              onCycleCountIn={() => setCountIn(prev => prev === 'Off' ? '1 Bar' : prev === '1 Bar' ? '2 Bars' : 'Off')}
+              monitorEnabled={monitorEnabled}
+              onMonitorChange={setMonitorEnabled}
+              onOpenTuner={() => setActiveModal('tuner')}
+              showToast={showToast}
+              theme={theme}
+              styles={styles}
+            />
           }
         </View>
         {activeTab !== 'waveform' && (
@@ -1877,718 +1540,98 @@ export default function AudiolabScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
 
-             <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {activeModal === 'trackSettings' && (() => {
-                const track = tracks.find(t => t.id === selectedTrackId);
-                if (!track) return null;
-                
-                return (
-                  <View style={styles.modalSection}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18, gap: 12 }}>
-                      <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: (track.color || theme.colors.accent) + '15', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons
-                          name={track.type === 'voice' ? 'mic' : track.type === 'sampler' ? 'musical-notes' : 'musical-note'}
-                          size={20}
-                          color={track.color || theme.colors.accentBright}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <TextInput
-                            style={{
-                              color: theme.colors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: '700',
-                              borderBottomWidth: 1,
-                              borderBottomColor: 'transparent',
-                              paddingVertical: 2,
-                              flex: 1
-                            }}
-                            value={renameText}
-                            onChangeText={(txt) => {
-                              setRenameText(txt);
-                              renameTrack(track.id, txt);
-                            }}
-                            placeholder="Rename track..."
-                            placeholderTextColor={theme.colors.textMuted}
-                          />
-                          <Ionicons name="pencil" size={14} color={theme.colors.textMuted} />
-                        </View>
-                        <Text style={{ fontSize: 9, color: theme.colors.textMuted, marginTop: 2, fontWeight: '600', letterSpacing: 0.5 }}>
-                          {track.type.toUpperCase()} TRACK
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 10, marginBottom: 18 }}>
-                      <TouchableOpacity
-                        style={[
-                          {
-                            flex: 1.2,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: 42,
-                            borderRadius: 10,
-                            backgroundColor: 'rgba(255,255,255,0.04)',
-                            borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.06)',
-                            gap: 6
-                          },
-                          track.mute && { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderColor: '#ef4444' }
-                        ]}
-                        onPress={() => toggleTrackMute(track.id)}
-                      >
-                        <Ionicons name={track.mute ? "volume-mute" : "volume-medium"} size={16} color={track.mute ? '#ef4444' : theme.colors.textPrimary} />
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: track.mute ? '#ef4444' : theme.colors.textPrimary }}>
-                          {track.mute ? 'Muted' : 'Mute'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          {
-                            flex: 1.2,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            height: 42,
-                            borderRadius: 10,
-                            backgroundColor: 'rgba(255,255,255,0.04)',
-                            borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.06)',
-                            gap: 6
-                          },
-                          track.solo && { backgroundColor: 'rgba(234, 179, 8, 0.15)', borderColor: '#eab308' }
-                        ]}
-                        onPress={() => toggleTrackSolo(track.id)}
-                      >
-                        <Ionicons name="star" size={16} color={track.solo ? '#eab308' : theme.colors.textPrimary} />
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: track.solo ? '#eab308' : theme.colors.textPrimary }}>
-                          {track.solo ? 'Soloing' : 'Solo'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={{
-                          width: 42,
-                          height: 42,
-                          borderRadius: 10,
-                          backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                          borderWidth: 1,
-                          borderColor: 'rgba(239, 68, 68, 0.2)',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        onPress={() => {
-                          Alert.alert(
-                            'Delete Track',
-                            `Are you sure you want to delete "${track.name}"? This cannot be undone.`,
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              {
-                                text: 'Delete',
-                                onPress: () => {
-                                  pushUndoSnapshot(tracks);
-                                  setTracks(prev => prev.filter(t => t.id !== track.id));
-                                  const sound = soundObjsRef.current[track.id];
-                                  if (sound) {
-                                    try {
-                                      sound.pause();
-                                      sound.remove();
-                                    } catch {}
-                                  }
-                                  setActiveModal(null);
-                                },
-                                style: 'destructive'
-                              }
-                            ]
-                          );
-                        }}
-                      >
-                        <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', padding: 12, marginBottom: 18 }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 12 }}>Volume</Text>
-                        <Text style={{ color: track.color || theme.colors.accent, fontWeight: '700', fontSize: 12 }}>
-                          {Math.round(track.volume * 100)}%
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Ionicons name="volume-low" size={16} color={theme.colors.textMuted} />
-                        <Slider
-                          style={{ flex: 1, height: 30 }}
-                          minimumValue={0}
-                          maximumValue={1}
-                          value={track.volume}
-                          onValueChange={(val) => {
-                            setTracks(prev => prev.map(t => t.id === track.id ? { ...t, volume: val } : t));
-                            if (track.type === 'backing') {
-                              TrackPlayer.setVolume(val).catch(() => {});
-                            }
-                          }}
-                          minimumTrackTintColor={track.color || theme.colors.accent}
-                          maximumTrackTintColor="rgba(255,255,255,0.1)"
-                        />
-                        <Ionicons name="volume-high" size={16} color={theme.colors.textMuted} />
-                      </View>
-                    </View>
-                    {track.type === 'voice' && (
-                      <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', padding: 12, marginBottom: 18 }}>
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 12, marginBottom: 10 }}>
-                          Vocal FX Tuning
-                        </Text>
-                        
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                          {[
-                            { name: 'Reverb', active: fxReverb, setter: setFxReverb, icon: 'sparkles' },
-                            { name: 'Delay', active: fxDelay, setter: setFxDelay, icon: 'repeat' },
-                            { name: 'Doubler', active: fxDoubler, setter: setFxDoubler, icon: 'people' },
-                            { name: 'EQ Boost', active: fxEQ, setter: setFxEQ, icon: 'options' }
-                          ].map((fx) => (
-                            <TouchableOpacity
-                              key={fx.name}
-                              style={{
-                                width: '48%',
-                                height: 48,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                backgroundColor: fx.active ? (track.color || theme.colors.accent) + '20' : 'rgba(255,255,255,0.03)',
-                                borderWidth: 1,
-                                borderColor: fx.active ? (track.color || theme.colors.accent) : 'rgba(255,255,255,0.05)',
-                                borderRadius: 10,
-                                paddingHorizontal: 10,
-                                gap: 8
-                              }}
-                              onPress={() => fx.setter(!fx.active)}
-                            >
-                              <Ionicons name={fx.icon as any} size={16} color={fx.active ? (track.color || theme.colors.accentBright) : theme.colors.textMuted} />
-                              <Text style={{ color: fx.active ? theme.colors.textPrimary : theme.colors.textMuted, fontWeight: '600', fontSize: 12 }}>
-                                {fx.name}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      </View>
-                    )}
-                    <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)', padding: 12, marginBottom: 10 }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 12, marginBottom: 12 }}>
-                        Timeline Audio Tools
-                      </Text>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                        <TouchableOpacity
-                          style={{ 
-                            flex: 1, 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            backgroundColor: 'rgba(255,255,255,0.04)', 
-                            borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.06)',
-                            borderRadius: 10, 
-                            paddingVertical: 10,
-                            gap: 4 
-                          }}
-                          onPress={() => {
-                            setActiveModal(null);
-                            splitTrack(track.id);
-                          }}
-                        >
-                          <Ionicons name="cut" size={16} color={theme.colors.accentBright} />
-                          <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 10 }}>
-                            Split Track
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={{ 
-                            flex: 1, 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            backgroundColor: 'rgba(255,255,255,0.04)', 
-                            borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.06)',
-                            borderRadius: 10, 
-                            paddingVertical: 10,
-                            gap: 4 
-                          }}
-                          onPress={() => {
-                            setActiveModal(null);
-                            trimTrack(track.id, 'right');
-                          }}
-                        >
-                          <Ionicons name="arrow-back" size={16} color="#ef4444" />
-                          <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 10 }}>
-                            Cut Left
-                          </Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={{ 
-                            flex: 1, 
-                            alignItems: 'center', 
-                            justifyContent: 'center', 
-                            backgroundColor: 'rgba(255,255,255,0.04)', 
-                            borderWidth: 1,
-                            borderColor: 'rgba(255,255,255,0.06)',
-                            borderRadius: 10, 
-                            paddingVertical: 10,
-                            gap: 4 
-                          }}
-                          onPress={() => {
-                            setActiveModal(null);
-                            trimTrack(track.id, 'left');
-                          }}
-                        >
-                          <Ionicons name="arrow-forward" size={16} color="#ef4444" />
-                          <Text style={{ color: theme.colors.textPrimary, fontWeight: '600', fontSize: 10 }}>
-                            Cut Right
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })()}
-
-              {activeModal === 'fx' &&
-                <View style={styles.modalSection}>
-                  <View style={styles.modalCard}>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Studio Reverb</Text>
-                      <Switch value={fxReverb} onValueChange={(val) => {setFxReverb(val);}} trackColor={{ false: '#333', true: '#10b981' }} />
-                    </View>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Tape Delay</Text>
-                      <Switch value={fxDelay} onValueChange={(val) => {setFxDelay(val);}} trackColor={{ false: '#333', true: '#10b981' }} />
-                    </View>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Vocal Doubler</Text>
-                      <Switch value={fxDoubler} onValueChange={(val) => {setFxDoubler(val);}} trackColor={{ false: '#333', true: '#10b981' }} />
-                    </View>
-                    <View style={styles.modalRow}>
-                      <Text style={styles.modalLabel}>7-Band Master EQ</Text>
-                      <Switch value={fxEQ} onValueChange={(val) => {setFxEQ(val);}} trackColor={{ false: '#333', true: '#10b981' }} />
-                    </View>
-                  </View>
-                  <TouchableOpacity style={styles.modalActionBtn} onPress={() => {setActiveModal(null);showToast('Saved FX Preset');}}>
-                    <Text style={styles.modalActionBtnText}>Apply FX Preset</Text>
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'studioKit' &&
-                <View style={styles.modalSection}>
-                  <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <View>
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Metronome & Tempo</Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>Set practice speed and beats</Text>
-                      </View>
-                      <TouchableOpacity 
-                        style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: theme.colors.cardBackgroundLight }}
-                        onPress={() => setActiveModal('metronome')}
-                      >
-                        <Text style={{ color: theme.colors.textPrimary, fontSize: 12, fontWeight: '600' }}>Tempo Settings</Text>
-                      </TouchableOpacity>
-                    </View>
-                    
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>BPM Speed</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <TouchableOpacity onPress={() => setBpm(Math.max(40, bpm - 5))}>
-                          <Ionicons name="remove-circle" size={24} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                        <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: '700', minWidth: 36, textAlign: 'center' }}>{bpm}</Text>
-                        <TouchableOpacity onPress={() => setBpm(Math.min(240, bpm + 5))}>
-                          <Ionicons name="add-circle" size={24} color={theme.colors.textSecondary} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    <TouchableOpacity 
-                      style={{ 
-                        marginTop: 12, 
-                        height: 38, 
-                        borderRadius: 8, 
-                        backgroundColor: 'rgba(124, 58, 237, 0.1)', 
-                        alignItems: 'center', 
-                        justifyContent: 'center',
-                        borderWidth: 1,
-                        borderColor: 'rgba(124, 58, 237, 0.3)'
-                      }} 
-                      onPress={handleTapTempo}
-                    >
-                      <Text style={{ color: theme.colors.accentBright, fontWeight: '700', fontSize: 12, letterSpacing: 0.5 }}>TAP TEMPO</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
-                    <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 4 }}>Pre-Record Count-In</Text>
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginBottom: 12 }}>Get a countdown beat before recording starts</Text>
-                    
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      {['Off', '1 Bar', '2 Bars'].map((mode) => (
-                        <TouchableOpacity
-                          key={mode}
-                          style={{
-                            flex: 1,
-                            height: 40,
-                            borderRadius: 10,
-                            backgroundColor: countIn === mode ? theme.colors.accent + '22' : 'rgba(255, 255, 255, 0.05)',
-                            borderWidth: 1.5,
-                            borderColor: countIn === mode ? theme.colors.accent : 'transparent',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          onPress={() => setCountIn(mode as any)}
-                        >
-                          <Text style={{ color: countIn === mode ? theme.colors.textPrimary : theme.colors.textMuted, fontWeight: '700', fontSize: 12 }}>
-                            {mode}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <View style={{ flex: 1, marginRight: 16 }}>
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 14, marginBottom: 2 }}>Speaker Monitoring</Text>
-                        <Text style={{ color: theme.colors.textMuted, fontSize: 11 }}>
-                          Hear backing tracks through speaker while recording. Use headphones to avoid feedback.
-                        </Text>
-                      </View>
-                      <Switch
-                        value={monitorEnabled}
-                        onValueChange={async (val) => {
-                          setMonitorEnabled(val);
-                          showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
+            <AudiolabModalContent
+              activeModal={activeModal}
+              onClose={() => setActiveModal(null)}
+              tracks={tracks}
+              selectedTrackId={selectedTrackId}
+              renameText={renameText}
+              onRenameTextChange={setRenameText}
+              onRenameTrack={(id, name) => renameTrack(id, name)}
+              onToggleTrackMute={toggleTrackMute}
+              onToggleTrackSolo={toggleTrackSolo}
+              onDeleteTrack={(track) => {
+                Alert.alert(
+                  'Delete Track',
+                  `Are you sure you want to delete "${track.name}"? This cannot be undone.`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Delete',
+                      onPress: () => {
+                        pushUndoSnapshot(tracks);
+                        setTracks(prev => prev.filter(t => t.id !== track.id));
+                        const sound = soundObjsRef.current[track.id];
+                        if (sound) {
                           try {
-                            await setAudioModeAsync({
-                              allowsRecording: true,
-                              playsInSilentMode: true,
-                              shouldPlayInBackground: false,
-                              shouldRouteThroughEarpiece: !val,
-                            });
+                            sound.pause();
+                            sound.remove();
                           } catch {}
-                        }}
-                        trackColor={{ false: 'rgba(255,255,255,0.1)', true: theme.colors.accent }}
-                      />
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: 'rgba(139,92,246,0.1)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(139,92,246,0.25)',
-                      borderRadius: 16,
-                      padding: 16,
-                      marginBottom: 20,
-                      gap: 12
-                    }}
-                    onPress={() => setActiveModal('tuner')}
-                  >
-                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(139,92,246,0.2)', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ionicons name="git-compare-outline" size={18} color={theme.colors.accentBright} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Vocal & Guitar Tuner</Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>Find perfect pitch and tune vocals</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'autopitch' &&
-                <View style={styles.modalSection}>
-                  <View style={styles.modalCard}>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Key Signature</Text>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        {['C', 'G', 'Bbm', 'F#'].map((k) =>
-                          <TouchableOpacity key={k} style={[styles.pillSelection, pitchKey === k && styles.pillSelectionActive]} onPress={() => {setPitchKey(k);}}>
-                            <Text style={[styles.pillSelectionText, pitchKey === k && styles.pillSelectionTextActive]}>{k}</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Scale Type</Text>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        {['Major', 'Minor', 'Chromatic'].map((s) =>
-                          <TouchableOpacity key={s} style={[styles.pillSelection, pitchScale === s && styles.pillSelectionActive]} onPress={() => {setPitchScale(s);}}>
-                            <Text style={[styles.pillSelectionText, pitchScale === s && styles.pillSelectionTextActive]}>{s}</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.modalRow}>
-                      <Text style={styles.modalLabel}>Formant Shift</Text>
-                      <Switch value={formantShift} onValueChange={(val) => {setFormantShift(val);}} trackColor={{ false: '#333', true: theme.colors.accent }} />
-                    </View>
-                  </View>
-                  <TouchableOpacity style={styles.modalActionBtn} onPress={() => {setActiveModal(null);showToast(`AutoPitch set to ${pitchKey} ${pitchScale}`);}}>
-                    <Text style={styles.modalActionBtnText}>Confirm Pitch Settings</Text>
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'addTrack' &&
-                <View style={styles.modalSection}>
-                  <View style={styles.gridContainer}>
-                    {[
-                      { name: 'Voice / Mic', icon: 'mic', color: '#10b981' },
-                      { name: 'Virtual Instruments', icon: 'musical-notes', color: theme.colors.accent },
-                      { name: 'Guitar / Bass', icon: 'radio', color: '#f59e0b' },
-                      { name: 'Import Audio', icon: 'folder', color: theme.colors.accent },
-                      { name: 'Sampler', icon: 'grid', color: '#ec4899' },
-                      { name: 'Looper', icon: 'infinite', color: '#06b6d4' }
-                    ].map((inst) =>
-                      <TouchableOpacity
-                        key={inst.name}
-                        style={styles.gridCard}
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          setActiveModal(null);
-                          if (inst.name === 'Import Audio') {
-                            importAudioFile();
-                          } else {
-                            const trackType = inst.name.includes('Voice') ? 'voice' : inst.name.includes('Sampler') ? 'sampler' : 'backing';
-                            let presetUri: string | undefined = undefined;
-                            addTrack(inst.name, trackType, inst.color, presetUri);
-                          }
-                        }}>
-                        <View style={[styles.gridIconBox, { backgroundColor: inst.color }]}>
-                          <Ionicons name={inst.icon as any} size={28} color={theme.colors.textPrimary} />
-                        </View>
-                        <Text style={styles.gridCardTitle}>{inst.name}</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-              }
-
-              {activeModal === 'mixer' &&
-                <View style={styles.modalSection}>
-                  {tracks.length === 0 ? (
-                    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40, gap: 16 }}>
-                      <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.03)', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="options-outline" size={32} color={theme.colors.textMuted} />
-                      </View>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 13, textAlign: 'center', maxWidth: 240, lineHeight: 20 }}>
-                        Your multi-track session is empty. Add a backing track or record to use the mixer.
-                      </Text>
-                      <TouchableOpacity 
-                        style={{ height: 38, borderRadius: 8, backgroundColor: theme.colors.accent, paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' }}
-                        onPress={() => setActiveModal('addTrack')}
-                      >
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 12 }}>Add Track</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    tracks.map((track) => (
-                      <View key={track.id} style={[styles.modalCard, { padding: 16, marginBottom: 16 }]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <View style={styles.mixerTrackInfo}>
-                            <Ionicons name={track.type === 'voice' ? 'mic' : 'musical-notes'} size={18} color={track.color} />
-                            <Text style={[styles.mixerTrackTitle, { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '700' }]}>{track.name}</Text>
-                          </View>
-                          <View style={styles.mixerTrackControls}>
-                            <TouchableOpacity style={[styles.mixerBtn, track.mute && styles.mixerBtnMute]} onPress={() => toggleTrackMute(track.id)}>
-                              <Text style={[styles.mixerBtnText, track.mute && styles.mixerBtnTextActive]}>M</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.mixerBtn, track.solo && styles.mixerBtnSolo]} onPress={() => toggleTrackSolo(track.id)}>
-                              <Text style={[styles.mixerBtnText, track.solo && styles.mixerBtnTextActive]}>S</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                        <Slider
-                          value={track.volume}
-                          onValueChange={(val) => handleVolumeChange(track.id, val)}
-                          minimumValue={0}
-                          maximumValue={1}
-                          minimumTrackTintColor={track.color}
-                          maximumTrackTintColor={theme.colors.trackMax}
-                          thumbTintColor={theme.colors.thumbTint}
-                          style={{ height: 40 }}
-                        />
-                      </View>
-                    ))
-                  )}
-                  <TouchableOpacity style={styles.modalActionBtn} onPress={() => {setActiveModal(null);}}>
-                    <Text style={styles.modalActionBtnText}>Close Mixer</Text>
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'metronome' &&
-                <View style={styles.modalSection}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 16, marginBottom: 20 }}>
-                    {[1, 2, 3, 4].map((beat) => (
-                      <View 
-                        key={beat} 
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: currentBeat === beat ? theme.colors.accent : theme.colors.cardBackgroundLight,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderWidth: 2,
-                          borderColor: currentBeat === beat ? theme.colors.textPrimary : 'transparent'
-                        }}
-                      >
-                        <Text style={{ color: theme.colors.textPrimary, fontWeight: 'bold' }}>{beat}</Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  <View style={styles.modalCard}>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Tempo (BPM)</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-                        <TouchableOpacity onPress={() => {setBpm(Math.max(40, bpm - 1));}}>
-                          <Ionicons name="remove-circle-outline" size={28} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                        <Text style={styles.bpmText}>{bpm}</Text>
-                        <TouchableOpacity onPress={() => {setBpm(Math.min(240, bpm + 1));}}>
-                          <Ionicons name="add-circle-outline" size={28} color={theme.colors.textPrimary} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    <View style={styles.modalRowBorder}>
-                      <Text style={styles.modalLabel}>Time Signature</Text>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        {['2/4', '3/4', '4/4', '6/8'].map((t) =>
-                          <TouchableOpacity key={t} style={[styles.pillSelection, timeSig === t && styles.pillSelectionActive]} onPress={() => {setTimeSig(t);}}>
-                            <Text style={[styles.pillSelectionText, timeSig === t && styles.pillSelectionTextActive]}>{t}</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                    <TouchableOpacity style={styles.tapTempoBtn} onPress={handleTapTempo}>
-                      <Text style={styles.tapTempoText}>TAP TEMPO</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <TouchableOpacity style={styles.modalActionBtn} onPress={() => {setActiveModal(null);showToast(`Metronome set to ${bpm} BPM`);}}>
-                    <Text style={styles.modalActionBtnText}>Save Tempo</Text>
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'export' &&
-                <View style={styles.modalSection}>
-                  <View style={styles.modalCard}>
-                    {[
-                      { title: 'WAV', desc: 'Lossless audio — save to device', icon: 'disc' },
-                      { title: 'M4A', desc: 'Compressed AAC — save to device', icon: 'musical-note' }
-                    ].map((exp, idx) =>
-                      <TouchableOpacity
-                        key={exp.title}
-                        style={[styles.exportRow, idx > 0 && { borderTopWidth: 1, borderTopColor: theme.colors.bottomTabBorder }]}
-                        onPress={() => triggerExport(exp.title)}>
-                        <View style={styles.exportIconBox}>
-                          <Ionicons name={exp.icon as any} size={22} color={theme.colors.accent} />
-                        </View>
-                        <View style={styles.exportTextCol}>
-                          <Text style={styles.exportTitleText}>{exp.title}</Text>
-                          <Text style={styles.exportDescText}>{exp.desc}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* Upload Take to Server */}
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                      borderWidth: 1,
-                      borderColor: 'rgba(99, 102, 241, 0.3)',
-                      borderRadius: 14,
-                      padding: 16,
-                      marginTop: 12,
-                      gap: 14,
-                    }}
-                    onPress={uploadTake}
-                    disabled={isUploading}
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: 'rgba(99,102,241,0.15)', alignItems: 'center', justifyContent: 'center' }}>
-                      {isUploading
-                        ? <ActivityIndicator size="small" color="#6366f1" />
-                        : <Ionicons name="cloud-upload" size={22} color="#6366f1" />}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: theme.colors.textPrimary, fontWeight: '700', fontSize: 14 }}>Upload Take to Server</Text>
-                      <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>Mix and save this take to Rehearsal Hub cloud</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'tuner' &&
-                <View style={styles.modalSection}>
-                  <View style={styles.tunerCard}>
-                    <Text style={styles.tunerNoteText}>{tunerNote}</Text>
-                    <Text style={styles.tunerSubText}>
-                      {Math.abs(tunerCents) < 4 ? 'IN TUNE' : `${tunerCents > 0 ? '+' : ''}${Math.round(tunerCents)} cents`}
-                    </Text>
-                    <View style={styles.tunerMeter}>
-                      <View style={styles.tunerMeterLineLeft} />
-                      <View style={[styles.tunerMeterPointer, { left: 100 + tunerCents * 2 }]} />
-                      <View style={styles.tunerMeterCenter} />
-                      <View style={styles.tunerMeterLineRight} />
-                    </View>
-                  </View>
-                  <TouchableOpacity style={styles.modalActionBtn} onPress={() => {setActiveModal(null);showToast('Tuner Closed');}}>
-                    <Text style={styles.modalActionBtnText}>Done</Text>
-                  </TouchableOpacity>
-                </View>
-              }
-
-              {activeModal === 'collab' &&
-                <View style={styles.modalSection}>
-                  <View style={styles.modalCard}>
-                    <View style={[styles.modalRow, { gap: 12 }]}>
-                      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#10b981', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="person" size={20} color={theme.colors.textPrimary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: '700' }}>You (Host)</Text>
-                        <Text style={{ color: '#10b981', fontSize: 12, fontWeight: '600' }}>Active</Text>
-                      </View>
-                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' }} />
-                    </View>
-                  </View>
-
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
-                    <Ionicons name="musical-notes" size={16} color={theme.colors.textMuted} />
-                    <Text style={{ color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' }}>{tracks.length} tracks in session</Text>
-                  </View>
-                  
-                  <Text style={{ color: theme.colors.accent, textAlign: 'center', marginBottom: 16, fontSize: 12, paddingHorizontal: 20 }}>
-                    Live DAW sync is in beta. Sharing will export your current session tracks and settings to your partner.
-                  </Text>
-
-                  <TouchableOpacity style={[styles.modalActionBtn, { backgroundColor: '#10b981' }]} onPress={() => {
-                    Share.share({
-                      message: `Join my Audiolab studio session! ${tracks.length} tracks active.`,
-                    }).catch(() => {});
-                  }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons name="person-add" size={20} color={theme.colors.textPrimary} />
-                      <Text style={styles.modalActionBtnText}>Invite Partner</Text>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              }
-
-              <View style={{ height: 40 }} />
-            </ScrollView>
+                        }
+                        setActiveModal(null);
+                      },
+                      style: 'destructive',
+                    },
+                  ]
+                );
+              }}
+              onSetTrackVolume={(id, val) => {
+                setTracks(prev => prev.map(t => t.id === id ? { ...t, volume: val } : t));
+                const track = tracks.find(t => t.id === id);
+                if (track?.type === 'backing') {
+                  TrackPlayer.setVolume(val).catch(() => {});
+                }
+              }}
+              onSplitTrack={(id) => splitTrack(id)}
+              onTrimTrack={(id, side) => trimTrack(id, side)}
+              onAddTrack={(name, type, color, presetUri) => addTrack(name, type, color, presetUri)}
+              onImportAudio={importAudioFile}
+              onVolumeChange={handleVolumeChange}
+              fxReverb={fxReverb}
+              setFxReverb={setFxReverb}
+              fxDelay={fxDelay}
+              setFxDelay={setFxDelay}
+              fxDoubler={fxDoubler}
+              setFxDoubler={setFxDoubler}
+              fxEQ={fxEQ}
+              setFxEQ={setFxEQ}
+              bpm={bpm}
+              setBpm={setBpm}
+              timeSig={timeSig}
+              setTimeSig={setTimeSig}
+              currentBeat={currentBeat}
+              onTapTempo={handleTapTempo}
+              countIn={countIn}
+              setCountIn={setCountIn}
+              monitorEnabled={monitorEnabled}
+              onMonitorChange={async (val) => {
+                setMonitorEnabled(val);
+                showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
+                try {
+                  await setAudioModeAsync({
+                    allowsRecording: true,
+                    playsInSilentMode: true,
+                    shouldPlayInBackground: false,
+                    shouldRouteThroughEarpiece: !val,
+                  });
+                } catch {}
+              }}
+              onOpenModal={(modal) => setActiveModal(modal as any)}
+              pitchKey={pitchKey}
+              setPitchKey={setPitchKey}
+              pitchScale={pitchScale}
+              setPitchScale={setPitchScale}
+              formantShift={formantShift}
+              setFormantShift={setFormantShift}
+              tunerNote={tunerNote}
+              tunerCents={tunerCents}
+              onTriggerExport={triggerExport}
+              isUploading={isUploading}
+              onUploadTake={uploadTake}
+              showToast={showToast}
+              theme={theme}
+              styles={styles}
+            />
           </View>
         </BlurView>
       </Modal>
@@ -2646,779 +1689,3 @@ export default function AudiolabScreen({ navigation }: any) {
 
 }
 
-const getStyles = (theme: any) => {
-  const T = theme.colors;
-  return StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background
-  },
-  safeArea: {
-    flex: 1
-  },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  headerButton: {
-    padding: 4
-  },
-  headerIconBtn: {
-    padding: 6
-  },
-  headerTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 17,
-    fontWeight: '700',
-    letterSpacing: -0.3
-  },
-
-  transportTopBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  timecodeBlock: {
-    minWidth: 90
-  },
-  timecodeText: {
-    color: theme.colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    fontFamily: 'monospace',
-    letterSpacing: 1
-  },
-  tempoText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500',
-    fontFamily: 'monospace',
-    marginTop: 2
-  },
-  transportControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20
-  },
-  transportPlayBtn: {
-    padding: 6
-  },
-  transportSmallBtn: {
-    padding: 6
-  },
-  transportRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 90,
-    justifyContent: 'flex-end'
-  },
-  gearBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(124,58,237,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-
-  mainContent: {
-    flex: 1
-  },
-  tabContainer: {
-    flex: 1
-  },
-  toastContainer: {
-    position: 'absolute',
-    top: 70,
-    left: 20,
-    right: 20,
-    alignItems: 'center',
-    zIndex: 100
-  },
-  toastBlur: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 24,
-    overflow: 'hidden'
-  },
-  toastText: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700'
-  },
-
-  timelineWrapper: {
-    flex: 1,
-    flexDirection: 'row'
-  },
-  trackHeadersColumn: {
-    width: 148,
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.bottomTabBorder,
-    backgroundColor: T.backgroundDark
-  },
-  trackHeaderRulerSpacer: {
-    height: 36,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.07)'
-  },
-  trackHeaderCard: {
-    height: 84,
-    flexDirection: 'row',
-    backgroundColor: theme.colors.bottomSheetBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  trackAccentStripe: {
-    width: 4,
-    backgroundColor: theme.colors.accent
-  },
-  trackHeaderInner: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    justifyContent: 'space-between'
-  },
-  trackHeaderTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  trackIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: 'rgba(124,58,237,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  trackTitleText: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1
-  },
-  trackHeaderControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  trackHeaderControlBtn: {
-    backgroundColor: theme.colors.cardBackgroundLight,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  trackHeaderControlBtnActive: {
-    backgroundColor: '#ef4444'
-  },
-  trackHeaderControlBtnActiveSolo: {
-    backgroundColor: '#eab308'
-  },
-  trackHeaderControlBtnText: {
-    color: theme.colors.textPrimary,
-    fontSize: 10,
-    fontWeight: '800'
-  },
-  addTrackHeaderCard: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  addTrackText: {
-    color: theme.colors.accent,
-    fontSize: 13,
-    fontWeight: '600'
-  },
-  timelineGridScroll: {
-    flex: 1
-  },
-  timelineGridInner: {
-    width: SCREEN_WIDTH * 2,
-    height: '100%',
-    position: 'relative',
-    backgroundColor: theme.colors.backgroundDark
-  },
-  beatNumbersRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 36,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder,
-    paddingLeft: 16,
-    gap: 118
-  },
-  beatNumber: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  waveformTrackRow: {
-    height: 84,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder,
-    justifyContent: 'center',
-    paddingHorizontal: 8
-  },
-  waveformBlock: {
-    flex: 1,
-    height: 60,
-    borderRadius: 6,
-    backgroundColor: theme.colors.accentDim,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden'
-  },
-  waveVisualContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: '100%',
-    paddingHorizontal: 6
-  },
-  waveBar: {
-    width: 2,
-    borderRadius: 1,
-    marginHorizontal: 0.7
-  },
-  emptyTrackText: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontStyle: 'italic',
-    paddingLeft: 12
-  },
-  scrubberLine: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: theme.colors.textPrimary,
-    zIndex: 10
-  },
-  scrubberHead: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: theme.colors.textPrimary,
-    position: 'absolute',
-    top: 24,
-    left: -4
-  },
-
-  studioToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    paddingBottom: 14,
-    backgroundColor: theme.colors.bottomTabBackground,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.bottomTabBorder
-  },
-  studioToolItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    flex: 1
-  },
-  studioToolLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 9,
-    fontWeight: '600',
-    textAlign: 'center'
-  },
-  bigRecordBtn: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: theme.colors.backgroundSecondary,
-    borderWidth: 2,
-    borderColor: theme.colors.bottomTabBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#ef4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 12
-  },
-  bigRecordInner: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#ef4444'
-  },
-  bigRecordInnerActive: {
-    borderRadius: 8,
-    width: 30,
-    height: 30
-  },
-
-  tunerMeterPointer: {
-    width: 4,
-    height: 28,
-    backgroundColor: '#ff3b30',
-    position: 'absolute',
-    zIndex: 10,
-    borderRadius: 2
-  },
-
-  notepadHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  notepadTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700'
-  },
-  clearText: {
-    color: '#3b8(255,255,255,0.4)',
-    fontSize: 15,
-    fontWeight: '600'
-  },
-  notepadInput: {
-    flex: 1,
-    padding: 20,
-    color: theme.colors.textPrimary,
-    fontSize: 18,
-    lineHeight: 28,
-    fontWeight: '500'
-  },
-
-  settingsCard: {
-    backgroundColor: theme.colors.bottomSheetBackground,
-    borderRadius: 14,
-    marginHorizontal: 20,
-    marginTop: 16,
-    overflow: 'hidden'
-  },
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16
-  },
-  settingsRowBorder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  settingsLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  settingsValueText: {
-    color: theme.colors.textMuted,
-    fontSize: 15,
-    fontWeight: '500'
-  },
-  settingsTextCol: {
-    flex: 1,
-    marginRight: 16
-  },
-  settingsSubDesc: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 4
-  },
-  settingsSliderRow: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  sliderLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12
-  },
-  sliderTrack: {
-    height: 4,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 2,
-    position: 'relative',
-    justifyContent: 'center'
-  },
-  sliderFill: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: theme.colors.accent,
-    borderRadius: 2
-  },
-  sliderThumb: {
-    position: 'absolute',
-    right: 0,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: theme.colors.textPrimary
-  },
-  sectionHeadingText: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginHorizontal: 20,
-    marginTop: 28
-  },
-
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end'
-  },
-  modalDismissArea: {
-    flex: 1
-  },
-  modalContainer: {
-    backgroundColor: theme.colors.bottomSheetBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: SCREEN_HEIGHT * 0.75,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.bottomTabBorder,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 20
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  modalTitleText: {
-    color: theme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '800',
-    letterSpacing: -0.5
-  },
-  closeModalBtn: {
-    padding: 4
-  },
-  modalScroll: {
-    paddingHorizontal: 24,
-    paddingTop: 20
-  },
-  modalSection: {
-    paddingBottom: 24
-  },
-  modalSubHeader: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: 16
-  },
-  modalCard: {
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 24
-  },
-  modalRowBorder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  modalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16
-  },
-  modalLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  pillSelection: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: theme.colors.cardBackgroundLight
-  },
-  pillSelectionActive: {
-    backgroundColor: theme.colors.accent
-  },
-  pillSelectionText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '600'
-  },
-  pillSelectionTextActive: {
-    color: theme.colors.textPrimary
-  },
-  modalActionBtn: {
-    backgroundColor: theme.colors.accent,
-    paddingVertical: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 12
-  },
-  modalActionBtnText: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700'
-  },
-
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16
-  },
-  gridCard: {
-    width: (SCREEN_WIDTH - 64) / 2,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    padding: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder
-  },
-  gridIconBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12
-  },
-  gridCardTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '700'
-  },
-
-  mixerTrackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  mixerTrackRowBorder: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16
-  },
-  mixerTrackInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12
-  },
-  mixerTrackTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  mixerTrackControls: {
-    flexDirection: 'row',
-    gap: 12
-  },
-  mixerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  mixerBtnMute: {
-    backgroundColor: '#ef4444'
-  },
-  mixerBtnSolo: {
-    backgroundColor: '#eab308'
-  },
-  mixerBtnText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  mixerBtnTextActive: {
-    color: theme.colors.textPrimary
-  },
-
-  bpmText: {
-    color: theme.colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '800',
-    fontFamily: 'monospace'
-  },
-  tapTempoBtn: {
-    backgroundColor: theme.colors.cardBackgroundLight,
-    paddingVertical: 20,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.bottomTabBorder
-  },
-  tapTempoText: {
-    color: theme.colors.accent,
-    fontSize: 18,
-    fontWeight: '800',
-    letterSpacing: 2
-  },
-
-  exportRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 18
-  },
-  exportIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16
-  },
-  exportTextCol: {
-    flex: 1,
-    marginRight: 16
-  },
-  exportTitleText: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4
-  },
-  exportDescText: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '500'
-  },
-
-  tunerCard: {
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 24,
-    padding: 32,
-    alignItems: 'center',
-    marginBottom: 24
-  },
-  tunerNoteText: {
-    color: '#10b981',
-    fontSize: 72,
-    fontWeight: '800',
-    fontFamily: 'monospace'
-  },
-  tunerSubText: {
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    marginTop: 8,
-    marginBottom: 24
-  },
-  tunerMeter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: 40
-  },
-  tunerMeterLineLeft: {
-    width: 80,
-    height: 4,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 2
-  },
-  tunerMeterCenter: {
-    width: 12,
-    height: 24,
-    backgroundColor: '#10b981',
-    borderRadius: 6,
-    marginHorizontal: 12
-  },
-  tunerMeterLineRight: {
-    width: 80,
-    height: 4,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 2
-  },
-
-  bottomNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: theme.colors.bottomTabBackground,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.bottomTabBorder
-  },
-  bottomNavItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20
-  },
-  bottomNavItemActive: {
-    backgroundColor: 'rgba(124,58,237,0.3)'
-  },
-  bottomNavIconWrap: {},
-  bottomNavIconActive: {},
-  bottomNavLabel: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  bottomNavLabelActive: {
-    color: theme.colors.textPrimary
-  }
-});
-};

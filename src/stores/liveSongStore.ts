@@ -41,20 +41,14 @@ const REMOVAL_SHIELD_MS = 12_000;
 
 export function isLiveSong(s: any): boolean {
   if (!s || typeof s !== 'object') return false;
+  if (isSongExplicitlyOff(s)) return false;
+
   const status = s.status !== undefined && s.status !== null ? String(s.status).toLowerCase().trim() : '';
   if (status === 'live') {
+    if (s.isActive === false || s.is_active === false || s.isLive === false || s.live === false) {
+      return false;
+    }
     return true;
-  }
-  // If status is heard, unheard, or inactive, it is definitively NOT live
-  if (
-    status === 'heard' ||
-    status === 'unheard' ||
-    status === 'inactive' ||
-    status === 'ended' ||
-    status === 'off' ||
-    status === 'stopped'
-  ) {
-    return false;
   }
 
   const isTruthy = (v: any) =>
@@ -73,7 +67,14 @@ export function isLiveSong(s: any): boolean {
 export function isSongExplicitlyOff(s: any): boolean {
   if (!s || typeof s !== 'object') return false;
   const status = s.status !== undefined && s.status !== null ? String(s.status).toLowerCase().trim() : '';
-  if (status === 'inactive' || status === 'ended' || status === 'off' || status === 'stopped' || status === 'heard' || status === 'unheard') {
+  if (
+    status === 'inactive' ||
+    status === 'ended' ||
+    status === 'off' ||
+    status === 'stopped' ||
+    status === 'heard' ||
+    status === 'unheard'
+  ) {
     return true;
   }
   const isFalsy = (v: any) =>
@@ -82,7 +83,11 @@ export function isSongExplicitlyOff(s: any): boolean {
     v === '0' ||
     (typeof v === 'string' && (v.toLowerCase() === 'false' || v.toLowerCase() === 'off' || v.toLowerCase() === 'inactive'));
 
+  if (s.isActive !== undefined && isFalsy(s.isActive)) return true;
+  if (s.is_active !== undefined && isFalsy(s.is_active)) return true;
+  if (s.active !== undefined && isFalsy(s.active)) return true;
   if (s.isLive !== undefined && isFalsy(s.isLive)) return true;
+  if (s.is_live !== undefined && isFalsy(s.is_live)) return true;
   if (s.live !== undefined && isFalsy(s.live)) return true;
   return false;
 }
@@ -146,7 +151,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
       return;
     }
 
-    // If explicitly inactive / off
+    // If explicitly inactive / off / heard / unheard
     if (isSongExplicitlyOff(update)) {
       get().removeSong(songId);
       return;
@@ -197,13 +202,24 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             status: 'live',
             ...update,
           };
-          return { activeSongs: [newSong, ...state.activeSongs], recentlyRemovedIds: updatedShields };
+
+          // Prune any songs that are explicitly off, and if this song belongs to a program/zone,
+          // prune other songs from the same program so past turned-off songs never persist as zombies
+          const cleaned = state.activeSongs.filter((s) => {
+            if (String(s.id) === String(songId)) return false;
+            if (isSongExplicitlyOff(s)) return false;
+            if (update.programId && s.programId && String(s.programId) === String(update.programId)) return false;
+            if (update.praiseNightId && s.praiseNightId && String(s.praiseNightId) === String(update.praiseNightId)) return false;
+            return true;
+          });
+
+          return { activeSongs: [newSong, ...cleaned], recentlyRemovedIds: updatedShields };
         }
       });
     } else {
-      // Song is NOT live (e.g. status changed to 'heard', 'unheard', etc.)
+      // Song is NOT live (e.g. status changed to 'heard', 'unheard', or isActive: false)
       const status = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
-      if (status && status !== 'live') {
+      if ((status && status !== 'live') || update.isActive === false || update.isLive === false) {
         get().removeSong(songId);
         return;
       }
@@ -253,8 +269,8 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
         if (seenIds.has(idStr)) continue;
         seenIds.add(idStr);
 
-        // Any song returned from GET /songs/active is an active live song
-        if (!isRecentlyRemoved(recentlyRemovedIds, idStr) && !isSongExplicitlyOff(s)) {
+        // Strict verification: Must not be recently removed, not explicitly off, and must be live
+        if (!isRecentlyRemoved(recentlyRemovedIds, idStr) && !isSongExplicitlyOff(s) && isLiveSong(s)) {
           const resolvedAudioUrl = resolveSongAudioUrl(s);
           const resolvedAudioUrls = resolveSongAudioUrls(s);
           prepped.push({

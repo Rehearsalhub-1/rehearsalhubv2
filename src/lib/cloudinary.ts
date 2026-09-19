@@ -1,16 +1,17 @@
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system/legacy';
 import { BASE_URL } from './apiClient';
 
 /**
  * Universal media uploader to Cloudflare R2 via rehearsalhub-api.
- * Named uploadMedia — previously uploadImageToCloudinary before Cloudinary was replaced with R2.
+ * Uses FileSystem.uploadAsync for native multipart file streaming (with XHR fallback)
+ * to bypass Expo's Winter fetch 'Unsupported FormDataPart implementation' bug.
  */
 export const uploadMedia = async (
   fileUri: string,
   resourceType: 'image' | 'video' | 'raw' | 'auto' = 'image'
 ): Promise<string> => {
   try {
-    const formData = new FormData();
     let ext = (fileUri.split('.').pop() || '').toLowerCase();
     if (!ext || ext.length > 5 || ext.includes('/') || ext.includes('?')) {
       ext = resourceType === 'image' ? 'jpg' : resourceType === 'video' ? 'mp4' : 'mp3';
@@ -39,12 +40,6 @@ export const uploadMedia = async (
 
     const filename = `upload_${Date.now()}.${ext}`;
 
-    formData.append('file', {
-      uri: fileUri,
-      type: mime,
-      name: filename,
-    } as any);
-
     const folder = isAudio
       ? 'audio'
       : resourceType === 'image' || (isImage && resourceType !== 'video')
@@ -53,29 +48,66 @@ export const uploadMedia = async (
       ? 'statuses_video'
       : 'documents';
 
-    formData.append('folder', folder);
-
     const token = await SecureStore.getItemAsync('jwt');
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
     const endpoint = `${BASE_URL}/upload`;
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      body: formData,
-      headers,
-    });
+    let data: any;
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Upload failed (${response.status}): ${errText}`);
+    try {
+      // Primary: FileSystem.uploadAsync (native streaming uploader, bypasses Winter fetch bug)
+      const uploadResult = await FileSystem.uploadAsync(endpoint, fileUri, {
+        httpMethod: 'POST',
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: 'file',
+        parameters: {
+          folder,
+        },
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (uploadResult.status < 200 || uploadResult.status >= 300) {
+        throw new Error(`Upload failed (${uploadResult.status}): ${uploadResult.body}`);
+      }
+
+      data = JSON.parse(uploadResult.body);
+    } catch (fsErr) {
+      console.warn('[Storage] FileSystem.uploadAsync fallback to XHR:', fsErr);
+      // Fallback: XMLHttpRequest (native RCTNetworking multipart uploader)
+      data = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', endpoint);
+        if (token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch {
+              resolve({ url: xhr.responseText });
+            }
+          } else {
+            reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network request failed'));
+        xhr.ontimeout = () => reject(new Error('Upload request timed out'));
+        xhr.timeout = 180000;
+
+        const formData = new FormData();
+        formData.append('file', {
+          uri: fileUri,
+          type: mime,
+          name: filename,
+        } as any);
+        formData.append('folder', folder);
+        xhr.send(formData);
+      });
     }
 
-    const data = await response.json();
-    const rawUrl = data.data?.url || data.url;
+    const rawUrl = data?.data?.url || data?.url;
     if (rawUrl && typeof rawUrl === 'string') {
       if (rawUrl.startsWith('/upload/file') || rawUrl.startsWith('upload/file')) {
         const cleanPath = rawUrl.startsWith('/') ? rawUrl : `/${rawUrl}`;
@@ -86,7 +118,7 @@ export const uploadMedia = async (
         if (key) return `${BASE_URL}/upload/file/${key}`;
       }
     }
-    return rawUrl;
+    return rawUrl || '';
   } catch (error) {
     console.error('[Storage] Upload Error:', error);
     throw error;

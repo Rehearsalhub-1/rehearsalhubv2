@@ -23,6 +23,7 @@ import { optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib
 import { api } from '../services/api';
 import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
+import { searchSongMatch, HighlightedText, sanitizeProgramName } from '../lib/searchUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
@@ -249,8 +250,8 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             drummer: song.drummer || '',
             leadGuitarist: song.leadGuitarist || '',
             createdAt: song.createdAt ? (typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString()) : new Date().toISOString(),
-            imageUrl: song.imageUrl || progBanner || getTrackImage(song) || '',
-            image: (song.imageUrl || progBanner || getTrackImage(song)) ? { uri: song.imageUrl || progBanner || getTrackImage(song) } : null,
+            imageUrl: (song.imageUrl && !song.imageUrl.includes('/banner/')) ? song.imageUrl : (getTrackImage(song) || ''),
+            image: ((song.imageUrl && !song.imageUrl.includes('/banner/')) || getTrackImage(song)) ? { uri: song.imageUrl || getTrackImage(song) } : null,
             zoneId: resolvedZoneId,
             collectionName: isHQ ? 'praise_night_songs' : 'zone_songs'
           };
@@ -328,6 +329,14 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     };
   }, [currentZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
 
+  const programMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (programs || []).forEach((p: any) => {
+      if (p?.id && (p?.name || p?.title)) map[String(p.id)] = String(p.name || p.title);
+    });
+    return map;
+  }, [programs]);
+
   const filteredTracks = (songs || []).filter(t => {
     if (!t) return false;
     if (selectedSinger && t.leadSinger !== selectedSinger) return false;
@@ -347,16 +356,20 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       if (quickFilter === 'special' && !prog.includes('special') && !prog.includes('thanksgiving') && !prog.includes('conference') && !prog.includes('eve') && !prog.includes('service') && !prog.includes('hslhs')) return false;
     }
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      return (t.title?.toLowerCase() || '').includes(q) || 
-             (t.leadSinger?.toLowerCase() || '').includes(q) || 
-             (t.writer?.toLowerCase() || '').includes(q) ||
-             (t.program?.toLowerCase() || '').includes(q) ||
-             (t.category?.toLowerCase() || '').includes(q);
+      const matchResult = searchSongMatch(t, searchQuery);
+      if (!matchResult.isMatch) return false;
+      (t as any).searchResult = matchResult;
+      return true;
     }
+    (t as any).searchResult = undefined;
     return true;
   }).sort((a, b) => {
     if (!a || !b) return 0;
+    if (searchQuery.trim()) {
+      const scoreA = (a as any).searchResult?.score || 0;
+      const scoreB = (b as any).searchResult?.score || 0;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+    }
     const timeA = new Date(a.createdAt || 0).getTime();
     const timeB = new Date(b.createdAt || 0).getTime();
     return sortAsc ? timeB - timeA : timeA - timeB;
@@ -381,10 +394,12 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       return;
     }
     const q = overrideQueue || filteredTracks;
-    if (!activeTrack || String(activeTrack.id) !== String(track.id)) {
-      play(track, q, false);
+    const isSameTrack = activeTrack && String(activeTrack.id) === String(track.id);
+    if (!isSameTrack) {
+      play(track, q, true);
+    } else {
+      navigation.navigate('Player', { activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: q });
     }
-    navigation.navigate('Player', { activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: q });
   };
 
   const toggleSelection = (trackId: string) => {
@@ -730,7 +745,32 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                   )}
                 </View>
                 <View style={s.trackInfo}>
-                  <Text style={[s.trackTitle, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.title}</Text>
+                  <HighlightedText
+                    text={track.title}
+                    tokens={track.searchResult?.matchTokens}
+                    style={[s.trackTitle, isActiveTrack && { color: theme.colors.accent }]}
+                    highlightStyle={{ color: theme.colors.accent, fontWeight: '700', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderRadius: 3 }}
+                    numberOfLines={1}
+                  />
+
+                  {track.searchResult?.snippet ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginTop: 2, marginBottom: 3 }}>
+                      <Ionicons
+                        name={track.searchResult.matchField === 'comments' ? 'chatbubble-ellipses-outline' : 'document-text-outline'}
+                        size={11}
+                        color={theme.colors.accent}
+                        style={{ marginRight: 4, marginTop: 1 }}
+                      />
+                      <HighlightedText
+                        text={track.searchResult.snippet}
+                        tokens={track.searchResult.matchTokens}
+                        style={{ flex: 1, color: theme.colors.textMuted, fontSize: 11.5, fontStyle: 'italic', lineHeight: 16 }}
+                        highlightStyle={{ color: '#38bdf8', fontWeight: '700', backgroundColor: 'rgba(56, 189, 248, 0.22)', borderRadius: 3 }}
+                        numberOfLines={2}
+                      />
+                    </View>
+                  ) : null}
+
                   <View style={s.trackMeta}>
                     {!hasAudio ? (
                       <>
@@ -740,17 +780,27 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                     ) : (
                       <>
                         <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.accent} style={{ marginRight: 4 }} />
-                        <Text style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.leadSinger}</Text>
+                        <HighlightedText
+                          text={track.leadSinger}
+                          tokens={track.searchResult?.matchTokens}
+                          style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]}
+                          highlightStyle={{ color: theme.colors.accent, fontWeight: '700', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderRadius: 3 }}
+                          numberOfLines={1}
+                        />
                       </>
                     )}
-                    <Text style={[s.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
-                    <Text style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.key}</Text>
+                    {track.key ? (
+                      <>
+                        <Text style={[s.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
+                        <Text style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.key}</Text>
+                      </>
+                    ) : null}
                   </View>
                   {track.program ? (
                     <View style={[s.trackProgramBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.2)' }]}>
                       <Ionicons name="musical-notes" size={9} color={theme.colors.accent} style={{ marginRight: 4 }} />
                       <Text style={[s.trackProgramBadgeText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
-                        {track.program}
+                        {sanitizeProgramName(track.program, 'Loveworld Singers', programMap)}
                       </Text>
                     </View>
                   ) : null}

@@ -65,6 +65,14 @@ export const api = {
       apiClient.get<{ success: boolean; data: any }>(`/songs/${songId}`),
     getMaster: () =>
       apiClient.get<any>('/songs/master'),
+    search: (query: string, limit = 60, zoneId?: string) =>
+      apiClient.get<{ success: boolean; count: number; data: any[] }>(
+        `/songs/search?q=${encodeURIComponent(query)}&limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`
+      ),
+    universalSearch: (query: string, limit = 60, zoneId?: string) =>
+      apiClient.get<{ success: boolean; count: number; data: any[] }>(
+        `/songs/search?q=${encodeURIComponent(query)}&limit=${limit}${zoneId ? `&zoneId=${encodeURIComponent(zoneId)}` : ''}`
+      ),
     getMasterSongs: (params?: string) =>
       apiClient.get<{ success: boolean; data: any[] }>(`/master-songs${params ? `?${params}` : ''}`),
     getZoneSongs: (zoneId: string) =>

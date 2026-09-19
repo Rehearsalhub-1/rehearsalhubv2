@@ -335,30 +335,78 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             >
               Comments preview
             </Text>
-            {activeTrack.comments ? (
-              <ScrollView
-                nestedScrollEnabled
-                style={{ maxHeight: 320, minHeight: 130 }}
-                contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-              >
-                <RenderHtml
-                  contentWidth={contentWidth}
-                  source={{ html: parseMarkdown(activeTrack.comments) }}
-                  baseStyle={{ ...theme.typography.htmlBase }}
-                  tagsStyles={{
-                    p: { margin: 0, padding: 0 },
-                    strong: { color: theme.colors.accent, fontWeight: '800' },
-                    b: { color: theme.colors.accent, fontWeight: '800' },
-                  }}
-                />
-              </ScrollView>
-            ) : (
-              <View style={{ minHeight: 100, justifyContent: 'center' }}>
-                <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
-                  No comments available.
-                </Text>
-              </View>
-            )}
+            {(() => {
+              let raw = activeTrack.comments || activeTrack.notes || (activeTrack as any).coordinatorComment;
+              if (!raw) return (
+                <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                  <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                    No comments available.
+                  </Text>
+                </View>
+              );
+
+              if (typeof raw === 'string') {
+                const trimmed = raw.trim();
+                if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                  try {
+                    raw = JSON.parse(trimmed);
+                  } catch {}
+                }
+              }
+
+              let htmlContent = '';
+              if (Array.isArray(raw)) {
+                if (raw.length === 0) {
+                  return (
+                    <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                      <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                        No comments available.
+                      </Text>
+                    </View>
+                  );
+                }
+                htmlContent = raw.map((c: any) => {
+                  const author = typeof c === 'object' && c?.author ? `<strong>${c.author}:</strong> ` : '';
+                  const text = typeof c === 'string' ? c : (c?.text || c?.comment || c?.content || '');
+                  return `${author}${parseMarkdown(text)}`;
+                }).join('<br><br>');
+              } else if (typeof raw === 'object' && raw !== null) {
+                const author = raw.author ? `<strong>${raw.author}:</strong> ` : '';
+                const text = raw.text || raw.comment || raw.content || '';
+                htmlContent = `${author}${parseMarkdown(text)}`;
+              } else {
+                htmlContent = parseMarkdown(String(raw));
+              }
+
+              if (!htmlContent.trim()) {
+                return (
+                  <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                    <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
+                      No comments available.
+                    </Text>
+                  </View>
+                );
+              }
+
+              return (
+                <ScrollView
+                  nestedScrollEnabled
+                  style={{ maxHeight: 320, minHeight: 130 }}
+                  contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+                >
+                  <RenderHtml
+                    contentWidth={contentWidth}
+                    source={{ html: htmlContent }}
+                    baseStyle={{ ...theme.typography.htmlBase }}
+                    tagsStyles={{
+                      p: { margin: 0, padding: 0 },
+                      strong: { color: theme.colors.accent, fontWeight: '800' },
+                      b: { color: theme.colors.accent, fontWeight: '800' },
+                    }}
+                  />
+                </ScrollView>
+              );
+            })()}
           </View>
           <TouchableOpacity
             style={{

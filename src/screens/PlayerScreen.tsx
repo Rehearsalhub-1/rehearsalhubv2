@@ -897,8 +897,10 @@ export default function PlayerScreen({ route, navigation }: any) {
                   nativeControls={false}
                 />
               )}
-              
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
+              <LinearGradient
+                colors={['rgba(0,0,0,0.50)', 'rgba(0,0,0,0.72)']}
+                style={StyleSheet.absoluteFill}
+              />
 
               {/* Double-tap Seek ±10s Ripple Feedback */}
               <DoubleTapOverlay side={doubleTapSide} anim={doubleTapAnim} theme={theme} />
@@ -1135,8 +1137,9 @@ export default function PlayerScreen({ route, navigation }: any) {
           formatTime={formatTime}
           playbackRate={playbackRate}
           onOpenSpeed={() => setShowSpeedModal(true)}
-          onOpenAudioParts={() => setShowAudioPartsModal(true)}
           onOpenKaraoke={() => navigation.navigate('Karaoke', { activeTrack })}
+          onOpenChat={() => navigation.navigate('ChatRooms')}
+          onShareToChat={() => setShowShareSheet(true)}
           insets={insets}
           theme={theme}
           styles={styles}

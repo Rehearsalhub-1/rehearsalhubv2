@@ -99,6 +99,7 @@ function LoopingOnceImage({ source, style, contentPosition }: { source: any; dur
       contentPosition={contentPosition || { x: 0.5, y: 0.5 }}
       priority="high"
       cachePolicy="memory-disk"
+      autoplay={false}
     />
   );
 }

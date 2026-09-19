@@ -47,6 +47,8 @@ export default function CommentsScreen({ route, navigation }: any) {
         return {
           ...prev,
           comments: d.comments !== undefined ? d.comments : prev.comments,
+          notes: d.notes !== undefined ? d.notes : prev.notes,
+          coordinatorComment: d.coordinatorComment !== undefined ? d.coordinatorComment : prev.coordinatorComment,
           title: d.title !== undefined ? d.title : prev.title,
         };
       });
@@ -129,7 +131,7 @@ export default function CommentsScreen({ route, navigation }: any) {
                 .replace(/\*(.*?)\*/g, '<strong>$1</strong>');
             };
 
-            let parsed = activeTrack?.comments;
+            let parsed = activeTrack?.comments || activeTrack?.notes || (activeTrack as any)?.coordinatorComment;
             if (typeof parsed === 'string') {
               try { parsed = JSON.parse(parsed); } catch (e) {}
             }

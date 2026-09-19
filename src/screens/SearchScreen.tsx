@@ -17,20 +17,42 @@ import { Image } from 'expo-image';
 import { isHQGroup } from '../config/zones';
 import { useZone } from '../hooks/useZone';
 import { useUserStore } from '../hooks/useUser';
-import { optimizeAudio } from '../lib/mediaUtils';
+import { optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
 import { api } from '../services/api';
-import { useTrackPlayer } from '../hooks/useTrackPlayer';
+import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
+import {
+  searchSongMatch,
+  HighlightedText,
+  sanitizeProgramName,
+  sanitizeTextNoId,
+  SongSearchResult,
+} from '../lib/searchUtils';
+
+const MiniPlayerProgressBar = ({ theme }: any) => {
+  const { position, duration } = useTrackPlayerProgress(250);
+  return (
+    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: theme.colors.divider || 'rgba(255,255,255,0.1)' }}>
+      <View style={{
+        height: '100%',
+        width: duration > 0 ? `${Math.min(100, (position / duration) * 100)}%` : '0%',
+        backgroundColor: theme.colors.accent,
+      }} />
+    </View>
+  );
+};
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const getTrackImage = (track: any, index: number) => {
-  if (track.image) {
-    if (typeof track.image === 'number') return track.image;
-    if (typeof track.image === 'string' && track.image.startsWith('http')) return { uri: track.image };
+// Resolved track image: returns real album art only. NEVER falls back to Praise Night banners.
+const getTrackImage = (track: any): any => {
+  const url = track?.imageUrl || track?.image || track?.coverArt || track?.artwork;
+  if (url && typeof url === 'string' && url.startsWith('http') && !url.includes('/banner/')) {
+    return { uri: url };
   }
-  if (track.imageUrl) return { uri: track.imageUrl };
-  
-  return require('../../assets/banner/praisenight28.jpg');
+  if (track?.image && typeof track.image === 'object' && track.image.uri && !track.image.uri.includes('/banner/')) {
+    return track.image;
+  }
+  return null;
 };
 
 let cachedSearchSongs: any[] | null = null;
@@ -38,7 +60,6 @@ let cachedSearchSongs: any[] | null = null;
 export default function SearchScreen({ navigation }: any) {
   const { theme, themeName } = useTheme();
   const styles = getStyles(theme);
-  const s = styles;
 
   const [searchQuery, setSearchQuery] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -47,7 +68,8 @@ export default function SearchScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const [songs, setSongs] = useState<any[]>([]);
 
-  const { currentTrack, play } = useTrackPlayer();
+  const { currentTrack, isPlaying, play, togglePlayback } = useTrackPlayer();
+  const [remoteSearchResults, setRemoteSearchResults] = useState<any[]>([]);
   const { currentZone: contextZone, zoneVersion, isLoading: isZoneLoading } = useZone();
   const user = useUserStore(s => s.user);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
@@ -61,14 +83,13 @@ export default function SearchScreen({ navigation }: any) {
     if (isZoneLoading || isProfileLoading || !user) return;
     setTimeout(() => {
       inputRef.current?.focus();
-    }, 500);
+    }, 400);
 
     Animated.timing(fadeAnim, {
-      toValue: 1, duration: 400, useNativeDriver: true
+      toValue: 1, duration: 350, useNativeDriver: true
     }).start();
 
     isMountedRef.current = true;
-
     cachedSearchSongs = null;
     loadData();
 
@@ -112,84 +133,157 @@ export default function SearchScreen({ navigation }: any) {
     try {
       const isHQ = isHQGroup(resolvedZoneId);
 
-      const [songsResult, zoneSongsResult, subgroupResult] = await Promise.all([
-        api.songs.getMaster(),
+      // Fetch ALL song databases: Master catalog, All Ministered Programs, Zone songs, Subgroup songs, Rehearsal programs
+      const [
+        songsResult,
+        masterProgramsResult,
+        zoneSongsResult,
+        subgroupResult,
+        allProgramsResult,
+      ] = await Promise.all([
+        api.songs.getMaster().catch(() => null),
+        api.programs.getMasterPrograms().catch(() => null),
         !isHQ ? api.songs.getZoneSongs(resolvedZoneId).catch(() => null) : Promise.resolve(null),
         api.songs.getSubgroupSongs({ zoneId: resolvedZoneId }).catch(() => null),
+        api.programs.getAll(resolvedZoneId, true).catch(() => null),
       ]);
-      
-      if (!isMountedRef.current) return;
 
-      if (!songsResult || songsResult.success === false) {
-        throw new Error('API fetch failed');
-      }
+      if (!isMountedRef.current) return;
 
       const mainSongs = Array.isArray(songsResult) ? songsResult : (songsResult?.success ? songsResult.data : []);
       const zoneSongs = Array.isArray(zoneSongsResult) ? zoneSongsResult : (zoneSongsResult?.success ? zoneSongsResult.data : []);
       const subSongs = Array.isArray(subgroupResult) ? subgroupResult : (subgroupResult?.success ? subgroupResult.data : []);
+      const masterPrograms = Array.isArray(masterProgramsResult) ? masterProgramsResult : (masterProgramsResult?.success ? masterProgramsResult.data : []);
+      const allPrograms = Array.isArray(allProgramsResult) ? allProgramsResult : (allProgramsResult?.success ? allProgramsResult.data : []);
 
-      const cachedRehearsalSongs: any[] = [];
+      // Build program ID to human-readable Name map so no IDs are ever displayed
+      const programMap: Record<string, string> = {};
+      const programSongsFromPrograms: any[] = [];
+
+      [...masterPrograms, ...allPrograms].forEach((p: any) => {
+        const pId = p?.id;
+        const pName = p?.name || p?.title;
+        if (pId && pName) {
+          programMap[String(pId)] = String(pName);
+        }
+        const sList = Array.isArray(p?.songs) ? p.songs : (Array.isArray(p?.programSongs) ? p.programSongs : []);
+        sList.forEach((item: any) => {
+          const songObj = item?.song || item;
+          if (songObj) {
+            programSongsFromPrograms.push({
+              ...songObj,
+              program: pName || songObj.program || songObj.programName,
+              programId: pId || songObj.programId,
+            });
+          }
+        });
+      });
+
+      // Also read cached Ministered and Rehearsal songs from AsyncStorage
+      const cachedStoredSongs: any[] = [];
       try {
+        const ministeredStored = await AsyncStorage.getItem(`MINISTERED_SONGS_CACHE_${resolvedZoneId}`);
+        if (ministeredStored) {
+          const parsed = JSON.parse(ministeredStored);
+          if (Array.isArray(parsed)) cachedStoredSongs.push(...parsed);
+        }
+
         const allKeys = await AsyncStorage.getAllKeys();
         const rehearsalKeys = allKeys.filter(k => k.startsWith('rehearsal_songs_'));
         if (rehearsalKeys.length > 0) {
           const rehearsalCaches = await AsyncStorage.multiGet(rehearsalKeys);
-          rehearsalCaches.forEach(([key, value]) => {
+          rehearsalCaches.forEach(([, value]) => {
             if (value) {
               try {
                 const parsed = JSON.parse(value);
                 if (parsed && Array.isArray(parsed.songs)) {
-                  cachedRehearsalSongs.push(...parsed.songs);
+                  cachedStoredSongs.push(...parsed.songs);
                 }
-              } catch (e) { }
+              } catch {}
             }
           });
         }
       } catch (err) {
-        console.warn('Failed to read rehearsal cache in SearchScreen', err);
+        console.warn('Failed to read local storage in SearchScreen:', err);
       }
 
-      const allSongsMap = new Map();
-      [...mainSongs, ...zoneSongs, ...subSongs, ...cachedRehearsalSongs].forEach(s => {
-        if (s.id) allSongsMap.set(s.id, s);
+      // Deduplicate all songs across master catalog, ministered programs, zone, subgroups, and cache
+      const allSongsMap = new Map<string, any>();
+      [
+        ...mainSongs,
+        ...programSongsFromPrograms,
+        ...zoneSongs,
+        ...subSongs,
+        ...cachedStoredSongs,
+      ].forEach((s: any, idx: number) => {
+        if (!s) return;
+        const rawId = s.id ? String(s.id) : `song-${idx}`;
+        if (!allSongsMap.has(rawId)) {
+          allSongsMap.set(rawId, s);
+        } else {
+          // Merge to get richest data (lyrics, notes, audio, artwork)
+          const existing = allSongsMap.get(rawId);
+          allSongsMap.set(rawId, {
+            ...existing,
+            ...s,
+            lyrics: s.lyrics || existing.lyrics,
+            comments: s.comments || existing.comments,
+            notes: s.notes || existing.notes,
+            imageUrl: s.imageUrl || existing.imageUrl,
+            audioFile: s.audioFile || existing.audioFile,
+            audioUrl: s.audioUrl || existing.audioUrl,
+            audioUrls: s.audioUrls || existing.audioUrls,
+          });
+        }
       });
+
       const rawSongs = Array.from(allSongsMap.values());
-      
+
       const mappedSongs = rawSongs
         .filter((song: any) => isHQ || !song.isHQOnly)
         .map((song: any, index: number) => {
-        const songAudioUrl = optimizeAudio(song.audioFile || song.audioUrls?.full || '');
-        return {
-          id: song.id || `song-${index}`,
-          title: song.title || 'Untitled Song',
-          subtitle: song.leadSinger || song.writer || 'Loveworld Singers',
-          program: song.praiseNightId || song.program || 'Loveworld Singers',
-          leadSinger: song.leadSinger || 'Unknown',
-          writer: song.writer || 'Unknown',
-          conductor: song.conductor || 'Evang. Kathy',
-          key: song.key || 'C Major',
-          tempo: song.tempo || '70 BPM',
-          category: song.category || '',
-          categories: Array.isArray(song.categories) ? song.categories : (song.category ? [song.category] : []),
-          audioUrl: songAudioUrl,
-          lyrics: song.lyrics || '',
-          solfa: song.notation || song.solfas || song.solfa || '',
-          audioUrls: song.audioUrls || {},
-          status: song.status || 'unheard',
-          isActive: song.isActive !== false,
-          rehearsalCount: song.rehearsalCount || 0,
-          conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
-          history: song.history || '',
-          comments: song.comments || '',
-          leadKeyboardist: song.leadKeyboardist || '',
-          drummer: song.drummer || '',
-          leadGuitarist: song.leadGuitarist || '',
-          createdAt: song.createdAt ? typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString() : new Date().toISOString(),
-          image: getTrackImage(song, index),
-          zoneId: resolvedZoneId,
-          collectionName: song.subGroupId ? 'subgroup_songs' : (isHQ ? 'praise_night_songs' : 'zone_songs')
-        };
-      });
+          const songAudioUrl = optimizeAudio(resolveSongAudioUrl(song) || song.audioFile || song.audioUrls?.full || '');
+          const resolvedAudioUrls = resolveSongAudioUrls(song);
+          const resolvedImage = getTrackImage(song);
+
+          // Guarantee clean human-readable text with NO raw IDs
+          const cleanTitle = sanitizeTextNoId(song.title, 'Untitled Song');
+          const cleanSinger = sanitizeTextNoId(song.leadSinger, 'Loveworld Singers');
+          const rawProg = song.programName || song.praiseNightName || song.program || song.praiseNightId || song.programId;
+          const cleanProgram = sanitizeProgramName(rawProg, 'Loveworld Singers', programMap);
+
+          return {
+            id: song.id ? String(song.id) : `song-${index}`,
+            title: cleanTitle,
+            subtitle: cleanSinger,
+            program: cleanProgram,
+            leadSinger: cleanSinger,
+            writer: sanitizeTextNoId(song.writer, 'Loveworld Singers'),
+            conductor: song.conductor || 'Evang. Kathy',
+            key: song.key || '',
+            tempo: song.tempo || '',
+            category: song.category || '',
+            categories: Array.isArray(song.categories) ? song.categories : (song.category ? [song.category] : []),
+            audioUrl: songAudioUrl,
+            lyrics: song.lyrics || '',
+            solfa: song.notation || song.solfas || song.solfa || '',
+            audioUrls: resolvedAudioUrls || song.audioUrls || {},
+            status: song.status || 'unheard',
+            isActive: song.isActive !== false,
+            rehearsalCount: song.rehearsalCount || 0,
+            conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
+            history: song.history || '',
+            comments: song.comments || song.notes || song.coordinatorComment || '',
+            leadKeyboardist: song.leadKeyboardist || '',
+            drummer: song.drummer || '',
+            leadGuitarist: song.leadGuitarist || '',
+            createdAt: song.createdAt ? (typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString()) : new Date().toISOString(),
+            image: resolvedImage,
+            imageUrl: song.imageUrl || '',
+            zoneId: resolvedZoneId,
+            collectionName: song.subGroupId ? 'subgroup_songs' : (isHQ ? 'praise_night_songs' : 'zone_songs'),
+          };
+        });
 
       setSongs(mappedSongs);
       cachedSearchSongs = mappedSongs;
@@ -214,10 +308,12 @@ export default function SearchScreen({ navigation }: any) {
   };
 
   const openTrack = (track: any) => {
-    if (!currentTrack || String(currentTrack.id) !== String(track.id)) {
-      play(track, filteredSongs, false);
+    const isSameTrack = currentTrack && String(currentTrack.id) === String(track.id);
+    if (!isSameTrack) {
+      play(track, filteredSongs, true);
+    } else {
+      navigation.navigate('Player', { activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: filteredSongs });
     }
-    navigation.navigate('Player', { activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: filteredSongs });
   };
 
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -227,21 +323,102 @@ export default function SearchScreen({ navigation }: any) {
     if (searchQuery.trim().length === 0) {
       setDebouncedQuery('');
       setIsSearching(false);
+      setRemoteSearchResults([]);
       return;
     }
     setIsSearching(true);
     const timer = setTimeout(() => {
       setDebouncedQuery(searchQuery);
       setIsSearching(false);
-    }, 400);
+    }, 280);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const filteredSongs = songs.filter(t => {
-    if (!debouncedQuery.trim()) return false;
-    const q = debouncedQuery.toLowerCase();
-    return t.title?.toLowerCase().includes(q) || t.leadSinger?.toLowerCase().includes(q) || t.program?.toLowerCase().includes(q);
-  }).sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  // Query Backend Universal Search across all 3,746+ songs in database
+  useEffect(() => {
+    if (!debouncedQuery.trim()) {
+      setRemoteSearchResults([]);
+      return;
+    }
+
+    let active = true;
+    const resolvedZoneId = contextZone?.id || 'zone-001';
+    api.songs.universalSearch(debouncedQuery, 80, resolvedZoneId)
+      .then((res: any) => {
+        if (!active) return;
+        if (res?.success && Array.isArray(res.data)) {
+          setRemoteSearchResults(res.data);
+        }
+      })
+      .catch((err: any) => {
+        console.warn('Backend universal search error:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [debouncedQuery, contextZone?.id]);
+
+  // Chat-like Full-Text Search with ranking, punctuation handling, and snippet extraction
+  const filteredSongs = React.useMemo(() => {
+    if (!debouncedQuery.trim()) return [];
+
+    const matchesMap = new Map<string, any>();
+
+    // 1. Matches from locally loaded songs
+    songs.forEach(song => {
+      const matchResult = searchSongMatch(song, debouncedQuery);
+      if (matchResult.isMatch) {
+        matchesMap.set(String(song.id), {
+          ...song,
+          searchResult: matchResult,
+        });
+      }
+    });
+
+    // 2. Matches from backend universal search (covers ALL 3,746+ songs in database)
+    remoteSearchResults.forEach(remoteSong => {
+      const id = String(remoteSong.id);
+      const resolvedImage = getTrackImage(remoteSong);
+      const cleanTitle = sanitizeTextNoId(remoteSong.title, 'Untitled Song');
+      const cleanSinger = sanitizeTextNoId(remoteSong.leadSinger, 'Loveworld Singers');
+      const cleanProgram = sanitizeProgramName(remoteSong.program || remoteSong.programName, 'Loveworld Singers');
+
+      const songObj = {
+        ...remoteSong,
+        title: cleanTitle,
+        subtitle: cleanSinger,
+        leadSinger: cleanSinger,
+        program: cleanProgram,
+        writer: sanitizeTextNoId(remoteSong.writer, 'Loveworld Singers'),
+        image: resolvedImage,
+        imageUrl: remoteSong.imageUrl || '',
+        lyrics: remoteSong.lyrics || '',
+        comments: remoteSong.comments || remoteSong.notes || remoteSong.coordinatorComment || '',
+      };
+
+      if (!matchesMap.has(id)) {
+        const localMatch = searchSongMatch(songObj, debouncedQuery);
+        matchesMap.set(id, {
+          ...songObj,
+          searchResult: remoteSong.searchResult || localMatch,
+        });
+      } else {
+        const existing = matchesMap.get(id);
+        matchesMap.set(id, {
+          ...existing,
+          ...songObj,
+          lyrics: songObj.lyrics || existing.lyrics,
+          searchResult: (existing.searchResult?.score || 0) >= (remoteSong.searchResult?.score || 0)
+            ? existing.searchResult
+            : (remoteSong.searchResult || existing.searchResult),
+        });
+      }
+    });
+
+    // Sort by match score descending (exact title > title word > lyrics phrase > lyrics word > comments)
+    return Array.from(matchesMap.values()).sort((a, b) => b.searchResult.score - a.searchResult.score);
+  }, [songs, debouncedQuery, remoteSearchResults]);
 
   return (
     <View style={styles.container}>
@@ -251,7 +428,8 @@ export default function SearchScreen({ navigation }: any) {
         colors={themeName === 'light'
           ? [theme.colors.background, theme.colors.backgroundSecondary]
           : [theme.colors.background, '#0a192f']}
-        style={StyleSheet.absoluteFill} />
+        style={StyleSheet.absoluteFill}
+      />
 
       <SafeAreaView style={styles.safeArea}>
         <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
@@ -261,23 +439,27 @@ export default function SearchScreen({ navigation }: any) {
                 <Ionicons name="search" size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
                 <TextInput
                   ref={inputRef}
-                  placeholder="Songs, archives or rehearsals..."
+                  placeholder="Songs, lyrics, notes or rehearsal..."
                   placeholderTextColor={theme.colors.inputPlaceholder}
                   style={styles.searchInput}
-                  selectionColor={theme.colors.textPrimary}
+                  selectionColor={theme.colors.accent}
                   value={searchQuery}
-                  onChangeText={setSearchQuery} />
+                  onChangeText={setSearchQuery}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                  returnKeyType="search"
+                />
                 
-                {searchQuery.length > 0 &&
-                  <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={clearSearch} style={styles.clearButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
                   </TouchableOpacity>
-                }
+                )}
               </View>
             </BlurView>
           </View>
           
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -286,6 +468,7 @@ export default function SearchScreen({ navigation }: any) {
           {isLoading && !isRefreshing ? (
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color={theme.colors.accent} />
+              <Text style={[styles.emptySubText, { marginTop: 14 }]}>Loading song library...</Text>
             </View>
           ) : hasError ? (
             <View style={styles.emptyState}>
@@ -317,19 +500,22 @@ export default function SearchScreen({ navigation }: any) {
                 />
               }
             >
-              <Ionicons name="search-outline" size={60} color={theme.colors.textDisabled} />
+              <Ionicons name="search-outline" size={56} color={theme.colors.textDisabled} />
               <Text style={styles.emptyText}>Find your rehearsal material</Text>
-              <Text style={styles.emptySubText}>Search for songs, lyrics, or recorded sessions</Text>
+              <Text style={styles.emptySubText}>
+                Search by song title, lyric words, punctuation, director notes, or vocal parts
+              </Text>
             </ScrollView>
           ) : isSearching ? (
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color={theme.colors.accent} />
-              <Text style={[styles.emptySubText, { marginTop: 16 }]}>Searching...</Text>
+              <Text style={[styles.emptySubText, { marginTop: 16 }]}>Searching songs & lyrics...</Text>
             </View>
           ) : filteredSongs.length > 0 ? (
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.trackList}
+              keyboardShouldPersistTaps="handled"
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -339,26 +525,75 @@ export default function SearchScreen({ navigation }: any) {
                 />
               }
             >
-              {filteredSongs.map((track, index) => {
+              <View style={styles.resultsHeaderRow}>
+                <Text style={styles.resultsCountText}>
+                  {filteredSongs.length} {filteredSongs.length === 1 ? 'result' : 'results'} found
+                </Text>
+              </View>
+
+              {filteredSongs.map(track => {
                 const isActiveTrack = currentTrack && String(currentTrack.id) === String(track.id);
-                const hasAudio = !!track.audioUrl;
+                const hasAudio = Boolean(track.audioUrl);
+                const searchResult: SongSearchResult = track.searchResult;
+
                 return (
                   <TouchableOpacity
                     key={track.id}
-                    style={styles.trackRow}
+                    style={[styles.trackRow, isActiveTrack && styles.trackRowActive]}
                     activeOpacity={0.7}
                     onPress={() => openTrack(track)}
                   >
-                    <View style={{ position: 'relative' }}>
-                      <Image source={track.image} style={styles.trackArt} contentFit="cover" />
+                    {/* Album Art: Real Artwork Only, or Stylized Vinyl Placeholder (NEVER Praise Night Banner) */}
+                    <View style={styles.trackArtWrap}>
+                      {track.image ? (
+                        <Image source={track.image} style={styles.trackArt} contentFit="cover" />
+                      ) : (
+                        <LinearGradient
+                          colors={['#1e293b', '#0f172a']}
+                          style={[styles.trackArt, styles.trackArtPlaceholder]}
+                        >
+                          <Ionicons name="disc-outline" size={22} color={theme.colors.accent} />
+                        </LinearGradient>
+                      )}
+
                       {!hasAudio && (
-                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="volume-mute" size={18} color="rgba(255,255,255,0.8)" />
+                        <View style={styles.noAudioBadge}>
+                          <Ionicons name="volume-mute" size={14} color="rgba(255,255,255,0.85)" />
                         </View>
                       )}
                     </View>
+
+                    {/* Track Info with Highlighted Search Matches */}
                     <View style={styles.trackInfo}>
-                      <Text style={[styles.trackTitle, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.title}</Text>
+                      {/* Song Title with Chat-like Highlighting */}
+                      <HighlightedText
+                        text={track.title}
+                        tokens={searchResult?.matchTokens}
+                        style={[styles.trackTitle, isActiveTrack && { color: theme.colors.accent }]}
+                        highlightStyle={styles.highlightActive}
+                        numberOfLines={1}
+                      />
+
+                      {/* Chat-style Matched Excerpt Snippet (when matched in lyrics, notes, or comments) */}
+                      {searchResult?.snippet ? (
+                        <View style={styles.snippetWrap}>
+                          <Ionicons
+                            name={searchResult.matchField === 'comments' ? 'chatbubble-ellipses-outline' : 'document-text-outline'}
+                            size={11}
+                            color={theme.colors.accent}
+                            style={{ marginRight: 4, marginTop: 1 }}
+                          />
+                          <HighlightedText
+                            text={searchResult.snippet}
+                            tokens={searchResult.matchTokens}
+                            style={styles.snippetText}
+                            highlightStyle={styles.highlightSnippet}
+                            numberOfLines={2}
+                          />
+                        </View>
+                      ) : null}
+
+                      {/* Metadata Row: Lead Singer · Program (No IDs ever shown) */}
                       <View style={styles.trackMeta}>
                         {!hasAudio ? (
                           <>
@@ -367,14 +602,28 @@ export default function SearchScreen({ navigation }: any) {
                           </>
                         ) : (
                           <>
-                            <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.accent} style={{ marginRight: 4 }} />
-                            <Text style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.leadSinger}</Text>
+                            <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.textMuted} style={{ marginRight: 4 }} />
+                            <HighlightedText
+                              text={track.leadSinger}
+                              tokens={searchResult?.matchTokens}
+                              style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]}
+                              highlightStyle={styles.highlightActive}
+                              numberOfLines={1}
+                            />
                           </>
                         )}
-                        <Text style={[styles.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
-                        <Text style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.program}</Text>
+
+                        {track.program ? (
+                          <>
+                            <Text style={[styles.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
+                            <Text style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
+                              {track.program}
+                            </Text>
+                          </>
+                        ) : null}
                       </View>
                     </View>
+
                     <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
                 );
@@ -394,61 +643,251 @@ export default function SearchScreen({ navigation }: any) {
                 />
               }
             >
+              <Ionicons name="alert-circle-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 8 }} />
               <Text style={styles.noResultsText}>No results for "{searchQuery}"</Text>
+              <Text style={styles.emptySubText}>
+                Try searching for partial words, lyrics, or check for typos
+              </Text>
             </ScrollView>
           )}
         </View>
+
+        {/* Persistent MiniPlayer Bar when audio is active */}
+        {currentTrack && (
+          <TouchableOpacity
+            style={styles.miniPlayerBar}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Player', {
+              activeTrack: currentTrack,
+              fromAllSongs: true,
+              zoneId: currentTrack.zoneId,
+              queue: filteredSongs.length > 0 ? filteredSongs : [currentTrack]
+            })}
+          >
+            <MiniPlayerProgressBar theme={theme} />
+            <View style={styles.miniPlayerInner}>
+              <View style={styles.miniPlayerArtWrap}>
+                {getTrackImage(currentTrack) ? (
+                  <Image source={getTrackImage(currentTrack)} style={styles.miniPlayerArt} contentFit="cover" />
+                ) : (
+                  <LinearGradient colors={['#7c3aed', '#4f46e5']} style={[styles.miniPlayerArt, styles.trackArtPlaceholder]}>
+                    <Ionicons name="disc-outline" size={18} color="#fff" />
+                  </LinearGradient>
+                )}
+              </View>
+
+              <View style={styles.miniPlayerInfo}>
+                <Text style={styles.miniPlayerTitle} numberOfLines={1}>
+                  {sanitizeTextNoId(currentTrack.title, 'Now Playing')}
+                </Text>
+                <Text style={styles.miniPlayerSubtitle} numberOfLines={1}>
+                  {sanitizeTextNoId(currentTrack.leadSinger || currentTrack.writer, 'Loveworld Singers')}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.miniPlayerPlayBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  togglePlayback();
+                }}
+              >
+                <Ionicons
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={22}
+                  color={theme.colors.accent}
+                />
+              </TouchableOpacity>
+
+              <Ionicons name="chevron-up" size={18} color={theme.colors.textMuted} style={{ marginLeft: 6 }} />
+            </View>
+          </TouchableOpacity>
+        )}
       </SafeAreaView>
     </View>
   );
 }
 
 const getStyles = (theme: any) => {
-  const T = theme.colors;
   return StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  safeArea: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 10 },
-  searchBarWrapper: { flex: 1, height: 44, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.inputBorder },
-  searchBarBlur: { flex: 1, backgroundColor: theme.colors.inputBackground },
-  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
-  searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, color: theme.colors.inputText, fontSize: 16, fontWeight: '500' },
-  clearButton: { padding: 4 },
-  cancelButton: { marginLeft: 12, paddingVertical: 8 },
-  cancelText: { color: theme.colors.accent, fontSize: 17, fontWeight: '500' },
-  resultsArea: { flex: 1 },
-  emptyState: { flex: 1, alignItems: 'center', paddingTop: 100 },
-  emptyText: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 20 },
-  emptySubText: { color: theme.colors.textMuted, fontSize: 14, marginTop: 8, textAlign: 'center', paddingHorizontal: 40 },
-  noResultsText: { color: theme.colors.textMuted, fontSize: 16, fontWeight: '500' },
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    safeArea: { flex: 1 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, zIndex: 10 },
+    searchBarWrapper: { flex: 1, height: 44, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.inputBorder },
+    searchBarBlur: { flex: 1, backgroundColor: theme.colors.inputBackground },
+    searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
+    searchIcon: { marginRight: 10 },
+    searchInput: { flex: 1, color: theme.colors.inputText, fontSize: 15, fontWeight: '500' },
+    clearButton: { padding: 4 },
+    cancelButton: { marginLeft: 12, paddingVertical: 8 },
+    cancelText: { color: theme.colors.accent, fontSize: 16, fontWeight: '600' },
+    resultsArea: { flex: 1 },
+    emptyState: { flex: 1, alignItems: 'center', paddingTop: 90, paddingHorizontal: 24 },
+    emptyText: { color: theme.colors.textPrimary, fontSize: 18, fontWeight: '700', marginTop: 18, textAlign: 'center' },
+    emptySubText: { color: theme.colors.textMuted, fontSize: 13, marginTop: 8, textAlign: 'center', lineHeight: 19 },
+    noResultsText: { color: theme.colors.textPrimary, fontSize: 16, fontWeight: '600', marginBottom: 4 },
+    countBadgeWrap: { marginTop: 20, backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+    countBadgeText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '600' },
 
-  trackList: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 10 },
-  trackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.bottomTabBorder },
-  trackArt: { width: 46, height: 46, borderRadius: 8, marginRight: 12 },
-  trackInfo: { flex: 1, justifyContent: 'center', paddingRight: 10 },
-  trackTitle: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 3 },
-  trackMeta: { flexDirection: 'row', alignItems: 'center' },
-  trackMetaText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '500' },
-  trackMetaDot: { color: theme.colors.textMuted, fontSize: 12, marginHorizontal: 5 },
-  retryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.accent,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginTop: 16,
-    shadowColor: theme.colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  retryBtnText: {
-    color: theme.colors.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-});
+    resultsHeaderRow: { marginBottom: 8, paddingHorizontal: 2 },
+    resultsCountText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+
+    trackList: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 6 },
+    trackRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.bottomTabBorder || 'rgba(255,255,255,0.08)',
+    },
+    trackRowActive: {
+      backgroundColor: 'rgba(192, 132, 252, 0.08)',
+      borderRadius: 10,
+      paddingHorizontal: 8,
+    },
+    trackArtWrap: {
+      position: 'relative',
+      width: 48,
+      height: 48,
+      borderRadius: 10,
+      overflow: 'hidden',
+      marginRight: 12,
+    },
+    trackArt: {
+      width: 48,
+      height: 48,
+      borderRadius: 10,
+    },
+    trackArtPlaceholder: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.08)',
+    },
+    noAudioBadge: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    trackInfo: { flex: 1, justifyContent: 'center', paddingRight: 8 },
+    trackTitle: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 2 },
+    
+    snippetWrap: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: 'rgba(255,255,255,0.05)',
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 6,
+      marginTop: 2,
+      marginBottom: 3,
+    },
+    snippetText: {
+      flex: 1,
+      color: theme.colors.textMuted,
+      fontSize: 11.5,
+      fontStyle: 'italic',
+      lineHeight: 16,
+    },
+
+    highlightActive: {
+      color: theme.colors.accent,
+      fontWeight: '700',
+      backgroundColor: 'rgba(192, 132, 252, 0.2)',
+      borderRadius: 3,
+    },
+    highlightSnippet: {
+      color: '#38bdf8',
+      fontWeight: '700',
+      backgroundColor: 'rgba(56, 189, 248, 0.22)',
+      borderRadius: 3,
+    },
+
+    trackMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+    trackMetaText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '500' },
+    trackMetaDot: { color: theme.colors.textMuted, fontSize: 12, marginHorizontal: 5 },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.accent,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginTop: 16,
+      shadowColor: theme.colors.accent,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+      elevation: 4,
+    },
+    retryBtnText: {
+      color: theme.colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    miniPlayerBar: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      backgroundColor: theme.colors.backgroundSecondary || '#1e1b4b',
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.bottomTabBorder || 'rgba(255,255,255,0.1)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 10,
+      zIndex: 50,
+    },
+    miniPlayerInner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    miniPlayerArtWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginRight: 12,
+    },
+    miniPlayerArt: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+    },
+    miniPlayerInfo: {
+      flex: 1,
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    miniPlayerTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+      marginBottom: 2,
+    },
+    miniPlayerSubtitle: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      fontWeight: '500',
+    },
+    miniPlayerPlayBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
 };

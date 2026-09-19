@@ -10,8 +10,10 @@ export interface PlayerBottomTabBarProps {
   formatTime: (secondsOrMs: number) => string;
   playbackRate: number;
   onOpenSpeed: () => void;
-  onOpenAudioParts: () => void;
+  onOpenAudioParts?: () => void;
   onOpenKaraoke: () => void;
+  onOpenChat: () => void;
+  onShareToChat?: () => void;
   insets: any;
   theme: any;
   styles: any;
@@ -27,6 +29,8 @@ export const PlayerBottomTabBar: React.FC<PlayerBottomTabBarProps> = ({
   onOpenSpeed,
   onOpenAudioParts,
   onOpenKaraoke,
+  onOpenChat,
+  onShareToChat,
   insets,
   theme,
   styles,
@@ -112,14 +116,18 @@ export const PlayerBottomTabBar: React.FC<PlayerBottomTabBarProps> = ({
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.playerTabButton} onPress={onOpenAudioParts}>
-        <Ionicons name="musical-notes-outline" size={20} color={theme.colors.textSecondary} />
-        <Text style={styles.playerTabLabel}>Parts</Text>
-      </TouchableOpacity>
-
       <TouchableOpacity style={styles.playerTabButton} onPress={onOpenKaraoke}>
         <Ionicons name="mic-outline" size={20} color={theme.colors.textSecondary} />
         <Text style={styles.playerTabLabel}>Practice</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.playerTabButton}
+        onPress={onOpenChat}
+        onLongPress={onShareToChat}
+      >
+        <Ionicons name="chatbubbles-outline" size={20} color={theme.colors.textSecondary} />
+        <Text style={styles.playerTabLabel}>Chat</Text>
       </TouchableOpacity>
     </View>
   );
