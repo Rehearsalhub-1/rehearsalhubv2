@@ -226,58 +226,81 @@ export function HighlightedText({
   highlightStyle,
   numberOfLines,
 }: {
-  text: string;
+  text: any;
   tokens?: string[];
   style?: any;
   highlightStyle?: any;
   numberOfLines?: number;
 }) {
-  if (!text) return null;
-  if (!tokens || tokens.length === 0) {
-    return <Text style={style} numberOfLines={numberOfLines}>{text}</Text>;
+  const safeText = typeof text === 'string' ? text : (text !== null && text !== undefined ? String(text) : '');
+  if (!safeText) return null;
+
+  if (!tokens || !Array.isArray(tokens) || tokens.length === 0) {
+    return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
   }
 
-  const cleanTokens = Array.from(
-    new Set(
-      tokens
-        .map(t => t.trim())
-        .filter(t => t.length > 0)
-    )
-  ).sort((a, b) => b.length - a.length);
+  try {
+    const cleanTokens = Array.from(
+      new Set(
+        tokens
+          .map(t => (typeof t === 'string' ? t.trim() : ''))
+          .filter(t => t.length > 0)
+      )
+    ).sort((a, b) => b.length - a.length);
 
-  if (cleanTokens.length === 0) {
-    return <Text style={style} numberOfLines={numberOfLines}>{text}</Text>;
+    if (cleanTokens.length === 0) {
+      return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
+    }
+
+    // Also include punctuation-free versions of tokens for resilient matching
+    const allMatchTokens = new Set<string>();
+    cleanTokens.forEach(t => {
+      if (t) allMatchTokens.add(t);
+      const noP = getPunctuationFree(t);
+      if (noP && noP.length > 0) allMatchTokens.add(noP);
+    });
+
+    const tokenArray = Array.from(allMatchTokens).filter(t => t && t.trim().length > 0);
+    if (tokenArray.length === 0) {
+      return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
+    }
+
+    const escaped = tokenArray.map(escapeRegex).join('|');
+    if (!escaped) {
+      return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
+    }
+
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = safeText.split(regex);
+
+    return (
+      <Text style={style} numberOfLines={numberOfLines}>
+        {parts.map((part, index) => {
+          if (!part) return null;
+          const trimmedPart = part.trim();
+          const isMatched = trimmedPart.length > 0 && tokenArray.some(t => {
+            const cleanT = t.toLowerCase();
+            const cleanP = part.toLowerCase();
+            if (cleanT === cleanP) return true;
+            const noPT = getPunctuationFree(cleanT);
+            const noPP = getPunctuationFree(cleanP);
+            return noPT.length > 0 && noPT === noPP;
+          });
+
+          return isMatched ? (
+            <Text key={index} style={[styles.defaultHighlight, highlightStyle]}>
+              {part}
+            </Text>
+          ) : (
+            <Text key={index}>{part}</Text>
+          );
+        })}
+      </Text>
+    );
+  } catch (err) {
+    // If regex or rendering fails for any reason, safely fall back to plain text
+    return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
   }
-
-  // Also include punctuation-free versions of tokens for resilient matching
-  const allMatchTokens = new Set<string>();
-  cleanTokens.forEach(t => {
-    allMatchTokens.add(t);
-    const noP = getPunctuationFree(t);
-    if (noP) allMatchTokens.add(noP);
-  });
-
-  const escaped = Array.from(allMatchTokens).map(escapeRegex).join('|');
-  const regex = new RegExp(`(${escaped})`, 'gi');
-  const parts = text.split(regex);
-
-  return (
-    <Text style={style} numberOfLines={numberOfLines}>
-      {parts.map((part, index) => {
-        const isMatched = Array.from(allMatchTokens).some(
-          t => t.toLowerCase() === part.toLowerCase() ||
-               getPunctuationFree(t.toLowerCase()) === getPunctuationFree(part.toLowerCase())
-        );
-        return isMatched ? (
-          <Text key={index} style={[styles.defaultHighlight, highlightStyle]}>
-            {part}
-          </Text>
-        ) : (
-          <Text key={index}>{part}</Text>
-        );
-      })}
-    </Text>
-  );
 }
 
 const styles = StyleSheet.create({

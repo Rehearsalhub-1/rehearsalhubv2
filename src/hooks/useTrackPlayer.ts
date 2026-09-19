@@ -310,65 +310,69 @@ export const useTrackPlayer = () => {
     if ((global as any).isChatAudio) return;
 
     if (event.type === Event.PlaybackState) {
-      const state = event.state;
-      const parsedState = typeof state === 'object' ? (state as any).state : state;
+      try {
+        const state = event?.state;
+        const parsedState = (state !== null && typeof state === 'object') ? (state as any).state : state;
 
-      if (parsedState === State.Playing || parsedState === 'playing') {
-        globalIsPlaying = true;
-        globalIsLoading = false;
-      } else if (
-        parsedState === State.Buffering ||
-        parsedState === State.Connecting ||
-        parsedState === 'loading' ||
-        parsedState === 'buffering' ||
-        parsedState === 'connecting'
-      ) {
-        globalIsLoading = true;
-      } else {
-        if (!globalIsFetching || parsedState === State.Ready || parsedState === 'ready' || parsedState === State.Paused || parsedState === 'paused') {
+        if (parsedState === State.Playing || parsedState === 'playing') {
+          globalIsPlaying = true;
           globalIsLoading = false;
-        }
-        if (
-          parsedState === State.Paused ||
-          parsedState === State.Stopped ||
-          parsedState === State.None
+        } else if (
+          parsedState === State.Buffering ||
+          parsedState === State.Connecting ||
+          parsedState === 'loading' ||
+          parsedState === 'buffering' ||
+          parsedState === 'connecting'
         ) {
-          globalIsPlaying = false;
+          globalIsLoading = true;
+        } else {
+          if (!globalIsFetching || parsedState === State.Ready || parsedState === 'ready' || parsedState === State.Paused || parsedState === 'paused') {
+            globalIsLoading = false;
+          }
+          if (
+            parsedState === State.Paused ||
+            parsedState === State.Stopped ||
+            parsedState === State.None
+          ) {
+            globalIsPlaying = false;
+          }
         }
-      }
-      if (parsedState === State.Ready || parsedState === 'ready' || parsedState === State.Playing || parsedState === 'playing') {
-        try {
-          let idx: any = null;
-          idx = await TrackPlayer.getCurrentTrack();
-          
-          if (idx !== undefined && idx !== null && globalQueue.length > 0) {
-            let t: any = null;
-            if (typeof idx === 'string') {
-              t = globalQueue.find(x => String(x.id) === String(idx));
-            } else {
-              t = await TrackPlayer.getTrack(idx);
-            }
-            if (t) {
-              const ft = globalQueue.find(x => String(x.id) === String(t.id)) || t.originalTrack || t;
-              if (ft) {
-                globalCurrentTrack = ft;
-                const globalIdx = globalQueue.findIndex(x => String(x.id) === String(ft.id));
-                if (globalIdx !== -1) globalQueueIndex = globalIdx;
+        if (parsedState === State.Ready || parsedState === 'ready' || parsedState === State.Playing || parsedState === 'playing') {
+          try {
+            let idx: any = null;
+            idx = await TrackPlayer.getCurrentTrack();
+            
+            if (idx !== undefined && idx !== null && globalQueue.length > 0) {
+              let t: any = null;
+              if (typeof idx === 'string') {
+                t = globalQueue.find(x => String(x.id) === String(idx));
+              } else {
+                t = await TrackPlayer.getTrack(idx);
+              }
+              if (t) {
+                const ft = globalQueue.find(x => String(x.id) === String(t.id)) || t.originalTrack || t;
+                if (ft) {
+                  globalCurrentTrack = ft;
+                  const globalIdx = globalQueue.findIndex(x => String(x.id) === String(ft.id));
+                  if (globalIdx !== -1) globalQueueIndex = globalIdx;
+                }
               }
             }
+          } catch (e) {
+            console.error('[PlaybackState Ready Handler] Failed to sync track:', e);
           }
-        } catch (e) {
-          console.error('[PlaybackState Ready Handler] Failed to sync track:', e);
         }
-      }
 
-      notifySubscribers();
+        notifySubscribers();
+      } catch (err) {
+        console.error('[PlaybackState Error Handler]:', err);
+      }
     }
 
     if (event.type === Event.PlaybackTrackChanged) {
       if ((global as any).isChatAudio) return;
       try {
-        let newTrackObj: any = null;
+        let newTrackObj: any = null;
         if ('nextTrack' in event && event.nextTrack !== undefined && event.nextTrack !== null) {
           newTrackObj = await TrackPlayer.getTrack(event.nextTrack as number);
         }
