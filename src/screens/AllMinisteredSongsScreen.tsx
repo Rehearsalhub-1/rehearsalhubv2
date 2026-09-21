@@ -399,7 +399,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     if (!isSameTrack) {
       play(track, q, true);
     } else {
-      navigation.navigate('Player', { activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: q });
+      navigateToPlayer({ activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: q });
     }
   };
 
@@ -900,7 +900,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           <TouchableOpacity
             style={[s.miniPlayer, { backgroundColor: theme.colors.backgroundSecondary }]}
             activeOpacity={0.9}
-            onPress={() => navigation.navigate('Player', { activeTrack, fromAllSongs: true, zoneId: activeTrack.zoneId, queue: filteredTracks })}
+            onPress={() => navigateToPlayer({ activeTrack, fromAllSongs: true, zoneId: activeTrack.zoneId, queue: filteredTracks })}
           >
             <MiniPlayerProgressBar theme={theme} />
             <Image source={activeTrack.image} style={s.miniArt} contentFit="cover" />
@@ -1317,3 +1317,4 @@ const getStyles = (theme: any) => {
   applyBtnText: { color: T.textPrimary, fontSize: 15, fontWeight: '700' },
 });
 };
+

@@ -331,7 +331,7 @@ export default function SearchScreen({ navigation }: any) {
     if (!isSameTrack) {
       play(track, filteredSongs, true);
     } else {
-      navigation.navigate('Player', { activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: filteredSongs });
+      navigateToPlayer({ activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: filteredSongs });
     }
   };
 
@@ -682,7 +682,7 @@ export default function SearchScreen({ navigation }: any) {
           <TouchableOpacity
             style={styles.miniPlayerBar}
             activeOpacity={0.9}
-            onPress={() => navigation.navigate('Player', {
+            onPress={() => navigateToPlayer({
               activeTrack: currentTrack,
               fromAllSongs: true,
               zoneId: currentTrack.zoneId,
@@ -916,3 +916,4 @@ const getStyles = (theme: any) => {
     },
   });
 };
+

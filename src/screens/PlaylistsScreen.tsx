@@ -309,7 +309,7 @@ export default function PlaylistsScreen({ navigation, route }: any) {
     if (!currentTrack || String(currentTrack.id) !== String(track.id)) {
       play(track, queue, false);
     }
-    navigation.navigate('Player', { activeTrack: track, queue });
+    navigateToPlayer({ activeTrack: track, queue });
   };
 
   const handleDeletePlaylist = (playlistId: string, playlistName?: string) => {
@@ -345,7 +345,7 @@ export default function PlaylistsScreen({ navigation, route }: any) {
     
     if (songsToPlay.length > 0) {
       play(songsToPlay[0], songsToPlay);
-      navigation.navigate('Player', { activeTrack: songsToPlay[0], queue: songsToPlay });
+      navigateToPlayer({ activeTrack: songsToPlay[0], queue: songsToPlay });
     }
   };
 
@@ -1297,3 +1297,4 @@ const getStyles = (theme: any) => {
     },
   });
 };
+
