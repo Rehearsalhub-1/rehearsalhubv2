@@ -101,7 +101,7 @@ export const SongShareCard = React.memo(({
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => {
-          navigation.navigate('Player', {
+          navigateToPlayer({
             activeTrack: msg.songData,
             fromAllSongs: true,
           });
@@ -161,7 +161,7 @@ export const SongShareCard = React.memo(({
       <TouchableOpacity
         style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: APP_THEME.border }}
         onPress={() => {
-          navigation.navigate('Player', {
+          navigateToPlayer({
             activeTrack: msg.songData,
             fromAllSongs: true,
           });
@@ -615,3 +615,4 @@ const waCardStyles = StyleSheet.create({
     paddingTop: 1,
   },
 });
+

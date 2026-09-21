@@ -208,7 +208,7 @@ function ChatMessageBubble({
           const songId = part.split('/').filter(Boolean).pop()?.split('?')[0] || '';
           label = `🎵 Listen to Song`;
           onPress = () => {
-            navigation.navigate('Player', {
+            navigateToPlayer({
               activeTrack: { id: songId },
               fromAllSongs: true,
             });
