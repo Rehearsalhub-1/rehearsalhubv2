@@ -276,7 +276,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         }
 
         console.log('[RehearsalScreen] Navigating to Player screen:', song.title);
-        navigation.navigate('Player', { activeTrack: song, zoneId: activeZone?.id || song.zoneId, queue: [song, ...programSongs], autoplay: false });
+        navigateToPlayer({ activeTrack: song, zoneId: activeZone?.id || song.zoneId, queue: [song, ...programSongs], autoplay: false });
 
         navigation.setParams({ songId: undefined });
       }
@@ -1168,7 +1168,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
                 if (programSongs.length > 0) {
                   const randomIdx = Math.floor(Math.random() * programSongs.length);
                   play(programSongs[randomIdx], programSongs, false);
-                  navigation.navigate('Player', { activeTrack: programSongs[randomIdx], zoneId: activeZone?.id, queue: programSongs });
+                  navigateToPlayer({ activeTrack: programSongs[randomIdx], zoneId: activeZone?.id, queue: programSongs });
                 }
               }}
               isLoading={isLoading}
@@ -1223,7 +1223,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
                   if (!isSameTrack) {
                     play(track, programSongs, true);
                   } else {
-                    navigation.navigate('Player', { activeTrack: track, zoneId: activeZone?.id, queue: programSongs });
+                    navigateToPlayer({ activeTrack: track, zoneId: activeZone?.id, queue: programSongs });
                   }
                 }}
                 onLongPress={() => { if (!isSelectionMode) setIsSelectionMode(true); toggleSelection(track.id); }}
@@ -1314,7 +1314,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
             style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.background === '#000000' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(124, 58, 237, 0.12)' }}
             activeOpacity={0.9}
             onPress={() => {
-              navigation.navigate('Player', { activeTrack: currentActiveTrack, zoneId: activeZone?.id, queue: programSongs });
+              navigateToPlayer({ activeTrack: currentActiveTrack, zoneId: activeZone?.id, queue: programSongs });
             }}>
             <LinearGradient
               colors={theme.colors.background !== '#FFFFFF' && theme.colors.background !== '#ffffff' ? theme.gradients.glassPurple : ['#FFFFFF', '#F3E8FF']}
@@ -1453,4 +1453,5 @@ export default function RehearsalScreen({ navigation, route }: any) {
     </View>);
 
 }
+
 
