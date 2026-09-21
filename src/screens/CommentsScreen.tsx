@@ -139,7 +139,7 @@ export default function CommentsScreen({ route, navigation }: any) {
             if (Array.isArray(parsed) && parsed.length > 0) {
               return parsed.map((comment: any, index: number) => (
                 <View key={index} style={{ marginBottom: 24 }}>
-                  <Text style={[styles.fullTextLine, { color: theme.colors.textMuted, marginBottom: 8 }]}>{comment.author || 'Director Comment'}:</Text>
+                  <Text style={[styles.fullTextLine, { color: theme.colors.textMuted, marginBottom: 8 }]}>{comment.author || 'comment'}:</Text>
                   <RenderHtml
                     contentWidth={SCREEN_WIDTH - 48}
                     source={{ html: parseMarkdown(comment.text || comment.comment || '') }}

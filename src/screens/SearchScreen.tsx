@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 
 import { isHQGroup } from '../config/zones';
+import { isHQAdmin } from '../config/roles';
 import { useZone } from '../hooks/useZone';
 import { useUserStore } from '../hooks/useUser';
 import { optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
@@ -72,7 +73,9 @@ export default function SearchScreen({ navigation }: any) {
   const [remoteSearchResults, setRemoteSearchResults] = useState<any[]>([]);
   const { currentZone: contextZone, zoneVersion, isLoading: isZoneLoading } = useZone();
   const user = useUserStore(s => s.user);
+  const profile = useUserStore(s => s.profile);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
+  const isHQOrPresident = isHQAdmin(profile);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasError, setHasError] = useState(false);
@@ -133,7 +136,11 @@ export default function SearchScreen({ navigation }: any) {
     try {
       const isHQ = isHQGroup(resolvedZoneId);
 
-      // Fetch ALL song databases: Master catalog, All Ministered Programs, Zone songs, Subgroup songs, Rehearsal programs
+      // Fetch song databases:
+      // Master catalog (All Ministered Songs) -> available to everyone
+      // Assigned Zone songs -> available to everyone for their assigned zone
+      // Subgroup songs of assigned zone -> available to everyone for their assigned zone
+      // Master/Archive programs -> ONLY for HQ Admin and The President!
       const [
         songsResult,
         masterProgramsResult,
@@ -142,7 +149,7 @@ export default function SearchScreen({ navigation }: any) {
         allProgramsResult,
       ] = await Promise.all([
         api.songs.getMaster().catch(() => null),
-        api.programs.getMasterPrograms().catch(() => null),
+        isHQOrPresident ? api.programs.getMasterPrograms().catch(() => null) : Promise.resolve([]),
         !isHQ ? api.songs.getZoneSongs(resolvedZoneId).catch(() => null) : Promise.resolve(null),
         api.songs.getSubgroupSongs({ zoneId: resolvedZoneId }).catch(() => null),
         api.programs.getAll(resolvedZoneId, true).catch(() => null),
@@ -161,6 +168,10 @@ export default function SearchScreen({ navigation }: any) {
       const programSongsFromPrograms: any[] = [];
 
       [...masterPrograms, ...allPrograms].forEach((p: any) => {
+        // Exclude archive programs for regular users (only HQ Admin & President can search Archive)
+        const isArchive = p?.category === 'archive' || p?.status === 'archive' || p?.isArchived;
+        if (!isHQOrPresident && isArchive) return;
+
         const pId = p?.id;
         const pName = p?.name || p?.title;
         if (pId && pName) {
@@ -240,7 +251,14 @@ export default function SearchScreen({ navigation }: any) {
       const rawSongs = Array.from(allSongsMap.values());
 
       const mappedSongs = rawSongs
-        .filter((song: any) => isHQ || !song.isHQOnly)
+        .filter((song: any) => {
+          if (!isHQOrPresident) {
+            if (song.isHQOnly || song.status === 'hq_only') return false;
+            // Strictly exclude archive songs for regular users
+            if (song.status === 'archive' || song.status === 'archived' || song.category === 'archive') return false;
+          }
+          return isHQ || !song.isHQOnly;
+        })
         .map((song: any, index: number) => {
           const songAudioUrl = optimizeAudio(resolveSongAudioUrl(song) || song.audioFile || song.audioUrls?.full || '');
           const resolvedAudioUrls = resolveSongAudioUrls(song);
@@ -376,8 +394,14 @@ export default function SearchScreen({ navigation }: any) {
       }
     });
 
-    // 2. Matches from backend universal search (covers ALL 3,746+ songs in database)
+    // 2. Matches from backend universal search
     remoteSearchResults.forEach(remoteSong => {
+      // Client-side guard: strictly exclude archive and HQ-only songs for regular users
+      if (!isHQOrPresident) {
+        if (remoteSong.status === 'archive' || remoteSong.status === 'archived' || remoteSong.category === 'archive') return;
+        if (remoteSong.status === 'hq_only' || remoteSong.isHQOnly) return;
+      }
+
       const id = String(remoteSong.id);
       const resolvedImage = getTrackImage(remoteSong);
       const cleanTitle = sanitizeTextNoId(remoteSong.title, 'Untitled Song');
