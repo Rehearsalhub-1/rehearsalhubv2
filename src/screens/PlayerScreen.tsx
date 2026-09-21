@@ -685,7 +685,8 @@ export default function PlayerScreen({ route, navigation }: any) {
 
     lastPlayedTrackIdRef.current = activeId;
     lastPlayedAudioUrlRef.current = activeAudioUrl;
-    const shouldAutoplay = route.params?.autoplay === true;
+    const isLive = isLiveSong(activeTrack) || route.params?.fromLive === true || route.params?.isLive === true;
+    const shouldAutoplay = isLive ? false : (route.params?.autoplay === true);
     play(activeTrack, initialQueue || undefined, shouldAutoplay);
   }, [activeTrack?.id, activeTrack?.audioUrl]);
 

@@ -517,6 +517,11 @@ export const useTrackPlayer = () => {
             await TrackPlayer.play();
             globalIsPlaying = true;
             notifySubscribers();
+          } else {
+            setWasPlayingIntentionally(false);
+            await TrackPlayer.pause();
+            globalIsPlaying = false;
+            notifySubscribers();
           }
           return; // Skip reset and adding!
         }

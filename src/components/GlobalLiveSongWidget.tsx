@@ -42,9 +42,8 @@ export default function GlobalLiveSongWidget() {
   // Use stable primitive selectors so Zustand doesn't return new refs every render
   const activeSongs = useLiveSongStore((state) => state.activeSongs);
   const hasInitialFetched = useLiveSongStore((state) => state.hasInitialFetched);
-  const isLiveStoreLoading = useLiveSongStore((state) => state.isLoading);
-  const handleSongUpdate = useLiveSongStore(useCallback((state) => state.handleSongUpdate, []));
-  const fetchActiveSongs = useLiveSongStore(useCallback((state) => state.fetchActiveSongs, []));
+  const handleSongUpdate = useLiveSongStore((state) => state.handleSongUpdate);
+  const fetchActiveSongs = useLiveSongStore((state) => state.fetchActiveSongs);
 
   const [currentScreen, setCurrentScreen] = useState<string | null>(null);
   const [showPickerModal, setShowPickerModal] = useState(false);
@@ -169,7 +168,7 @@ export default function GlobalLiveSongWidget() {
   // Visibility guard:
   // Hide if on a screen that forbids live widget (Chat screens, Calls, Player, Auth),
   // OR if there are no active songs.
-  // DO NOT hide if currentScreen is temporarily null/unknown!
+  // DO NOT hide on background loading so the widget never flickers/glitches!
   const isHiddenScreen = currentScreen
     ? Boolean(
         HIDDEN_SCREENS.has(currentScreen) ||
@@ -182,7 +181,6 @@ export default function GlobalLiveSongWidget() {
   const isHidden =
     isHiddenScreen ||
     !hasInitialFetched ||
-    isLiveStoreLoading ||
     !activeSongs ||
     activeSongs.length === 0;
 
@@ -197,6 +195,8 @@ export default function GlobalLiveSongWidget() {
       zoneId: currentZone?.id,
       queue: activeSongs,
       autoplay: false,
+      fromLive: true,
+      isLive: true,
     });
   };
 
@@ -208,8 +208,12 @@ export default function GlobalLiveSongWidget() {
     }
   };
 
+  const songCount = activeSongs.length;
   const primarySong = activeSongs[0];
-  const titleText = primarySong?.title || 'Live Rehearsal';
+  const tagText = songCount > 1 ? `LIVE NOW • ${songCount} SESSIONS` : 'LIVE NOW';
+  const titleText = songCount > 1
+    ? `${primarySong?.title || 'Rehearsal'} +${songCount - 1} more`
+    : (primarySong?.title || 'Live Rehearsal');
 
   return (
     <>
@@ -246,7 +250,7 @@ export default function GlobalLiveSongWidget() {
 
           {/* Song info badge */}
           <View style={styles.liveWidgetInfo}>
-            <Text style={styles.liveTagText}>LIVE NOW</Text>
+            <Text style={styles.liveTagText}>{tagText}</Text>
             <Text
               style={[styles.liveTitleText, { color: theme.colors.textPrimary }]}
               numberOfLines={1}
@@ -254,6 +258,12 @@ export default function GlobalLiveSongWidget() {
               {titleText}
             </Text>
           </View>
+
+          {songCount > 1 && (
+            <View style={styles.countPill}>
+              <Text style={styles.countPillText}>{songCount} Live</Text>
+            </View>
+          )}
 
           {/* Pulse wave icon */}
           <Ionicons
@@ -416,6 +426,21 @@ const styles = StyleSheet.create({
   },
   livePulseIcon: {
     marginLeft: 'auto',
+  },
+  countPill: {
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+    marginRight: 6,
+    alignSelf: 'center',
+  },
+  countPillText: {
+    color: '#22c55e',
+    fontSize: 10,
+    fontWeight: '800',
   },
   modalOverlay: {
     flex: 1,

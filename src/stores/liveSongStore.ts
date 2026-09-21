@@ -27,17 +27,11 @@ interface LiveSongStore {
   activeSongs: LiveSong[];
   isLoading: boolean;
   hasInitialFetched: boolean;
-  /** IDs of songs explicitly turned off via WebSocket, with the timestamp they were removed.
-   *  Used to prevent stale HTTP fetches from re-adding already-removed songs. */
-  recentlyRemovedIds: Map<string, number>;
   setActiveSongs: (songs: LiveSong[]) => void;
   handleSongUpdate: (rawUpdate: any) => void;
   removeSong: (songId: string) => void;
   fetchActiveSongs: (zoneId?: string) => Promise<void>;
 }
-
-/** How long (ms) to shield a removed song from HTTP re-addition. */
-const REMOVAL_SHIELD_MS = 12_000;
 
 export function isLiveSong(s: any): boolean {
   if (!s || typeof s !== 'object') return false;
@@ -96,7 +90,6 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   activeSongs: [],
   isLoading: false,
   hasInitialFetched: false,
-  recentlyRemovedIds: new Map(),
 
   setActiveSongs: (songs: LiveSong[]) => {
     const rawList = Array.isArray(songs) ? songs : [];
@@ -233,7 +226,6 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
         }
       }
 
-      const { recentlyRemovedIds } = get();
       const seenIds = new Set<string>();
       const prepped: LiveSong[] = [];
 
@@ -244,8 +236,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
         if (seenIds.has(idStr)) continue;
         seenIds.add(idStr);
 
-        // Strict verification: Must not be recently removed, not explicitly off, and must be live
-        if (!isRecentlyRemoved(recentlyRemovedIds, idStr) && !isSongExplicitlyOff(s) && isLiveSong(s)) {
+        if (!isSongExplicitlyOff(s) && isLiveSong(s)) {
           const resolvedAudioUrl = resolveSongAudioUrl(s);
           const resolvedAudioUrls = resolveSongAudioUrls(s);
           prepped.push({
@@ -271,13 +262,3 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
     }
   },
 }));
-
-/** Returns true if this song ID was removed recently within REMOVAL_SHIELD_MS. */
-function isRecentlyRemoved(
-  removedMap: Map<string, number>,
-  songId: string
-): boolean {
-  const removedAt = removedMap.get(songId);
-  if (!removedAt) return false;
-  return Date.now() - removedAt < REMOVAL_SHIELD_MS;
-}

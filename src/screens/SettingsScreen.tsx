@@ -264,15 +264,25 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
+  const isClockedInToday = attendanceHistory.some((r: any) => {
+    const d = r.parsedCheckIn || r.parsedDate || (r.checkInTime ? new Date(r.checkInTime) : null) || (r.createdAt ? new Date(r.createdAt) : null);
+    if (!d || isNaN(d.getTime())) return false;
+    const today = new Date();
+    return d.getFullYear() === today.getFullYear() &&
+           d.getMonth() === today.getMonth() &&
+           d.getDate() === today.getDate();
+  });
+
   const handleGeofencedClockIn = async () => {
     if (!currentUser || clockingIn) return;
+
+    if (isClockedInToday) {
+      Alert.alert('Already Clocked In', 'You have already clocked in for today.');
+      return;
+    }
+
     setClockingIn(true);
     try {
-      const docId = currentZone?.id
-        ? isHQGroup(currentZone.id) ? 'geofence_hq' : `geofence_${currentZone.id}`
-        : 'geofence';
-      const res = await api.settings.get(docId).catch(() => null);
-
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Denied', 'Location permission is required to clock in.');
@@ -286,16 +296,47 @@ export default function SettingsScreen({ navigation }: any) {
 
       const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
         const R = 6371e3;
-        const f1 = lat1 * Math.PI/180;
-        const f2 = lat2 * Math.PI/180;
-        const df = (lat2-lat1) * Math.PI/180;
-        const dl = (lon2-lon1) * Math.PI/180;
-        const a = Math.sin(df/2) * Math.sin(df/2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl/2) * Math.sin(dl/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        const f1 = (lat1 * Math.PI) / 180;
+        const f2 = (lat2 * Math.PI) / 180;
+        const df = ((lat2 - lat1) * Math.PI) / 180;
+        const dl = ((lon2 - lon1) * Math.PI) / 180;
+        const a = Math.sin(df / 2) * Math.sin(df / 2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
       };
 
-      // Geofence check skipped — location verified server-side
+      // Resolve geofence config for current zone/church
+      const candidateKeys = [
+        currentChurch?.id ? `geofence_${currentChurch.id}` : null,
+        currentZone?.id ? (isHQGroup(currentZone.id) ? 'geofence_hq' : `geofence_${currentZone.id}`) : null,
+        'geofence_hq',
+        'geofence',
+      ].filter(Boolean) as string[];
+
+      let geoData: any = null;
+      for (const key of candidateKeys) {
+        const res = await api.settings.get(key).catch(() => null);
+        if (res?.data && res.data.latitude != null && res.data.longitude != null) {
+          geoData = res.data;
+          break;
+        }
+      }
+
+      if (geoData && geoData.isEnabled !== false && geoData.latitude != null && geoData.longitude != null) {
+        const venueLat = parseFloat(geoData.latitude);
+        const venueLon = parseFloat(geoData.longitude);
+        const maxRadius = parseFloat(geoData.radius) || 250;
+        const dist = getDistance(myLat, myLon, venueLat, venueLon);
+
+        if (dist > maxRadius) {
+          Alert.alert(
+            'Outside Rehearsal Venue',
+            `You are ${Math.round(dist)}m away from ${geoData.venueName || 'the rehearsal venue'}.\n\nYou must be within ${Math.round(maxRadius)}m to clock in.`
+          );
+          setClockingIn(false);
+          return;
+        }
+      }
 
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -303,7 +344,7 @@ export default function SettingsScreen({ navigation }: any) {
       if (hasHardware && isEnrolled) {
         const bioResult = await LocalAuthentication.authenticateAsync({
           promptMessage: 'Verify Identity to Clock-in',
-          fallbackLabel: 'Use Passcode'
+          fallbackLabel: 'Use Passcode',
         });
         if (!bioResult.success) {
           Alert.alert('Authentication Failed', 'We could not verify your identity.');
@@ -312,18 +353,28 @@ export default function SettingsScreen({ navigation }: any) {
         }
       }
 
-      await api.attendance.clockIn({
-        userId: currentUser?.uid || "",
+      const clockInRes: any = await api.attendance.clockIn({
+        userId: currentUser?.uid || '',
         userName: [profile.firstName, profile.lastName].filter(Boolean).join(' '),
         status: 'present',
         timestamp: new Date().toISOString(),
+        latitude: myLat,
+        longitude: myLon,
+        zoneId: currentZone?.id,
       });
+
+      if (clockInRes && clockInRes.success === false) {
+        Alert.alert('Clock-in Blocked', clockInRes.error || clockInRes.message || 'Unable to clock in.');
+        setClockingIn(false);
+        return;
+      }
 
       showToast('Clocked in successfully! ✓');
       await loadAttendance();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      Alert.alert('Error', 'Failed to clock in. Please check your connection and location settings.');
+      const errMsg = e?.error || e?.message || 'Failed to clock in. Please check your connection and location settings.';
+      Alert.alert('Clock-in Failed', errMsg);
     } finally {
       setClockingIn(false);
     }
@@ -882,12 +933,26 @@ export default function SettingsScreen({ navigation }: any) {
                         Make sure you are within the rehearsal venue. Your location and identity will be verified securely on-device.
                       </Text>
                       <TouchableOpacity 
-                        style={[s.requestBtn, { backgroundColor: '#34D399', width: '100%', paddingVertical: 14 }]} 
+                        style={[
+                          s.requestBtn, 
+                          { 
+                            backgroundColor: isClockedInToday ? 'rgba(52,211,153,0.15)' : '#34D399', 
+                            width: '100%', 
+                            paddingVertical: 14,
+                            borderColor: isClockedInToday ? '#34D399' : 'transparent',
+                            borderWidth: isClockedInToday ? 1 : 0,
+                          }
+                        ]} 
                         onPress={handleGeofencedClockIn}
-                        disabled={clockingIn}
+                        disabled={clockingIn || isClockedInToday}
                       >
                         {clockingIn ? (
                           <ActivityIndicator color="#111" />
+                        ) : isClockedInToday ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            <Ionicons name="checkmark-circle" size={18} color="#34D399" />
+                            <Text style={[s.requestBtnTxt, { color: '#34D399', fontSize: 16, fontWeight: 'bold' }]}>Clocked In Today ✓</Text>
+                          </View>
                         ) : (
                           <Text style={[s.requestBtnTxt, { color: '#111', fontSize: 16, fontWeight: 'bold' }]}>Clock In Now</Text>
                         )}
