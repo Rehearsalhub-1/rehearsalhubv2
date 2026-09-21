@@ -106,36 +106,19 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
       return;
     }
 
-    const { recentlyRemovedIds, activeSongs: current } = get();
-    const updatedShields = new Map(recentlyRemovedIds);
-    liveOnly.forEach((s) => updatedShields.delete(String(s.id)));
-
-    // Do NOT merge old zombie songs! Incoming list from the server/action is authoritative.
-    const validLive = liveOnly.filter((s) => !isRecentlyRemoved(recentlyRemovedIds, String(s.id)));
-
     // Sort by latest update so the newest active song is always index 0
-    validLive.sort((a, b) => {
+    liveOnly.sort((a, b) => {
       const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
       const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
       return timeB - timeA;
     });
 
-    const currentSig = current.map((s) => `${s.id}-${s.title}`).join('|');
-    const newSig = validLive.map((s) => `${s.id}-${s.title}`).join('|');
-
-    if (currentSig !== newSig) {
-      set({ activeSongs: validLive, recentlyRemovedIds: updatedShields });
-    }
+    set({ activeSongs: liveOnly });
   },
 
   removeSong: (songId: string) => {
-    const { recentlyRemovedIds } = get();
-    const updated = new Map(recentlyRemovedIds);
-    updated.set(String(songId), Date.now());
-
     set((state) => ({
       activeSongs: state.activeSongs.filter((s) => String(s.id) !== String(songId)),
-      recentlyRemovedIds: updated,
     }));
   },
 
@@ -159,11 +142,6 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
 
     // If song is live / active now
     if (isLiveSong(update)) {
-      // Clear removal shield — song was explicitly activated
-      const { recentlyRemovedIds } = get();
-      const updatedShields = new Map(recentlyRemovedIds);
-      updatedShields.delete(String(songId));
-
       set((state) => {
         const existingIndex = state.activeSongs.findIndex(
           (s) => String(s.id) === String(songId)
@@ -185,7 +163,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
                 ? resolvedAudioUrls
                 : next[existingIndex].audioUrls,
           };
-          return { activeSongs: next, recentlyRemovedIds: updatedShields };
+          return { activeSongs: next };
         } else {
           const newSong: LiveSong = {
             id: String(update.id),
@@ -203,17 +181,14 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             ...update,
           };
 
-          // Prune any songs that are explicitly off, and if this song belongs to a program/zone,
-          // prune other songs from the same program so past turned-off songs never persist as zombies
+          // Retain all other active live songs (do NOT remove other songs in the same program)
           const cleaned = state.activeSongs.filter((s) => {
             if (String(s.id) === String(songId)) return false;
             if (isSongExplicitlyOff(s)) return false;
-            if (update.programId && s.programId && String(s.programId) === String(update.programId)) return false;
-            if (update.praiseNightId && s.praiseNightId && String(s.praiseNightId) === String(update.praiseNightId)) return false;
             return true;
           });
 
-          return { activeSongs: [newSong, ...cleaned], recentlyRemovedIds: updatedShields };
+          return { activeSongs: [newSong, ...cleaned] };
         }
       });
     } else {

@@ -20,7 +20,9 @@ import {
   Platform,
   Animated,
   useWindowDimensions,
+  BackHandler,
 } from 'react-native';
+import { StackActions } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { DoodleBackground } from '../components/DoodleBackground';
@@ -135,6 +137,45 @@ export default function PlayerScreen({ route, navigation }: any) {
       setActiveTrack(paramTrack);
     }
   }, [paramTrack]);
+
+  // Clean close: pops directly back to the app without having to close each stacked Player screen
+  const handleClose = useCallback(() => {
+    try {
+      const state = navigation.getState();
+      const routes = state?.routes || [];
+      // Find the deepest route in the stack that is NOT a Player screen
+      let targetIndex = -1;
+      for (let i = routes.length - 2; i >= 0; i--) {
+        if (routes[i]?.name !== 'Player') {
+          targetIndex = i;
+          break;
+        }
+      }
+      if (targetIndex >= 0) {
+        const popCount = (routes.length - 1) - targetIndex;
+        if (popCount > 1) {
+          navigation.dispatch(StackActions.pop(popCount));
+          return;
+        }
+      }
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate('Home');
+      }
+    } catch {
+      navigation.navigate('Home');
+    }
+  }, [navigation]);
+
+  // Handle hardware back press on Android
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleClose]);
 
   // Always hydrate latest full song data from API to ensure updates (lyrics, solfas, key, tempo, audio stems) are reflected
   useEffect(() => {
@@ -807,7 +848,7 @@ export default function PlayerScreen({ route, navigation }: any) {
         {/* Top Header */}
         <View style={[styles.header, { top: Math.max(insets.top + 10, 40) }]}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={handleClose}
             style={styles.headerBtn}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-down" size={28} color="#ffffff" />

@@ -17,8 +17,13 @@ export function navigate(screen: string, params?: any, retries = 60) {
  */
 export function navigateToPlayer(params: any, retries = 60) {
   if (navigationRef.isReady()) {
+    const state = navigationRef.getState();
     const currentRoute = navigationRef.getCurrentRoute();
-    if (currentRoute?.name === 'Player') {
+    const routes = state?.routes || [];
+    const isPlayerInStack = routes.some((r: any) => r?.name === 'Player');
+    const isPlayerCurrent = currentRoute?.name === 'Player';
+
+    if (isPlayerCurrent || isPlayerInStack) {
       // Replace the current Player screen instead of pushing a new one
       navigationRef.dispatch(StackActions.replace('Player', params));
     } else {
