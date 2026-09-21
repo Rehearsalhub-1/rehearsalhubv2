@@ -1,4 +1,4 @@
-import { createNavigationContainerRef } from '@react-navigation/native';
+import { createNavigationContainerRef, StackActions } from '@react-navigation/native';
 
 export const navigationRef = createNavigationContainerRef<any>();
 
@@ -7,6 +7,25 @@ export function navigate(screen: string, params?: any, retries = 60) {
     (navigationRef as any).navigate(screen, params);
   } else if (retries > 0) {
     setTimeout(() => navigate(screen, params, retries - 1), 200);
+  }
+}
+
+/**
+ * Navigate to the Player screen without stacking.
+ * If Player is already on top of the stack, replace it with the new song.
+ * This prevents the "close each player screen" problem when tapping multiple songs.
+ */
+export function navigateToPlayer(params: any, retries = 60) {
+  if (navigationRef.isReady()) {
+    const currentRoute = navigationRef.getCurrentRoute();
+    if (currentRoute?.name === 'Player') {
+      // Replace the current Player screen instead of pushing a new one
+      navigationRef.dispatch(StackActions.replace('Player', params));
+    } else {
+      (navigationRef as any).navigate('Player', params);
+    }
+  } else if (retries > 0) {
+    setTimeout(() => navigateToPlayer(params, retries - 1), 200);
   }
 }
 

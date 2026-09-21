@@ -16,7 +16,7 @@ import { useLiveSongStore, LiveSong } from '../stores/liveSongStore';
 import { useZone } from '../hooks/useZone';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
-import { navigationRef, navigate, subscribeToRoute } from '../navigation/navigationService';
+import { navigationRef, navigate, navigateToPlayer, subscribeToRoute } from '../navigation/navigationService';
 
 const HIDDEN_SCREENS = new Set([
   'Login',
@@ -192,11 +192,11 @@ export default function GlobalLiveSongWidget() {
 
   const handleTuneIn = (song: LiveSong) => {
     setShowPickerModal(false);
-    navigate('Player', {
+    navigateToPlayer({
       activeTrack: song,
       zoneId: currentZone?.id,
       queue: activeSongs,
-      autoplay: false, // Never autoplay automatically when opening a song
+      autoplay: false,
     });
   };
 
