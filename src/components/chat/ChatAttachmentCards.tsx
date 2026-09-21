@@ -6,6 +6,7 @@ import { LocalAudioSlider, VoiceWaveformVisualizer } from './VoiceWaveformVisual
 import { SyncAvatar } from '../SyncAvatar';
 import { useUserStore } from '../../hooks/useUser';
 import { api } from '../../services/api';
+import { navigateToPlayer } from '../../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

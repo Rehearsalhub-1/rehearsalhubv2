@@ -56,6 +56,7 @@ import { ProgramSwitcherModal } from '../components/rehearsal/ProgramSwitcherMod
 import { RehearsalListHeader } from '../components/rehearsal/RehearsalListHeader';
 import { getStyles } from '../components/rehearsal/rehearsalStyles';
 import { isInvalidUserCategory, songBelongsToCategory, isSongHeard, getTrackImage, getRehearsalCount } from '../lib/rehearsalUtils';
+import { navigateToPlayer } from '../navigation/navigationService';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 

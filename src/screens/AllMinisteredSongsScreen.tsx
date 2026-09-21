@@ -24,6 +24,7 @@ import { api } from '../services/api';
 import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { searchSongMatch, HighlightedText, sanitizeProgramName } from '../lib/searchUtils';
+import { navigateToPlayer } from '../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');

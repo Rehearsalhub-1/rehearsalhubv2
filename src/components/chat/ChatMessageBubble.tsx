@@ -26,6 +26,7 @@ import {
   isOnlyEmojis,
 } from './index';
 import type { ChatMessage } from './ChatTypes';
+import { navigateToPlayer } from '../../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLLAPSE_THRESHOLD = 320;

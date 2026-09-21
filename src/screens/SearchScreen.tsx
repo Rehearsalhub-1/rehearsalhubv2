@@ -28,6 +28,7 @@ import {
   sanitizeTextNoId,
   SongSearchResult,
 } from '../lib/searchUtils';
+import { navigateToPlayer } from '../navigation/navigationService';
 
 const MiniPlayerProgressBar = ({ theme }: any) => {
   const { position, duration } = useTrackPlayerProgress(250);

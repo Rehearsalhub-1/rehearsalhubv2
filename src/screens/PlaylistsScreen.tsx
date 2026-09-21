@@ -30,6 +30,7 @@ import { useUserStore } from '../hooks/useUser';
 import { useZone } from '../hooks/useZone';
 import { isHQGroup } from '../config/zones';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
+import { navigateToPlayer } from '../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const getTrackImage = (track: any, index: number) => {
