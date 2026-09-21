@@ -306,11 +306,15 @@ export default function SettingsScreen({ navigation }: any) {
       };
 
       // Resolve geofence config for current zone/church
+      const effectiveZoneId = currentZone?.id || (contextProfile as any)?.zoneId || (contextProfile as any)?.zoneCode;
+      const effectiveChurchId = currentChurch?.id || (contextProfile as any)?.churchId || null;
+      const isHQ = isHQGroup(effectiveZoneId);
+
       const candidateKeys = [
-        currentChurch?.id ? `geofence_${currentChurch.id}` : null,
-        currentZone?.id ? (isHQGroup(currentZone.id) ? 'geofence_hq' : `geofence_${currentZone.id}`) : null,
-        'geofence_hq',
-        'geofence',
+        effectiveChurchId ? `geofence_${effectiveChurchId}` : null,
+        effectiveZoneId ? `geofence_${effectiveZoneId}` : null,
+        isHQ ? 'geofence_hq' : null,
+        isHQ ? 'geofence' : null,
       ].filter(Boolean) as string[];
 
       let geoData: any = null;
@@ -360,7 +364,8 @@ export default function SettingsScreen({ navigation }: any) {
         timestamp: new Date().toISOString(),
         latitude: myLat,
         longitude: myLon,
-        zoneId: currentZone?.id,
+        zoneId: effectiveZoneId,
+        churchId: effectiveChurchId,
       });
 
       if (clockInRes && clockInRes.success === false) {
