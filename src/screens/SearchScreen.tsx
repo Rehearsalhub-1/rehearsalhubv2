@@ -68,7 +68,6 @@ export default function SearchScreen({ navigation }: any) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
-  const [isLoading, setIsLoading] = useState(false);
   const [songs, setSongs] = useState<any[]>([]);
 
   const { currentTrack, isPlaying, play, togglePlayback } = useTrackPlayer();
@@ -82,250 +81,197 @@ export default function SearchScreen({ navigation }: any) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasError, setHasError] = useState(false);
   const isMountedRef = useRef(true);
-  const isFetchingRef = useRef(false);
 
   useEffect(() => {
     if (isZoneLoading || isProfileLoading || !user) return;
     setTimeout(() => {
       inputRef.current?.focus();
-    }, 400);
+    }, 250);
 
     Animated.timing(fadeAnim, {
-      toValue: 1, duration: 350, useNativeDriver: true
+      toValue: 1, duration: 300, useNativeDriver: true
     }).start();
 
     isMountedRef.current = true;
-    cachedSearchSongs = null;
-    loadData();
+
+    // Load any cached songs gently in background for instant offline preview (never blocking)
+    const resolvedZoneId = contextZone?.id || 'zone-001';
+    if (!cachedSearchSongs) {
+      AsyncStorage.getItem(`SEARCH_SONGS_CACHE_${resolvedZoneId}`)
+        .then(stored => {
+          if (stored && isMountedRef.current) {
+            try {
+              const parsed = JSON.parse(stored);
+              if (Array.isArray(parsed)) {
+                cachedSearchSongs = parsed;
+                setSongs(parsed);
+              }
+            } catch {}
+          }
+        })
+        .catch(() => {});
+    } else {
+      setSongs(cachedSearchSongs);
+    }
 
     return () => {
       isMountedRef.current = false;
     };
-  }, [contextZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
+  }, [contextZone?.id, user?.uid, isZoneLoading, isProfileLoading]);
 
   const loadData = async (force = false) => {
-    if (isFetchingRef.current || isRefreshing) return;
-    isFetchingRef.current = true;
-    if (force) {
+    if (debouncedQuery.trim()) {
       setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    setHasError(false);
-
-    const resolvedZoneId = contextZone?.id || 'zone-001';
-
-    if (!force && cachedSearchSongs) {
-      setSongs(cachedSearchSongs);
-      setIsLoading(false);
-      isFetchingRef.current = false;
-      return;
-    }
-
-    if (!force && !cachedSearchSongs) {
+      const resolvedZoneId = contextZone?.id || 'zone-001';
       try {
-        const stored = await AsyncStorage.getItem(`SEARCH_SONGS_CACHE_${resolvedZoneId}`);
-        if (stored && isMountedRef.current) {
-          cachedSearchSongs = JSON.parse(stored);
-          setSongs(cachedSearchSongs!);
-          setIsLoading(false);
+        const res: any = await api.songs.universalSearch(debouncedQuery, 60, resolvedZoneId);
+        if (res?.success && Array.isArray(res.data)) {
+          setRemoteSearchResults(res.data);
         }
       } catch (e) {
-        console.error("Error reading search cache:", e);
-      }
-    }
-
-    try {
-      const isHQ = isHQGroup(resolvedZoneId);
-
-      // Fetch song databases:
-      // Master catalog (All Ministered Songs) -> available to everyone
-      // Assigned Zone songs -> available to everyone for their assigned zone
-      // Subgroup songs of assigned zone -> available to everyone for their assigned zone
-      // Master/Archive programs -> ONLY for HQ Admin and The President!
-      const [
-        songsResult,
-        masterProgramsResult,
-        zoneSongsResult,
-        subgroupResult,
-        allProgramsResult,
-      ] = await Promise.all([
-        api.songs.getMaster().catch(() => null),
-        isHQOrPresident ? api.programs.getMasterPrograms().catch(() => null) : Promise.resolve([]),
-        !isHQ ? api.songs.getZoneSongs(resolvedZoneId).catch(() => null) : Promise.resolve(null),
-        api.songs.getSubgroupSongs({ zoneId: resolvedZoneId }).catch(() => null),
-        api.programs.getAll(resolvedZoneId, true).catch(() => null),
-      ]);
-
-      if (!isMountedRef.current) return;
-
-      const mainSongs = Array.isArray(songsResult) ? songsResult : (songsResult?.success ? songsResult.data : []);
-      const zoneSongs = Array.isArray(zoneSongsResult) ? zoneSongsResult : (zoneSongsResult?.success ? zoneSongsResult.data : []);
-      const subSongs = Array.isArray(subgroupResult) ? subgroupResult : (subgroupResult?.success ? subgroupResult.data : []);
-      const masterPrograms = Array.isArray(masterProgramsResult) ? masterProgramsResult : (masterProgramsResult?.success ? masterProgramsResult.data : []);
-      const allPrograms = Array.isArray(allProgramsResult) ? allProgramsResult : (allProgramsResult?.success ? allProgramsResult.data : []);
-
-      // Build program ID to human-readable Name map so no IDs are ever displayed
-      const programMap: Record<string, string> = {};
-      const programSongsFromPrograms: any[] = [];
-
-      [...masterPrograms, ...allPrograms].forEach((p: any) => {
-        // Exclude archive programs for regular users (only HQ Admin & President can search Archive)
-        const isArchive = p?.category === 'archive' || p?.status === 'archive' || p?.isArchived;
-        if (!isHQOrPresident && isArchive) return;
-
-        const pId = p?.id;
-        const pName = p?.name || p?.title;
-        if (pId && pName) {
-          programMap[String(pId)] = String(pName);
-        }
-        const sList = Array.isArray(p?.songs) ? p.songs : (Array.isArray(p?.programSongs) ? p.programSongs : []);
-        sList.forEach((item: any) => {
-          const songObj = item?.song || item;
-          if (songObj) {
-            programSongsFromPrograms.push({
-              ...songObj,
-              program: pName || songObj.program || songObj.programName,
-              programId: pId || songObj.programId,
-            });
-          }
-        });
-      });
-
-      // Also read cached Ministered and Rehearsal songs from AsyncStorage
-      const cachedStoredSongs: any[] = [];
-      try {
-        const ministeredStored = await AsyncStorage.getItem(`MINISTERED_SONGS_CACHE_${resolvedZoneId}`);
-        if (ministeredStored) {
-          const parsed = JSON.parse(ministeredStored);
-          if (Array.isArray(parsed)) cachedStoredSongs.push(...parsed);
-        }
-
-        const allKeys = await AsyncStorage.getAllKeys();
-        const rehearsalKeys = allKeys.filter(k => k.startsWith('rehearsal_songs_'));
-        if (rehearsalKeys.length > 0) {
-          const rehearsalCaches = await AsyncStorage.multiGet(rehearsalKeys);
-          rehearsalCaches.forEach(([, value]) => {
-            if (value) {
-              try {
-                const parsed = JSON.parse(value);
-                if (parsed && Array.isArray(parsed.songs)) {
-                  cachedStoredSongs.push(...parsed.songs);
-                }
-              } catch {}
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('Failed to read local storage in SearchScreen:', err);
-      }
-
-      // Deduplicate all songs across master catalog, ministered programs, zone, subgroups, and cache
-      const allSongsMap = new Map<string, any>();
-      [
-        ...mainSongs,
-        ...programSongsFromPrograms,
-        ...zoneSongs,
-        ...subSongs,
-        ...cachedStoredSongs,
-      ].forEach((s: any, idx: number) => {
-        if (!s) return;
-        const rawId = s.id ? String(s.id) : `song-${idx}`;
-        if (!allSongsMap.has(rawId)) {
-          allSongsMap.set(rawId, s);
-        } else {
-          // Merge to get richest data (lyrics, notes, audio, artwork)
-          const existing = allSongsMap.get(rawId);
-          allSongsMap.set(rawId, {
-            ...existing,
-            ...s,
-            lyrics: s.lyrics || existing.lyrics,
-            comments: s.comments || existing.comments,
-            notes: s.notes || existing.notes,
-            imageUrl: s.imageUrl || existing.imageUrl,
-            audioFile: s.audioFile || existing.audioFile,
-            audioUrl: s.audioUrl || existing.audioUrl,
-            audioUrls: s.audioUrls || existing.audioUrls,
-          });
-        }
-      });
-
-      const rawSongs = Array.from(allSongsMap.values());
-
-      const mappedSongs = rawSongs
-        .filter((song: any) => {
-          if (!isHQOrPresident) {
-            if (song.isHQOnly || song.status === 'hq_only') return false;
-            // Strictly exclude archive songs for regular users
-            if (song.status === 'archive' || song.status === 'archived' || song.category === 'archive') return false;
-          }
-          return isHQ || !song.isHQOnly;
-        })
-        .map((song: any, index: number) => {
-          const songAudioUrl = optimizeAudio(resolveSongAudioUrl(song) || song.audioFile || song.audioUrls?.full || '');
-          const resolvedAudioUrls = resolveSongAudioUrls(song);
-          const resolvedImage = getTrackImage(song);
-
-          // Guarantee clean human-readable text with NO raw IDs
-          const cleanTitle = sanitizeTextNoId(song.title, 'Untitled Song');
-          const cleanSinger = sanitizeTextNoId(song.leadSinger, 'Loveworld Singers');
-          const rawProg = song.programName || song.praiseNightName || song.program || song.praiseNightId || song.programId;
-          const cleanProgram = sanitizeProgramName(rawProg, 'Loveworld Singers', programMap);
-
-          return {
-            id: song.id ? String(song.id) : `song-${index}`,
-            title: cleanTitle,
-            subtitle: cleanSinger,
-            program: cleanProgram,
-            leadSinger: cleanSinger,
-            writer: sanitizeTextNoId(song.writer, 'Loveworld Singers'),
-            conductor: song.conductor || 'Evang. Kathy',
-            key: song.key || '',
-            tempo: song.tempo || '',
-            category: song.category || '',
-            categories: Array.isArray(song.categories) ? song.categories : (song.category ? [song.category] : []),
-            audioUrl: songAudioUrl,
-            lyrics: song.lyrics || '',
-            solfa: song.notation || song.solfas || song.solfa || '',
-            audioUrls: resolvedAudioUrls || song.audioUrls || {},
-            status: song.status || 'unheard',
-            isActive: song.isActive !== false,
-            rehearsalCount: song.rehearsalCount || 0,
-            conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
-            history: song.history || '',
-            comments: song.comments || song.notes || song.coordinatorComment || '',
-            leadKeyboardist: song.leadKeyboardist || '',
-            drummer: song.drummer || '',
-            leadGuitarist: song.leadGuitarist || '',
-            createdAt: song.createdAt ? (typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString()) : new Date().toISOString(),
-            image: resolvedImage,
-            imageUrl: song.imageUrl || '',
-            zoneId: resolvedZoneId,
-            collectionName: song.subGroupId ? 'subgroup_songs' : (isHQ ? 'praise_night_songs' : 'zone_songs'),
-          };
-        });
-
-      setSongs(mappedSongs);
-      cachedSearchSongs = mappedSongs;
-      AsyncStorage.setItem(`SEARCH_SONGS_CACHE_${resolvedZoneId}`, JSON.stringify(mappedSongs)).catch(() => {});
-    } catch (err) {
-      console.error('Error fetching search songs:', err);
-      if (isMountedRef.current) {
-        setHasError(true);
-      }
-    } finally {
-      isFetchingRef.current = false;
-      if (isMountedRef.current) {
-        setIsLoading(false);
+        console.warn('Search refresh error:', e);
+      } finally {
         setIsRefreshing(false);
       }
+    } else {
+      setIsRefreshing(false);
     }
   };
 
   const clearSearch = () => {
     setSearchQuery('');
+    setDebouncedQuery('');
+    setRemoteSearchResults([]);
+    setIsSearching(false);
     inputRef.current?.focus();
   };
+
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setDebouncedQuery('');
+      setIsSearching(false);
+      setRemoteSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(() => {
+      setDebouncedQuery(trimmed);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Query Backend Universal Search across all 3,746+ songs in database (lightning-fast with GIN indexes)
+  useEffect(() => {
+    if (!debouncedQuery) {
+      setRemoteSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    let active = true;
+    setIsSearching(true);
+    setHasError(false);
+    const resolvedZoneId = contextZone?.id || 'zone-001';
+
+    api.songs.universalSearch(debouncedQuery, 60, resolvedZoneId)
+      .then((res: any) => {
+        if (!active) return;
+        if (res?.success && Array.isArray(res.data)) {
+          setRemoteSearchResults(res.data);
+        }
+      })
+      .catch((err: any) => {
+        if (!active) return;
+        console.warn('Backend universal search error:', err);
+        if (songs.length === 0) {
+          setHasError(true);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsSearching(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [debouncedQuery, contextZone?.id]);
+
+  // Ranked search results with instant zero-latency local fallback
+  const filteredSongs = React.useMemo(() => {
+    const q = debouncedQuery.trim();
+    if (!q) return [];
+
+    // 1. If backend results have arrived, use them directly (already ranked by relevance)
+    if (remoteSearchResults.length > 0) {
+      return remoteSearchResults
+        .filter(remoteSong => {
+          if (!isHQOrPresident) {
+            if (remoteSong.status === 'archive' || remoteSong.status === 'archived' || remoteSong.category === 'archive') return false;
+            if (remoteSong.status === 'hq_only' || remoteSong.isHQOnly) return false;
+          }
+          return true;
+        })
+        .map(remoteSong => {
+          const resolvedImage = getTrackImage(remoteSong);
+          const cleanTitle = sanitizeTextNoId(remoteSong.title, 'Untitled Song');
+          const cleanSinger = sanitizeTextNoId(remoteSong.leadSinger, 'Loveworld Singers');
+          const cleanProgram = sanitizeProgramName(remoteSong.program || remoteSong.programName, 'Loveworld Singers');
+
+          return {
+            ...remoteSong,
+            title: cleanTitle,
+            subtitle: cleanSinger,
+            leadSinger: cleanSinger,
+            program: cleanProgram,
+            writer: sanitizeTextNoId(remoteSong.writer, 'Loveworld Singers'),
+            image: resolvedImage,
+            imageUrl: remoteSong.imageUrl || '',
+            lyrics: remoteSong.lyrics || '',
+            comments: remoteSong.comments || remoteSong.notes || remoteSong.coordinatorComment || '',
+            searchResult: remoteSong.searchResult || {
+              isMatch: true,
+              score: 100,
+              matchField: 'title',
+              matchTokens: [q],
+            },
+          };
+        });
+    }
+
+    // 2. Instant local preview while backend search responds (< 2ms execution, zero thread lag)
+    if (songs.length > 0) {
+      const cleanQ = q.toLowerCase();
+      const localMatches: any[] = [];
+      for (let i = 0; i < songs.length; i++) {
+        const s = songs[i];
+        const title = (s.title || '').toLowerCase();
+        const singer = (s.leadSinger || '').toLowerCase();
+        if (title.includes(cleanQ) || singer.includes(cleanQ)) {
+          localMatches.push({
+            ...s,
+            searchResult: {
+              isMatch: true,
+              score: title.includes(cleanQ) ? 100 : 75,
+              matchField: title.includes(cleanQ) ? 'title' : 'leadSinger',
+              matchTokens: [q],
+            },
+          });
+          if (localMatches.length >= 40) break;
+        }
+      }
+      return localMatches;
+    }
+
+    return [];
+  }, [debouncedQuery, remoteSearchResults, songs, isHQOrPresident]);
 
   const openTrack = useCallback((track: any) => {
     const isSameTrack = currentTrack && String(currentTrack.id) === String(track.id);
@@ -430,116 +376,6 @@ export default function SearchScreen({ navigation }: any) {
     );
   }, [currentTrack, openTrack, theme, styles]);
 
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-
-  useEffect(() => {
-    if (searchQuery.trim().length === 0) {
-      setDebouncedQuery('');
-      setIsSearching(false);
-      setRemoteSearchResults([]);
-      return;
-    }
-    setIsSearching(true);
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-      setIsSearching(false);
-    }, 280);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Query Backend Universal Search across all 3,746+ songs in database
-  useEffect(() => {
-    if (!debouncedQuery.trim()) {
-      setRemoteSearchResults([]);
-      return;
-    }
-
-    let active = true;
-    const resolvedZoneId = contextZone?.id || 'zone-001';
-    api.songs.universalSearch(debouncedQuery, 80, resolvedZoneId)
-      .then((res: any) => {
-        if (!active) return;
-        if (res?.success && Array.isArray(res.data)) {
-          setRemoteSearchResults(res.data);
-        }
-      })
-      .catch((err: any) => {
-        console.warn('Backend universal search error:', err);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [debouncedQuery, contextZone?.id]);
-
-  // Chat-like Full-Text Search with ranking, punctuation handling, and snippet extraction
-  const filteredSongs = React.useMemo(() => {
-    if (!debouncedQuery.trim()) return [];
-
-    const matchesMap = new Map<string, any>();
-
-    // 1. Matches from locally loaded songs
-    songs.forEach(song => {
-      const matchResult = searchSongMatch(song, debouncedQuery);
-      if (matchResult.isMatch) {
-        matchesMap.set(String(song.id), {
-          ...song,
-          searchResult: matchResult,
-        });
-      }
-    });
-
-    // 2. Matches from backend universal search
-    remoteSearchResults.forEach(remoteSong => {
-      // Client-side guard: strictly exclude archive and HQ-only songs for regular users
-      if (!isHQOrPresident) {
-        if (remoteSong.status === 'archive' || remoteSong.status === 'archived' || remoteSong.category === 'archive') return;
-        if (remoteSong.status === 'hq_only' || remoteSong.isHQOnly) return;
-      }
-
-      const id = String(remoteSong.id);
-      const resolvedImage = getTrackImage(remoteSong);
-      const cleanTitle = sanitizeTextNoId(remoteSong.title, 'Untitled Song');
-      const cleanSinger = sanitizeTextNoId(remoteSong.leadSinger, 'Loveworld Singers');
-      const cleanProgram = sanitizeProgramName(remoteSong.program || remoteSong.programName, 'Loveworld Singers');
-
-      const songObj = {
-        ...remoteSong,
-        title: cleanTitle,
-        subtitle: cleanSinger,
-        leadSinger: cleanSinger,
-        program: cleanProgram,
-        writer: sanitizeTextNoId(remoteSong.writer, 'Loveworld Singers'),
-        image: resolvedImage,
-        imageUrl: remoteSong.imageUrl || '',
-        lyrics: remoteSong.lyrics || '',
-        comments: remoteSong.comments || remoteSong.notes || remoteSong.coordinatorComment || '',
-      };
-
-      if (!matchesMap.has(id)) {
-        const localMatch = searchSongMatch(songObj, debouncedQuery);
-        matchesMap.set(id, {
-          ...songObj,
-          searchResult: remoteSong.searchResult || localMatch,
-        });
-      } else {
-        const existing = matchesMap.get(id);
-        matchesMap.set(id, {
-          ...existing,
-          ...songObj,
-          lyrics: songObj.lyrics || existing.lyrics,
-          searchResult: (existing.searchResult?.score || 0) >= (remoteSong.searchResult?.score || 0)
-            ? existing.searchResult
-            : (remoteSong.searchResult || existing.searchResult),
-        });
-      }
-    });
-
-    // Sort by match score descending (exact title > title word > lyrics phrase > lyrics word > comments)
-    return Array.from(matchesMap.values()).sort((a, b) => b.searchResult.score - a.searchResult.score);
-  }, [songs, debouncedQuery, remoteSearchResults]);
-
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
@@ -570,6 +406,9 @@ export default function SearchScreen({ navigation }: any) {
                   returnKeyType="search"
                 />
                 
+                {isSearching && (
+                  <ActivityIndicator size="small" color={theme.colors.accent} style={{ marginRight: 6 }} />
+                )}
                 {searchQuery.length > 0 && (
                   <TouchableOpacity onPress={clearSearch} style={styles.clearButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
@@ -585,32 +424,12 @@ export default function SearchScreen({ navigation }: any) {
         </Animated.View>
 
         <View style={styles.resultsArea}>
-          {isLoading && !isRefreshing ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="large" color={theme.colors.accent} />
-              <Text style={[styles.emptySubText, { marginTop: 14 }]}>Loading song library...</Text>
-            </View>
-          ) : hasError ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="cloud-offline-outline" size={60} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyText}>Failed to load songs</Text>
-              <Text style={styles.emptySubText}>
-                Please check your internet connection and try again.
-              </Text>
-              <TouchableOpacity
-                style={styles.retryBtn}
-                onPress={() => loadData(true)}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="refresh" size={16} color={theme.colors.textPrimary} style={{ marginRight: 6 }} />
-                <Text style={styles.retryBtnText}>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          ) : searchQuery.length === 0 ? (
+          {searchQuery.trim().length === 0 ? (
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={styles.emptyState}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -626,7 +445,7 @@ export default function SearchScreen({ navigation }: any) {
                 Search by song title, lyric words, punctuation, director notes, or vocal parts
               </Text>
             </ScrollView>
-          ) : isSearching ? (
+          ) : isSearching && filteredSongs.length === 0 ? (
             <View style={styles.emptyState}>
               <ActivityIndicator size="large" color={theme.colors.accent} />
               <Text style={[styles.emptySubText, { marginTop: 16 }]}>Searching songs & lyrics...</Text>
@@ -636,6 +455,7 @@ export default function SearchScreen({ navigation }: any) {
               data={filteredSongs}
               keyExtractor={(item: any) => String(item.id)}
               renderItem={renderSearchItem}
+              // @ts-ignore
               estimatedItemSize={ITEM_HEIGHT}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
@@ -645,6 +465,9 @@ export default function SearchScreen({ navigation }: any) {
                   <Text style={styles.resultsCountText}>
                     {filteredSongs.length} {filteredSongs.length === 1 ? 'result' : 'results'} found
                   </Text>
+                  {isSearching && (
+                    <ActivityIndicator size="small" color={theme.colors.accent} style={{ marginLeft: 8 }} />
+                  )}
                 </View>
               }
               refreshControl={
@@ -656,11 +479,28 @@ export default function SearchScreen({ navigation }: any) {
                 />
               }
             />
+          ) : hasError ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="cloud-offline-outline" size={60} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
+              <Text style={styles.emptyText}>Search connection issue</Text>
+              <Text style={styles.emptySubText}>
+                Please check your internet connection and try again.
+              </Text>
+              <TouchableOpacity
+                style={styles.retryBtn}
+                onPress={() => loadData(true)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="refresh" size={16} color={theme.colors.textPrimary} style={{ marginRight: 6 }} />
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <ScrollView
               style={{ flex: 1 }}
               contentContainerStyle={styles.emptyState}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}

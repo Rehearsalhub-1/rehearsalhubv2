@@ -219,6 +219,45 @@ export function searchSongMatch(song: any, rawQuery: string): SongSearchResult {
   return { isMatch: false, score: 0, matchField: '', matchTokens: [] };
 }
 
+const regexCache = new Map<string, RegExp | null>();
+
+function getHighlightRegex(tokens: string[]): RegExp | null {
+  if (!tokens || tokens.length === 0) return null;
+  const key = tokens.join('__');
+  if (regexCache.has(key)) return regexCache.get(key) ?? null;
+
+  const clean = Array.from(
+    new Set(
+      tokens
+        .map(t => (typeof t === 'string' ? t.trim() : ''))
+        .filter(t => t.length > 0)
+    )
+  ).sort((a, b) => b.length - a.length);
+
+  if (clean.length === 0) {
+    regexCache.set(key, null);
+    return null;
+  }
+
+  // Also include punctuation-free versions
+  const allTokens = new Set<string>();
+  clean.forEach(t => {
+    allTokens.add(t);
+    const noP = getPunctuationFree(t);
+    if (noP && noP.length > 0) allTokens.add(noP);
+  });
+
+  const escaped = Array.from(allTokens)
+    .filter(t => t.trim().length > 0)
+    .map(escapeRegex)
+    .join('|');
+
+  const reg = escaped ? new RegExp(`(${escaped})`, 'gi') : null;
+  if (regexCache.size > 200) regexCache.clear();
+  regexCache.set(key, reg);
+  return reg;
+}
+
 export function HighlightedText({
   text,
   tokens = [],
@@ -240,52 +279,20 @@ export function HighlightedText({
   }
 
   try {
-    const cleanTokens = Array.from(
-      new Set(
-        tokens
-          .map(t => (typeof t === 'string' ? t.trim() : ''))
-          .filter(t => t.length > 0)
-      )
-    ).sort((a, b) => b.length - a.length);
-
-    if (cleanTokens.length === 0) {
+    const regex = getHighlightRegex(tokens);
+    if (!regex) {
       return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
     }
 
-    // Also include punctuation-free versions of tokens for resilient matching
-    const allMatchTokens = new Set<string>();
-    cleanTokens.forEach(t => {
-      if (t) allMatchTokens.add(t);
-      const noP = getPunctuationFree(t);
-      if (noP && noP.length > 0) allMatchTokens.add(noP);
-    });
-
-    const tokenArray = Array.from(allMatchTokens).filter(t => t && t.trim().length > 0);
-    if (tokenArray.length === 0) {
-      return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
-    }
-
-    const escaped = tokenArray.map(escapeRegex).join('|');
-    if (!escaped) {
-      return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
-    }
-
-    const regex = new RegExp(`(${escaped})`, 'gi');
     const parts = safeText.split(regex);
 
     return (
       <Text style={style} numberOfLines={numberOfLines}>
         {parts.map((part, index) => {
           if (!part) return null;
-          const trimmedPart = part.trim();
-          const isMatched = trimmedPart.length > 0 && tokenArray.some(t => {
-            const cleanT = t.toLowerCase();
-            const cleanP = part.toLowerCase();
-            if (cleanT === cleanP) return true;
-            const noPT = getPunctuationFree(cleanT);
-            const noPP = getPunctuationFree(cleanP);
-            return noPT.length > 0 && noPT === noPP;
-          });
+          regex.lastIndex = 0;
+          const isMatched = regex.test(part);
+          regex.lastIndex = 0;
 
           return isMatched ? (
             <Text key={index} style={[styles.defaultHighlight, highlightStyle]}>
@@ -298,7 +305,6 @@ export function HighlightedText({
       </Text>
     );
   } catch (err) {
-    // If regex or rendering fails for any reason, safely fall back to plain text
     return <Text style={style} numberOfLines={numberOfLines}>{safeText}</Text>;
   }
 }
