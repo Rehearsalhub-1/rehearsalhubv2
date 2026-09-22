@@ -83,37 +83,15 @@ export const PlayerQueueModal: React.FC<PlayerQueueModalProps> = ({
                     )}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text
-                        style={[
-                          styles.playlistItemName,
-                          { flexShrink: 1 },
-                          (isCurrent || isLive) && { color: purpleAccent, fontWeight: '800' },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {song.title}
-                      </Text>
-                      {isLive && (
-                        <View style={{
-                          backgroundColor: 'rgba(168, 85, 247, 0.22)',
-                          borderColor: 'rgba(192, 132, 252, 0.5)',
-                          borderWidth: 1,
-                          paddingHorizontal: 5,
-                          paddingVertical: 1,
-                          borderRadius: 5,
-                          marginLeft: 6,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 3,
-                        }}>
-                          <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: purpleAccent }} />
-                          <Text style={{ color: purpleAccent, fontSize: 9, fontWeight: '800' }}>
-                            LIVE
-                          </Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text
+                      style={[
+                        styles.playlistItemName,
+                        (isCurrent || isLive) && { color: purpleAccent, fontWeight: '800' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {song.title}
+                    </Text>
                     <Text style={[styles.playlistItemCount, (isCurrent || isLive) && { color: purpleAccent }]} numberOfLines={1}>
                       {song.leadSinger || song.writer || 'Loveworld Singers'}
                     </Text>

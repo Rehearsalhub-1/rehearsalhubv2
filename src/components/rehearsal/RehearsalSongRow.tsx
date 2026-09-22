@@ -105,38 +105,16 @@ export const RehearsalSongRow: React.FC<Props> = ({
 
         {/* Title + subtitle */}
         <View style={styles.trackInfo}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text
-              style={[
-                styles.trackTitle,
-                { flexShrink: 1, marginBottom: 0 },
-                (isActiveTrack || isLive) && { color: purpleAccent, fontWeight: '700' }
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {track.title}
-            </Text>
-            {isLive && (
-              <View style={{
-                backgroundColor: 'rgba(168, 85, 247, 0.22)',
-                borderColor: 'rgba(192, 132, 252, 0.5)',
-                borderWidth: 1,
-                paddingHorizontal: 6,
-                paddingVertical: 1,
-                borderRadius: 6,
-                marginLeft: 6,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 3,
-              }}>
-                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: purpleAccent }} />
-                <Text style={{ color: purpleAccent, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 }}>
-                  LIVE
-                </Text>
-              </View>
-            )}
-          </View>
+          <Text
+            style={[
+              styles.trackTitle,
+              (isActiveTrack || isLive) && { color: purpleAccent, fontWeight: '700' }
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {track.title}
+          </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
             {!hasAudio ? (
               <Ionicons name="volume-mute-outline" size={12} color="#fb923c" style={{ marginRight: 4 }} />
