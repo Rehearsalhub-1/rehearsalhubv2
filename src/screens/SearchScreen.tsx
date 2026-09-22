@@ -1,11 +1,12 @@
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
   Animated, Dimensions, Platform, ScrollView, ActivityIndicator,
   RefreshControl
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -326,14 +327,108 @@ export default function SearchScreen({ navigation }: any) {
     inputRef.current?.focus();
   };
 
-  const openTrack = (track: any) => {
+  const openTrack = useCallback((track: any) => {
     const isSameTrack = currentTrack && String(currentTrack.id) === String(track.id);
     if (!isSameTrack) {
       play(track, filteredSongs, true);
     } else {
       navigateToPlayer({ activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: filteredSongs });
     }
-  };
+  }, [currentTrack, filteredSongs, play]);
+
+  const ITEM_HEIGHT = 68; // paddingVertical 10 * 2 + art 48
+
+  const renderSearchItem = useCallback(({ item: track }: { item: any }) => {
+    const isActiveTrack = currentTrack && String(currentTrack.id) === String(track.id);
+    const hasAudio = Boolean(track.audioUrl);
+    const searchResult: SongSearchResult = track.searchResult;
+
+    return (
+      <TouchableOpacity
+        style={[styles.trackRow, isActiveTrack && styles.trackRowActive]}
+        activeOpacity={0.7}
+        onPress={() => openTrack(track)}
+      >
+        {/* Album Art */}
+        <View style={styles.trackArtWrap}>
+          {track.image ? (
+            <Image source={track.image} style={styles.trackArt} contentFit="cover" />
+          ) : (
+            <LinearGradient
+              colors={['#1e293b', '#0f172a']}
+              style={[styles.trackArt, styles.trackArtPlaceholder]}
+            >
+              <Ionicons name="disc-outline" size={22} color={theme.colors.accent} />
+            </LinearGradient>
+          )}
+          {!hasAudio && (
+            <View style={styles.noAudioBadge}>
+              <Ionicons name="volume-mute" size={14} color="rgba(255,255,255,0.85)" />
+            </View>
+          )}
+        </View>
+
+        {/* Track Info */}
+        <View style={styles.trackInfo}>
+          <HighlightedText
+            text={track.title}
+            tokens={searchResult?.matchTokens}
+            style={[styles.trackTitle, isActiveTrack && { color: theme.colors.accent }]}
+            highlightStyle={styles.highlightActive}
+            numberOfLines={1}
+          />
+
+          {searchResult?.snippet ? (
+            <View style={styles.snippetWrap}>
+              <Ionicons
+                name={searchResult.matchField === 'comments' ? 'chatbubble-ellipses-outline' : 'document-text-outline'}
+                size={11}
+                color={theme.colors.accent}
+                style={{ marginRight: 4, marginTop: 1 }}
+              />
+              <HighlightedText
+                text={searchResult.snippet}
+                tokens={searchResult.matchTokens}
+                style={styles.snippetText}
+                highlightStyle={styles.highlightSnippet}
+                numberOfLines={2}
+              />
+            </View>
+          ) : null}
+
+          <View style={styles.trackMeta}>
+            {!hasAudio ? (
+              <>
+                <Ionicons name="volume-mute-outline" size={11} color="#fb923c" style={{ marginRight: 4 }} />
+                <Text style={[styles.trackMetaText, { color: '#fb923c' }]} numberOfLines={1}>No audio yet</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.textMuted} style={{ marginRight: 4 }} />
+                <HighlightedText
+                  text={track.leadSinger}
+                  tokens={searchResult?.matchTokens}
+                  style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]}
+                  highlightStyle={styles.highlightActive}
+                  numberOfLines={1}
+                />
+              </>
+            )}
+            {track.program ? (
+              <>
+                <Text style={[styles.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
+                <Text style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
+                  {track.program}
+                </Text>
+              </>
+            ) : null}
+          </View>
+        </View>
+
+        <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
+      </TouchableOpacity>
+    );
+  }, [currentTrack, openTrack, theme, styles]);
 
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -537,10 +632,21 @@ export default function SearchScreen({ navigation }: any) {
               <Text style={[styles.emptySubText, { marginTop: 16 }]}>Searching songs & lyrics...</Text>
             </View>
           ) : filteredSongs.length > 0 ? (
-            <ScrollView
+            <FlashList
+              data={filteredSongs}
+              keyExtractor={(item: any) => String(item.id)}
+              renderItem={renderSearchItem}
+              estimatedItemSize={ITEM_HEIGHT}
+              keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.trackList}
-              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                <View style={styles.resultsHeaderRow}>
+                  <Text style={styles.resultsCountText}>
+                    {filteredSongs.length} {filteredSongs.length === 1 ? 'result' : 'results'} found
+                  </Text>
+                </View>
+              }
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -549,111 +655,7 @@ export default function SearchScreen({ navigation }: any) {
                   colors={[theme.colors.accent]}
                 />
               }
-            >
-              <View style={styles.resultsHeaderRow}>
-                <Text style={styles.resultsCountText}>
-                  {filteredSongs.length} {filteredSongs.length === 1 ? 'result' : 'results'} found
-                </Text>
-              </View>
-
-              {filteredSongs.map(track => {
-                const isActiveTrack = currentTrack && String(currentTrack.id) === String(track.id);
-                const hasAudio = Boolean(track.audioUrl);
-                const searchResult: SongSearchResult = track.searchResult;
-
-                return (
-                  <TouchableOpacity
-                    key={track.id}
-                    style={[styles.trackRow, isActiveTrack && styles.trackRowActive]}
-                    activeOpacity={0.7}
-                    onPress={() => openTrack(track)}
-                  >
-                    {/* Album Art: Real Artwork Only, or Stylized Vinyl Placeholder (NEVER Praise Night Banner) */}
-                    <View style={styles.trackArtWrap}>
-                      {track.image ? (
-                        <Image source={track.image} style={styles.trackArt} contentFit="cover" />
-                      ) : (
-                        <LinearGradient
-                          colors={['#1e293b', '#0f172a']}
-                          style={[styles.trackArt, styles.trackArtPlaceholder]}
-                        >
-                          <Ionicons name="disc-outline" size={22} color={theme.colors.accent} />
-                        </LinearGradient>
-                      )}
-
-                      {!hasAudio && (
-                        <View style={styles.noAudioBadge}>
-                          <Ionicons name="volume-mute" size={14} color="rgba(255,255,255,0.85)" />
-                        </View>
-                      )}
-                    </View>
-
-                    {/* Track Info with Highlighted Search Matches */}
-                    <View style={styles.trackInfo}>
-                      {/* Song Title with Chat-like Highlighting */}
-                      <HighlightedText
-                        text={track.title}
-                        tokens={searchResult?.matchTokens}
-                        style={[styles.trackTitle, isActiveTrack && { color: theme.colors.accent }]}
-                        highlightStyle={styles.highlightActive}
-                        numberOfLines={1}
-                      />
-
-                      {/* Chat-style Matched Excerpt Snippet (when matched in lyrics, notes, or comments) */}
-                      {searchResult?.snippet ? (
-                        <View style={styles.snippetWrap}>
-                          <Ionicons
-                            name={searchResult.matchField === 'comments' ? 'chatbubble-ellipses-outline' : 'document-text-outline'}
-                            size={11}
-                            color={theme.colors.accent}
-                            style={{ marginRight: 4, marginTop: 1 }}
-                          />
-                          <HighlightedText
-                            text={searchResult.snippet}
-                            tokens={searchResult.matchTokens}
-                            style={styles.snippetText}
-                            highlightStyle={styles.highlightSnippet}
-                            numberOfLines={2}
-                          />
-                        </View>
-                      ) : null}
-
-                      {/* Metadata Row: Lead Singer · Program (No IDs ever shown) */}
-                      <View style={styles.trackMeta}>
-                        {!hasAudio ? (
-                          <>
-                            <Ionicons name="volume-mute-outline" size={11} color="#fb923c" style={{ marginRight: 4 }} />
-                            <Text style={[styles.trackMetaText, { color: '#fb923c' }]} numberOfLines={1}>No audio yet</Text>
-                          </>
-                        ) : (
-                          <>
-                            <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.textMuted} style={{ marginRight: 4 }} />
-                            <HighlightedText
-                              text={track.leadSinger}
-                              tokens={searchResult?.matchTokens}
-                              style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]}
-                              highlightStyle={styles.highlightActive}
-                              numberOfLines={1}
-                            />
-                          </>
-                        )}
-
-                        {track.program ? (
-                          <>
-                            <Text style={[styles.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
-                            <Text style={[styles.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
-                              {track.program}
-                            </Text>
-                          </>
-                        ) : null}
-                      </View>
-                    </View>
-
-                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            />
           ) : (
             <ScrollView
               style={{ flex: 1 }}
