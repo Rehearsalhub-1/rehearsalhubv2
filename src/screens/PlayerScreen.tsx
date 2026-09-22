@@ -1076,6 +1076,7 @@ export default function PlayerScreen({ route, navigation }: any) {
             isConductorGuideText={isConductorGuideText}
             navigation={navigation}
             theme={theme}
+            isTablet={windowWidth >= 768}
           />
 
           {/* A-B Section Looper Strip */}

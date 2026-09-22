@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
 import { ExpandableText } from './ExpandableText';
@@ -15,6 +15,7 @@ export interface PlayerPreviewContentProps {
   isConductorGuideText: (text: string | null | undefined) => boolean;
   navigation: any;
   theme: any;
+  isTablet?: boolean;
 }
 
 export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
@@ -28,8 +29,18 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
   isConductorGuideText,
   navigation,
   theme,
+  isTablet: propIsTablet,
 }) => {
   if (!activeTrack) return null;
+
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isTablet = propIsTablet ?? (windowWidth >= 768 || (windowWidth >= 600 && windowHeight >= 900));
+
+  // Shorter on phone (~160px), longer on tablet (~480px)
+  const previewMaxHeight = isTablet ? 480 : 160;
+  const previewMinHeight = isTablet ? 240 : 70;
+  const emptyMinHeight = isTablet ? 140 : 60;
+  const detailsMaxHeight = isTablet ? 220 : 90;
 
   const resolvedConductorGuide =
     activeTrack.conductorGuide ||
@@ -78,7 +89,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             {activeTrack.lyrics ? (
               <ScrollView
                 nestedScrollEnabled
-                style={{ maxHeight: 320, minHeight: 130 }}
+                style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
                 contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
               >
                 <RenderHtml
@@ -93,7 +104,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                 />
               </ScrollView>
             ) : (
-              <View style={{ minHeight: 100, justifyContent: 'center' }}>
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                   No lyrics available.
                 </Text>
@@ -143,7 +154,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             {resolvedConductorGuide ? (
               <ScrollView
                 nestedScrollEnabled
-                style={{ maxHeight: 320, minHeight: 130 }}
+                style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
                 contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
               >
                 <RenderHtml
@@ -158,7 +169,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                 />
               </ScrollView>
             ) : (
-              <View style={{ minHeight: 100, justifyContent: 'center' }}>
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                   No conductor guide provided.
                 </Text>
@@ -208,7 +219,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             {resolvedSolfa ? (
               <ScrollView
                 nestedScrollEnabled
-                style={{ maxHeight: 320, minHeight: 130 }}
+                style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
                 contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
               >
                 <RenderHtml
@@ -223,7 +234,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                 />
               </ScrollView>
             ) : (
-              <View style={{ minHeight: 100, justifyContent: 'center' }}>
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                   No solfa notation available.
                 </Text>
@@ -273,7 +284,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             {resolvedHistory ? (
               <ScrollView
                 nestedScrollEnabled
-                style={{ maxHeight: 320, minHeight: 130 }}
+                style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
                 contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
               >
                 <RenderHtml
@@ -288,7 +299,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                 />
               </ScrollView>
             ) : (
-              <View style={{ minHeight: 100, justifyContent: 'center' }}>
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                   No history available.
                 </Text>
@@ -380,7 +391,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
 
               if (!htmlContent.trim()) {
                 return (
-                  <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                  <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                     <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                       No comments available.
                     </Text>
@@ -391,7 +402,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
               return (
                 <ScrollView
                   nestedScrollEnabled
-                  style={{ maxHeight: 320, minHeight: 130 }}
+                  style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
                   contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
                 >
                   <RenderHtml
@@ -447,7 +458,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             >
               Song Details
             </Text>
-            <View style={{ maxHeight: 120, overflow: 'hidden' }}>
+            <View style={{ maxHeight: detailsMaxHeight, overflow: 'hidden' }}>
               <ExpandableText
                 style={{ fontSize: 13, color: theme.colors.textPrimary, fontWeight: '500' }}
               >
