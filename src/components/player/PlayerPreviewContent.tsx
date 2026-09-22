@@ -36,11 +36,11 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isTablet = propIsTablet ?? (windowWidth >= 768 || (windowWidth >= 600 && windowHeight >= 900));
 
-  // Shorter on phone (~160px), longer on tablet (~480px)
-  const previewMaxHeight = isTablet ? 480 : 160;
-  const previewMinHeight = isTablet ? 240 : 70;
-  const emptyMinHeight = isTablet ? 140 : 60;
-  const detailsMaxHeight = isTablet ? 220 : 90;
+  // Well-balanced: comfortable reading height on phone (~235px), spacious on tablet (~520px)
+  const previewMaxHeight = isTablet ? 520 : 235;
+  const previewMinHeight = isTablet ? 260 : 110;
+  const emptyMinHeight = isTablet ? 140 : 80;
+  const detailsMaxHeight = isTablet ? 240 : 110;
 
   const resolvedConductorGuide =
     activeTrack.conductorGuide ||
