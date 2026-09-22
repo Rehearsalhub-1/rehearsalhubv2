@@ -369,6 +369,8 @@ export default function PlayerScreen({ route, navigation }: any) {
     personalNote,
   } = useAnnotationsAndNotes(activeTrack?.id, activeTrack?.title, { isPlayer: true });
 
+  const isLive = isLiveSong(activeTrack) || route.params?.fromLive === true || route.params?.isLive === true;
+
   const {
     isPlaying,
     isLoading,
@@ -861,7 +863,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                 flex: 1,
                 textAlign: 'center',
                 marginHorizontal: 16,
-                color: '#FFFFFF',
+                color: isLive ? (theme.colors.accentBright || theme.colors.accent || '#c084fc') : '#FFFFFF',
                 fontWeight: '800',
                 textShadowColor: theme.colors.accent || '#8B5CF6',
                 textShadowOffset: { width: 0, height: 0 },

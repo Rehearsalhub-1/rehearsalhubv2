@@ -90,6 +90,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
+  const activeLiveSongs = useLiveSongStore(s => s.activeSongs);
 
   const [programSongs, setProgramSongs] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -1202,6 +1203,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
               String(activeTrack.id) === String(track.id) ||
               (activeTrack.isHistory && String(activeTrack.originalSongId) === String(track.id))
             ));
+            const isLive = isLiveSong(track) || (activeLiveSongs && activeLiveSongs.some((ls: any) => String(ls.id) === String(track.id)));
             const hasAudio = !!track.audioUrl;
             return (
               <RehearsalSongRow
@@ -1209,6 +1211,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
                 index={index}
                 isActiveTrack={isActiveTrack}
                 isPlaying={isPlaying}
+                isLive={isLive}
                 isSelectionMode={isSelectionMode}
                 isSelected={selectedTracks.has(track.id)}
                 hasAudio={hasAudio}
