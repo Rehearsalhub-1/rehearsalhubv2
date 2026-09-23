@@ -881,94 +881,102 @@ export default function RehearsalScreen({ navigation, route }: any) {
           notifiedActiveSongsRef.current.delete(update.id);
         }
 
+        const hasExplicitHeardUpdate =
+          update.isHeard !== undefined ||
+          update.is_heard !== undefined ||
+          update.heard !== undefined ||
+          (update.status && update.status !== 'live') ||
+          update._preLiveStatus !== undefined ||
+          update.audioUrls?._isHeard !== undefined ||
+          update.audioUrls?._preLiveStatus !== undefined;
+        const resolvedIsHeard = hasExplicitHeardUpdate ? isSongHeard(update) : isSongHeard(s);
+
         next[index] = {
-          ...s,
-          ...update,
-          title: update.title || s.title,
-          lyrics: update.lyrics ?? s.lyrics,
-          solfa: (update.notation || update.solfas || update.solfa) ?? s.solfa,
-          conductorGuide: (update.solfas || update.conductorGuide || update.guide) ?? s.conductorGuide,
-          comments: update.comments ?? s.comments,
-          history: update.history ?? s.history,
-          leadSinger: update.leadSinger || s.leadSinger,
-          writer: update.writer || s.writer,
-          conductor: update.conductor || s.conductor,
-          key: update.key || s.key,
-          tempo: update.tempo || s.tempo,
-          category: update.category || s.category,
-          categories: update.categories || s.categories,
-          audioUrl: songAudioUrl,
-          audioUrls: resolvedAudioUrls,
-          isLive: isCurrentlyLive,
-          rehearsalCount: update.rehearsalCount ?? s.rehearsalCount,
-          // Live/off toggle only controls isLive — heard/unheard stays as-is.
-          // Only the admin's explicit "mark heard" action should change that.
-          isHeard: isSongHeard(update) || s.isHeard || s.heard,
-          heard: isSongHeard(update) || s.isHeard || s.heard,
-          status: isCurrentlyLive ? 'live' : (isSongHeard(update) ? 'heard' : (s.status === 'live' ? (s.isHeard || s.heard ? 'heard' : 'unheard') : (s.status || 'unheard'))),
-          leadKeyboardist: update.leadKeyboardist || s.leadKeyboardist,
-          drummer: update.drummer || s.drummer,
-          leadGuitarist: update.leadGuitarist || s.leadGuitarist,
-          imageUrl: update.imageUrl || s.imageUrl,
-          image: update.imageUrl ? update.imageUrl : s.image,
-        };
-      } else if (
-        activeProgramId &&
-        (String(update.praiseNightId) === String(activeProgramId) ||
-         String(update.programId) === String(activeProgramId) ||
-         update._action === 'added')
-      ) {
-        // Newly added song for this program
-        const songAudioUrl = resolveSongAudioUrl(update);
-        const resolvedAudioUrls = resolveSongAudioUrls(update);
-        const newSong = {
-          id: update.id,
-          title: update.title || 'Untitled Song',
-          subtitle: update.leadSinger || update.writer || 'Loveworld Singers',
-          program: programTitle || 'Ongoing Rehearsal',
-          leadSinger: update.leadSinger || 'Unknown',
-          writer: update.writer || 'Unknown',
-          conductor: update.conductor || '',
-          key: update.key || '',
-          tempo: update.tempo || '',
-          category: update.category || '',
-          categories: Array.isArray(update.categories) ? update.categories : (update.category ? [update.category] : []),
-          audioUrl: songAudioUrl,
-          lyrics: update.lyrics || '',
-          solfa: update.notation || update.solfas || update.solfa || '',
-          audioUrls: resolvedAudioUrls,
-          status: isSongHeard(update) ? 'heard' : 'unheard',
-          isActive: update.isActive !== false,
-          rehearsalCount: update.rehearsalCount || 0,
-          conductorGuide: update.solfas || update.conductorGuide || update.guide || '',
-          comments: update.comments || '',
-          history: update.history || '',
-          leadKeyboardist: update.leadKeyboardist || '',
-          drummer: update.drummer || '',
-          leadGuitarist: update.leadGuitarist || '',
-          createdAt: update.createdAt || new Date().toISOString(),
-          imageUrl: update.imageUrl || '',
-          image: getTrackImage(update, prev.length),
-          zoneId: activeZone?.id || 'zone-001',
-          collectionName: 'praise_night_songs'
-        };
-        next = [...prev, newSong];
-      } else {
-        return prev;
-      }
-
-      // Write the updated songs list back to cache so it survives app restarts
-      // on bad network — users get the latest admin changes without manual refresh.
-      if (hasCachedDataRef.current) {
-        const cacheKey = `rehearsal_songs_${activeProgramId || 'default'}_${activeZone?.id || 'none'}`;
-        if (_memCache[cacheKey]) {
-          const updated = { ..._memCache[cacheKey], songs: next };
-          _memCache[cacheKey] = updated;
-          writeCache(cacheKey, updated);
+            ...s,
+            ...update,
+            title: update.title || s.title,
+            lyrics: update.lyrics ?? s.lyrics,
+            solfa: (update.notation || update.solfas || update.solfa) ?? s.solfa,
+            conductorGuide: (update.solfas || update.conductorGuide || update.guide) ?? s.conductorGuide,
+            comments: update.comments ?? s.comments,
+            history: update.history ?? s.history,
+            leadSinger: update.leadSinger || s.leadSinger,
+            writer: update.writer || s.writer,
+            conductor: update.conductor || s.conductor,
+            key: update.key || s.key,
+            tempo: update.tempo || s.tempo,
+            category: update.category || s.category,
+            categories: update.categories || s.categories,
+            audioUrl: songAudioUrl,
+            audioUrls: resolvedAudioUrls,
+            isLive: isCurrentlyLive,
+            rehearsalCount: update.rehearsalCount ?? s.rehearsalCount,
+            isHeard: resolvedIsHeard,
+            heard: resolvedIsHeard,
+            status: isCurrentlyLive ? 'live' : (resolvedIsHeard ? 'heard' : 'unheard'),
+            leadKeyboardist: update.leadKeyboardist || s.leadKeyboardist,
+            drummer: update.drummer || s.drummer,
+            leadGuitarist: update.leadGuitarist || s.leadGuitarist,
+            imageUrl: update.imageUrl || s.imageUrl,
+            image: update.imageUrl ? update.imageUrl : s.image,
+          };
+        } else if (
+          activeProgramId &&
+          (String(update.praiseNightId) === String(activeProgramId) ||
+           String(update.programId) === String(activeProgramId) ||
+           update._action === 'added')
+        ) {
+          // Newly added song for this program
+          const songAudioUrl = resolveSongAudioUrl(update);
+          const resolvedAudioUrls = resolveSongAudioUrls(update);
+          const newSong = {
+            id: update.id,
+            title: update.title || 'Untitled Song',
+            subtitle: update.leadSinger || update.writer || 'Loveworld Singers',
+            program: programTitle || 'Ongoing Rehearsal',
+            leadSinger: update.leadSinger || 'Unknown',
+            writer: update.writer || 'Unknown',
+            conductor: update.conductor || '',
+            key: update.key || '',
+            tempo: update.tempo || '',
+            category: update.category || '',
+            categories: Array.isArray(update.categories) ? update.categories : (update.category ? [update.category] : []),
+            audioUrl: songAudioUrl,
+            lyrics: update.lyrics || '',
+            solfa: update.notation || update.solfas || update.solfa || '',
+            audioUrls: resolvedAudioUrls,
+            status: isSongHeard(update) ? 'heard' : 'unheard',
+            isActive: update.isActive !== false,
+            rehearsalCount: update.rehearsalCount || 0,
+            conductorGuide: update.solfas || update.conductorGuide || update.guide || '',
+            comments: update.comments || '',
+            history: update.history || '',
+            leadKeyboardist: update.leadKeyboardist || '',
+            drummer: update.drummer || '',
+            leadGuitarist: update.leadGuitarist || '',
+            createdAt: update.createdAt || new Date().toISOString(),
+            imageUrl: update.imageUrl || '',
+            image: getTrackImage(update, prev.length),
+            zoneId: activeZone?.id || 'zone-001',
+            collectionName: 'praise_night_songs'
+          };
+          next = [...prev, newSong];
+        } else {
+          return prev;
         }
-      }
 
-      return next;
+        // Write the updated songs list back to cache so it survives app restarts
+        // on bad network — users get the latest admin changes without manual refresh.
+        if (hasCachedDataRef.current) {
+          const cacheKey = `rehearsal_songs_${activeProgramId || 'default'}_${activeZone?.id || 'none'}`;
+          if (_memCache[cacheKey]) {
+            const updated = { ..._memCache[cacheKey], songs: next };
+            _memCache[cacheKey] = updated;
+            writeCache(cacheKey, updated);
+          }
+        }
+
+    return next;
     });
   }, [activeProgramId, programTitle, activeZone?.id]);
 
@@ -977,7 +985,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
   // internally. Using just 2 subscriptions prevents the same event from firing
   // handleLiveSongUpdate 3-5 times from overlapping channels.
   useWebSocket('live_song', 'all', handleLiveSongUpdate, true);
-  useWebSocket('song', activeProgramId || 'all', handleLiveSongUpdate, true);
+  useWebSocket('song', 'all', handleLiveSongUpdate, true);
 
   useWebSocket(
     'programs',
