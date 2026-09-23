@@ -830,13 +830,13 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
   const handleLiveSongUpdate = useCallback((data: unknown) => {
     const update = (data as any)?.data || data;
-    if (!update || typeof update !== 'object' || !update.id) return;
+    const updateId = String(update?.id || update?._id || '');
+    if (!update || typeof update !== 'object' || !updateId) return;
 
     // Deduplicate only when the server provides a unique sequence/timestamp.
-    // Without it, every event for the same song would be blocked after the first.
-    const seq = update.sequence || update._seq || update._ts;
+    const seq = update.sequence || update._seq || update._ts || (data as any)?.sequence;
     if (seq) {
-      const eventKey = `${update.id}_${seq}`;
+      const eventKey = `${updateId}_${seq}`;
       if (eventKey === lastHandledEventRef.current) return;
       lastHandledEventRef.current = eventKey;
     }
@@ -844,7 +844,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
     // Song deleted or removed
     if (update.deleted || update.isDeleted || update._action === 'removed') {
       setProgramSongs((prev: any[]) => {
-        const next = prev.filter((s: any) => String(s.id) !== String(update.id));
+        const next = prev.filter((s: any) => String(s.id || s._id) !== updateId);
         // Write updated list back to cache so next app open is correct
         if (hasCachedDataRef.current) {
           const overrideId = null;
@@ -862,7 +862,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
     useLiveSongStore.getState().handleSongUpdate(update);
 
     setProgramSongs((prev: any[]) => {
-      const index = prev.findIndex((s: any) => String(s.id) === String(update.id));
+      const index = prev.findIndex((s: any) => String(s.id || s._id) === updateId);
       let next: any[];
 
       if (index >= 0) {
@@ -1033,11 +1033,11 @@ export default function RehearsalScreen({ navigation, route }: any) {
   );
 
   const categoryHeardCount = useMemo(() => programSongs.filter((track: any) => {
-    return songBelongsToCategory(track, selectedCategory || '') && track.status === 'heard';
+    return songBelongsToCategory(track, selectedCategory || '') && isSongHeard(track);
   }).length, [programSongs, selectedCategory]);
 
   const categoryUnheardCount = useMemo(() => programSongs.filter((track: any) => {
-    return songBelongsToCategory(track, selectedCategory || '') && track.status === 'unheard';
+    return songBelongsToCategory(track, selectedCategory || '') && !isSongHeard(track);
   }).length, [programSongs, selectedCategory]);
 
   const memoizedSongsData = useMemo(() => {
@@ -1053,7 +1053,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         const matchesWriter = track.writer?.toLowerCase().includes(q);
         if (!matchesTitle && !matchesLead && !matchesWriter) return false;
       }
-      const isHeardTrack = track.status === 'heard';
+      const isHeardTrack = isSongHeard(track);
       return activeTab === 'heard' ? isHeardTrack : !isHeardTrack;
     }).sort((a: any, b: any) => {
       const titleA = a.title || '';
