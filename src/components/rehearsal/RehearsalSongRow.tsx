@@ -2,7 +2,6 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { VideoView } from 'expo-video';
 
 interface Props {
   track: any;
@@ -14,7 +13,6 @@ interface Props {
   isSelected: boolean;
   hasAudio: boolean;
   coverImage: any;
-  placeholderVideoPlayer: any;
   onPress: () => void;
   onLongPress: () => void;
   onOptionsPress: () => void;
@@ -22,7 +20,7 @@ interface Props {
   styles: any;
 }
 
-export const RehearsalSongRow: React.FC<Props> = ({
+export const RehearsalSongRow: React.FC<Props> = React.memo(({
   track,
   index,
   isActiveTrack,
@@ -32,7 +30,6 @@ export const RehearsalSongRow: React.FC<Props> = ({
   isSelected,
   hasAudio,
   coverImage,
-  placeholderVideoPlayer,
   onPress,
   onLongPress,
   onOptionsPress,
@@ -88,14 +85,16 @@ export const RehearsalSongRow: React.FC<Props> = ({
 
         {/* Thumbnail */}
         <View style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26', marginRight: 12 }}>
-          {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
-            <Image source={{ uri: track.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" />
-          ) : (
-            <>
-              <Image source={coverImage} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" />
-              <VideoView player={placeholderVideoPlayer} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
-            </>
-          )}
+          <Image
+            source={
+              track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http')
+                ? { uri: track.imageUrl }
+                : coverImage
+            }
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="disk"
+          />
           {!hasAudio && (
             <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 4, alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="volume-mute" size={16} color="rgba(255,255,255,0.8)" />
@@ -155,4 +154,4 @@ export const RehearsalSongRow: React.FC<Props> = ({
       </TouchableOpacity>
     </View>
   );
-};
+});

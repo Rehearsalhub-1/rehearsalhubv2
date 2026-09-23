@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Pure utility functions shared across Rehearsal components.
  * Extracted from RehearsalScreen.tsx — no JSX, no hooks.
  */
@@ -18,11 +18,16 @@ export const songBelongsToCategory = (song: any, targetCategory: string): boolea
 
 export const isSongHeard = (s: any): boolean => {
   if (!s) return false;
+  if (s.isHeard === true || s.is_heard === true || s.heard === true) return true;
+  if (s.isHeard === false || s.is_heard === false || s.heard === false) return false;
   const status = (s.status || '').toLowerCase().trim();
   if (status === 'heard') return true;
-  if (status === 'unheard' || status === 'live' || status === 'active') return false;
-  if (s.isHeard === true || s.is_heard === true) return true;
-  if (s.isHeard === false || s.is_heard === false) return false;
+  if (status === 'unheard') return false;
+  const audioUrls = s.audioUrls || s.audio_urls;
+  if (audioUrls?._isHeard === true || audioUrls?._preLiveStatus === 'heard') return true;
+  if (audioUrls?._isHeard === false || audioUrls?._preLiveStatus === 'unheard') return false;
+  if (s._preLiveStatus === 'heard') return true;
+  if (s._preLiveStatus === 'unheard') return false;
   return false;
 };
 

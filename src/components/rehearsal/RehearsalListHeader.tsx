@@ -42,7 +42,7 @@ export interface RehearsalListHeaderProps {
   styles: any;
 }
 
-export const RehearsalListHeader: React.FC<RehearsalListHeaderProps> = ({
+export const RehearsalListHeader: React.FC<RehearsalListHeaderProps> = React.memo(({
   searchQuery,
   onSearchChange,
   sortAscending,
@@ -229,4 +229,4 @@ export const RehearsalListHeader: React.FC<RehearsalListHeaderProps> = ({
       )}
     </View>
   </>
-);
+));

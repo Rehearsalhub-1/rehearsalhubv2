@@ -65,9 +65,7 @@ export function isSongExplicitlyOff(s: any): boolean {
     status === 'inactive' ||
     status === 'ended' ||
     status === 'off' ||
-    status === 'stopped' ||
-    status === 'heard' ||
-    status === 'unheard'
+    status === 'stopped'
   ) {
     return true;
   }
@@ -156,7 +154,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
                 ? resolvedAudioUrls
                 : next[existingIndex].audioUrls,
           };
-          return { activeSongs: next };
+          return { activeSongs: next, hasInitialFetched: true };
         } else {
           const newSong: LiveSong = {
             id: String(update.id),
@@ -174,20 +172,19 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             ...update,
           };
 
-          // Retain all other active live songs (do NOT remove other songs in the same program)
           const cleaned = state.activeSongs.filter((s) => {
             if (String(s.id) === String(songId)) return false;
             if (isSongExplicitlyOff(s)) return false;
             return true;
           });
 
-          return { activeSongs: [newSong, ...cleaned] };
+          return { activeSongs: [newSong, ...cleaned], hasInitialFetched: true };
         }
       });
     } else {
-      // Song is NOT live (e.g. status changed to 'heard', 'unheard', or isActive: false)
+      // Song is NOT live (e.g. isActive: false or explicit off status)
       const status = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
-      if ((status && status !== 'live') || update.isActive === false || update.isLive === false) {
+      if (['inactive', 'off', 'ended', 'stopped'].includes(status) || update.isActive === false || update.isLive === false) {
         get().removeSong(songId);
         return;
       }

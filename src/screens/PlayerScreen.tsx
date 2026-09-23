@@ -98,7 +98,7 @@ export default function PlayerScreen({ route, navigation }: any) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  const styles = getStyles(theme, insets, windowWidth);
+  const styles = useMemo(() => getStyles(theme, insets, windowWidth), [theme, insets, windowWidth]);
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isHQ = useUserStore(s => s.isHQ);
@@ -177,9 +177,19 @@ export default function PlayerScreen({ route, navigation }: any) {
     return () => sub.remove();
   }, [handleClose]);
 
-  // Always hydrate latest full song data from API to ensure updates (lyrics, solfas, key, tempo, audio stems) are reflected
+  // Hydrate full song data from API — but only if the track is missing key
+  // fields (lyrics, solfa, audioUrl). If the rehearsal screen already passed
+  // complete data, skip the fetch entirely to avoid a redundant API call on
+  // every song tap.
   useEffect(() => {
     if (!activeTrack?.id) return;
+
+    const alreadyComplete = Boolean(
+      activeTrack.lyrics &&
+      (activeTrack.solfa || activeTrack.conductorGuide) &&
+      activeTrack.audioUrl
+    );
+    if (alreadyComplete) return;
 
     let active = true;
     api.songs.getById(String(activeTrack.id)).then(res => {
@@ -208,10 +218,23 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   const { width } = useWindowDimensions();
   const [activePreviewTab, setActivePreviewTab] = useState('Lyrics');
-  const [songHistorySummary, setSongHistorySummary] = useState<string>('');
 
+  const [songHistorySummary, setSongHistorySummary] = useState<string>('');
+  const historyFetchedForRef = useRef<string | null>(null);
+
+  // Reset history state when track changes so it loads fresh for the new song
   useEffect(() => {
+    setSongHistorySummary('');
+    historyFetchedForRef.current = null;
+  }, [activeTrack?.id]);
+
+  // Lazy-load history only when the Conductor tab is opened — not on every track change
+  useEffect(() => {
+    if (activePreviewTab !== 'Conductor') return;
     if (!activeTrack?.id) return;
+    if (historyFetchedForRef.current === String(activeTrack.id)) return; // already fetched
+
+    historyFetchedForRef.current = String(activeTrack.id);
     let active = true;
     api.songs.getHistory(String(activeTrack.id).trim()).then(res => {
       if (!active) return;
@@ -221,7 +244,7 @@ export default function PlayerScreen({ route, navigation }: any) {
       }
     }).catch(() => {});
     return () => { active = false; };
-  }, [activeTrack?.id]);
+  }, [activeTrack?.id, activePreviewTab]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [showMoreAssetsModal, setShowMoreAssetsModal] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
@@ -307,22 +330,36 @@ export default function PlayerScreen({ route, navigation }: any) {
         return prev;
       }
       const rawAudioUrl = update.audioFile || update.audioUrls?.full || null;
-      // Only compute a new audioUrl if the incoming event actually carries one
-      // that differs from what we already have — avoids re-triggering play().
       const songAudioUrl = rawAudioUrl
         ? (rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl)
         : prev.audioUrl;
-      // If nothing meaningful changed, return same ref to skip re-render
-      const nextAudioUrl = songAudioUrl || prev.audioUrl;
+
+      // Use explicit undefined checks for each field so falsy values (empty string) still apply
+      const nextLyrics = update.lyrics !== undefined ? update.lyrics : prev.lyrics;
+      const nextSolfa = update.notation !== undefined
+        ? update.notation
+        : update.solfas !== undefined
+        ? update.solfas
+        : update.solfa !== undefined
+        ? update.solfa
+        : prev.solfa;
+      const nextConductorGuide = update.conductorGuide !== undefined
+        ? update.conductorGuide
+        : update.guide !== undefined
+        ? update.guide
+        : prev.conductorGuide;
+      const nextComments = update.comments !== undefined ? update.comments : prev.comments;
+      const nextHistory = update.history !== undefined ? update.history : prev.history;
+
       return {
         ...prev,
         ...update,
-        lyrics: update.lyrics !== undefined ? update.lyrics : prev.lyrics,
-        solfa: (update.notation || update.solfas || update.solfa) !== undefined ? (update.notation || update.solfas || update.solfa) : prev.solfa,
-        conductorGuide: (update.solfas || update.conductorGuide || update.guide) !== undefined ? (update.solfas || update.conductorGuide || update.guide) : prev.conductorGuide,
-        comments: update.comments !== undefined ? update.comments : prev.comments,
-        history: update.history !== undefined ? update.history : prev.history,
-        // Preserve existing audioUrl when the update doesn't supply a new one
+        audioUrl: songAudioUrl,
+        lyrics: nextLyrics,
+        solfa: nextSolfa,
+        conductorGuide: nextConductorGuide,
+        comments: nextComments,
+        history: nextHistory,
         status: isLiveSong(update) ? 'live' : (isSongHeard(update) ? 'heard' : (update.status || prev.status)),
         isLive: isLiveSong(update) || (update.status === undefined && Boolean(prev?.isLive)),
       };
@@ -333,8 +370,10 @@ export default function PlayerScreen({ route, navigation }: any) {
   useWebSocket('song', activeTrack?.id ? String(activeTrack.id) : '', useCallback((eventData: any) => {
     const update = eventData?.data || eventData;
     if (update?.id && activeTrack?.id && String(update.id) !== String(activeTrack.id)) return;
-    // Record this event as handled so the 'all' sub below skips it
-    if (update?.id) lastWsUpdateIdRef.current = String(update.id) + (update._seq || update.sequence || Date.now());
+    // Record dedup key only when sequence info is available (not Date.now which is always unique)
+    if (update?.id && (update._seq || update.sequence)) {
+      lastWsUpdateIdRef.current = String(update.id) + (update._seq || update.sequence);
+    }
     applySongUpdate(eventData);
   }, [applySongUpdate, activeTrack?.id]), Boolean(activeTrack?.id));
 
@@ -345,8 +384,10 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (!activeTrack?.id) return;
     const idMatch = String(update.id) === String(activeTrack.id);
     if (!idMatch) return;
-    // De-duplicate: skip if the targeted handler already processed this event
-    const eventSig = String(update.id) + (update._seq || update.sequence || '');
+    // De-duplicate only when sequence info is present — avoids blocking updates that lack sequence
+    const eventSig = (update._seq || update.sequence)
+      ? String(update.id) + (update._seq || update.sequence)
+      : '';
     if (eventSig && lastWsUpdateIdRef.current === eventSig) return;
     applySongUpdate(update);
   }, [applySongUpdate, activeTrack?.id]), Boolean(activeTrack?.id));
@@ -635,15 +676,17 @@ export default function PlayerScreen({ route, navigation }: any) {
     }).catch(() => {});
   }, [user]);
 
+  // Load playlists once on mount only
   useEffect(() => {
     loadUserPlaylists();
   }, [loadUserPlaylists]);
 
+  // Re-fetch when modal opens only if list is empty (avoid double fetch)
   useEffect(() => {
-    if (showPlaylistModal) {
+    if (showPlaylistModal && playlists.length === 0) {
       loadUserPlaylists();
     }
-  }, [showPlaylistModal, loadUserPlaylists]);
+  }, [showPlaylistModal]);
 
   const toggleFavorite = async () => {
     if (!activeTrack?.id) return;

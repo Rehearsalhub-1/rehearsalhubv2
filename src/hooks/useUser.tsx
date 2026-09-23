@@ -338,7 +338,10 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       return await Promise.race([
         fetchAuthMe(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2500)),
+        new Promise<boolean>((resolve) => setTimeout(() => {
+          // If we have a valid JWT in SecureStore, do not boot user to login screen just because network is slow
+          resolve(true);
+        }, 5000)),
       ]);
     } catch (err) {
       console.warn('[useUserStore] bootstrap network error:', err);

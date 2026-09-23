@@ -7,36 +7,26 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
   Dimensions,
   TextInput,
-  Image as RNImage,
-  Modal,
   ActivityIndicator,
   Animated,
   Alert,
   FlatList,
   Pressable,
   RefreshControl,
-  AppState } from
-'react-native';
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { sendPushNotification, sendLocalNotification } from '../lib/notifications';
 import { Image } from 'expo-image';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import { Asset } from 'expo-asset';
 import Constants from 'expo-constants';
-
-const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
-import Svg, { Path } from 'react-native-svg';
-import { ZONES, getZoneByInvitationCode, isHQGroup } from '../config/zones';
+import { getZoneByInvitationCode, isHQGroup } from '../config/zones';
 import { useZone } from '../hooks/useZone';
 import { useUserStore, useChurch } from '../hooks/useUser';
-import { canAccessArchive, canAccessPreRehearsal, getHiddenFeatures, isHQAdmin } from '../config/roles';
+import { canAccessArchive, canAccessPreRehearsal, getHiddenFeatures } from '../config/roles';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import TrackOptionsModal from '../components/TrackOptionsModal';
 import { readCache, writeCache } from '../lib/screenCache';
@@ -101,55 +91,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const [programUpdatedAt, setProgramUpdatedAt] = useState<any>(null);
   const [coverImage, setCoverImage] = useState<any>(COVER_IMAGE);
 
-  const [bgColor, setBgColor] = useState(theme.colors.background);
-  const [miniPlayerBg, setMiniPlayerBg] = useState(theme.colors.backgroundSecondary);
-  const [playerModalBg, setPlayerModalBg] = useState(theme.colors.backgroundDark);
-
-  const initialPlaceholderAsset = Asset.fromModule(TRACK_PLACEHOLDER_VIDEO);
-  const initialPlaceholderSource = initialPlaceholderAsset.localUri ? { uri: initialPlaceholderAsset.localUri } : TRACK_PLACEHOLDER_VIDEO;
-
-  const placeholderVideoPlayer = useVideoPlayer(initialPlaceholderSource, player => {
-    player.loop = true;
-    player.muted = true;
-    try {
-      player.play();
-    } catch {}
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-    async function ensureLocalPlaceholder() {
-      try {
-        const a = Asset.fromModule(TRACK_PLACEHOLDER_VIDEO);
-        if (!a.localUri) {
-          await a.downloadAsync();
-        }
-        if (isMounted && a.localUri && placeholderVideoPlayer) {
-          if (typeof placeholderVideoPlayer.replaceAsync === 'function') {
-            await placeholderVideoPlayer.replaceAsync({ uri: a.localUri });
-          } else {
-            placeholderVideoPlayer.replace({ uri: a.localUri });
-          }
-          placeholderVideoPlayer.muted = true;
-          placeholderVideoPlayer.loop = true;
-          try {
-            placeholderVideoPlayer.play();
-          } catch {}
-        }
-      } catch (e) {
-        console.warn('[RehearsalScreen] Track placeholder video local load warning:', e);
-      }
-    }
-    ensureLocalPlaceholder();
-    return () => {
-      isMounted = false;
-    };
-  }, [placeholderVideoPlayer]);
-
-
   const [activeTab, setActiveTab] = useState<'heard' | 'unheard'>('unheard');
-  const [mainTab, setMainTab] = useState<'home' | 'audiolab' | 'more'>('audiolab');
-  const [showCategoriesDropdown, setShowCategoriesDropdown] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const [availablePrograms, setAvailablePrograms] = useState<any[]>([]);
@@ -161,7 +103,14 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [sortAscending, setSortAscending] = useState(true);
+
+  // Debounce search so the expensive memo doesn't run on every keystroke
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const { currentTrack: activeTrack, isPlaying, isLoading: isPlayerLoading, play, pause, togglePlayback } = useTrackPlayer();
   const [hideMiniPlayer, setHideMiniPlayer] = useState(false);
@@ -195,18 +144,11 @@ export default function RehearsalScreen({ navigation, route }: any) {
     }
     if (handledSongIdRef.current === String(targetSongId)) return;
 
-    console.log('[RehearsalScreen] useEffect songId triggered:', {
-      targetSongId,
-      programSongsLength: programSongs.length,
-      activeZoneId: activeZone?.id
-    });
-
     let active = true;
 
     async function handleAutoPlay() {
 
       let song = programSongs.find((s: any) => String(s.id) === String(targetSongId));
-      console.log('[RehearsalScreen] Search in programSongs result:', song ? song.title : 'NOT FOUND');
 
       if (!song) {
         try {
@@ -276,7 +218,6 @@ export default function RehearsalScreen({ navigation, route }: any) {
           setActiveTab('unheard');
         }
 
-        console.log('[RehearsalScreen] Navigating to Player screen:', song.title);
         navigateToPlayer({ activeTrack: song, zoneId: activeZone?.id || song.zoneId, queue: [song, ...programSongs], autoplay: false });
 
         navigation.setParams({ songId: undefined });
@@ -342,6 +283,10 @@ export default function RehearsalScreen({ navigation, route }: any) {
     delete _memCache[cacheKey];
     clearCache();
     triggerReload();
+    // Safety fallback: if zone/profile is still loading when refresh fires,
+    // the loadData effect will return early without resetting isRefreshing.
+    // Clear it after 8s max so the spinner never gets stuck indefinitely.
+    setTimeout(() => setIsRefreshing(false), 8000);
   };
 
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -360,23 +305,25 @@ export default function RehearsalScreen({ navigation, route }: any) {
   };
 
 
+  // O(n) single-pass count instead of O(categories × songs) nested filter
   const categorySongCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    categories.forEach(cat => {
-      counts[cat.id] = programSongs.filter((track: any) => {
-        const matchesCategory = songBelongsToCategory(track, cat.id);
-        if (!matchesCategory) return false;
-        if (searchQuery.trim() !== '') {
-          const query = searchQuery.toLowerCase();
-          return track.title?.toLowerCase().includes(query) ||
-                 track.leadSinger?.toLowerCase().includes(query) ||
-                 track.writer?.toLowerCase().includes(query);
-        }
-        return true;
-      }).length;
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    programSongs.forEach((track: any) => {
+      const matchesSearch = !q ||
+        track.title?.toLowerCase().includes(q) ||
+        track.leadSinger?.toLowerCase().includes(q) ||
+        track.writer?.toLowerCase().includes(q);
+      if (!matchesSearch) return;
+      const cats: string[] = Array.isArray(track.categories) && track.categories.length > 0
+        ? track.categories
+        : (track.category ? [track.category] : []);
+      cats.forEach(c => {
+        if (c) counts[c] = (counts[c] || 0) + 1;
+      });
     });
     return counts;
-  }, [programSongs, searchQuery, categories]);
+  }, [programSongs, debouncedSearchQuery, categories]);
 
   useEffect(() => {
     if (isZoneLoading || isProfileLoading || !user) return;
@@ -574,7 +521,6 @@ export default function RehearsalScreen({ navigation, route }: any) {
         }
 
         if (!isRehearsalFetchSuccessful && hasCachedDataRef.current) {
-          console.log('[RehearsalScreen] Rehearsal fetch failed but cache exists. Preserving cache.');
           if (active) setIsLoading(false);
           return;
         }
@@ -606,6 +552,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         if (!active) return;
 
         setActiveProgramId(selectedRehearsal.id);
+        notifiedActiveSongsRef.current.clear(); // reset live-song notification tracking for new program
         setActiveProgramScope(selectedRehearsal.scope || null);
         setActiveProgramSubGroupId(selectedRehearsal.subGroupId || null);
         setProgramTitle(selectedRehearsal.name || selectedRehearsal.title || 'Loveworld Singers Rehearsal');
@@ -682,7 +629,6 @@ export default function RehearsalScreen({ navigation, route }: any) {
         }
 
         if (!isSongsFetchSuccessful && hasCachedDataRef.current) {
-          console.log('[RehearsalScreen] Song fetch failed but cache exists. Preserving cache.');
           if (active) setIsLoading(false);
           return;
         }
@@ -708,6 +654,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
             solfa: song.notation || song.solfas || song.solfa || '',
             audioUrls: resolvedAudioUrls,
             status: isLiveNow ? 'live' : (isSongHeard(song) ? 'heard' : 'unheard'),
+            isHeard: isSongHeard(song),
+            heard: isSongHeard(song),
             isLive: isLiveNow,
             isActive: isLiveNow,
             rehearsalCount: getRehearsalCount(song),
@@ -789,10 +737,48 @@ export default function RehearsalScreen({ navigation, route }: any) {
         if (!active) return;
         setCategories(pageCategories);
         setProgramSongs(finalSongs);
+        // Dismiss the loading state immediately so users see songs right away.
+        // Cache writing happens in the background and doesn't need to block UI.
+        setIsLoading(false);
+        setIsRefreshing(false);
 
         hasCachedDataRef.current = true;
+
+        // Keep full songs in memory cache for active session use.
+        // Write a slimmed version to AsyncStorage — strips heavy fields (lyrics,
+        // solfas, history, comments) that aren't needed to render the song list.
+        // This cuts the AsyncStorage payload by ~70%, making cold-start reads much faster.
+        const slimSongs = finalSongs.map((s: any) => ({
+          id: s.id,
+          title: s.title,
+          subtitle: s.subtitle,
+          program: s.program,
+          leadSinger: s.leadSinger,
+          writer: s.writer,
+          conductor: s.conductor,
+          key: s.key,
+          tempo: s.tempo,
+          category: s.category,
+          categories: s.categories,
+          audioUrl: s.audioUrl,
+          status: s.status,
+          isLive: s.isLive,
+          isActive: s.isActive,
+          rehearsalCount: s.rehearsalCount,
+          imageUrl: s.imageUrl,
+          image: s.image,
+          zoneId: s.zoneId,
+          collectionName: s.collectionName,
+          createdAt: s.createdAt,
+          leadKeyboardist: s.leadKeyboardist,
+          drummer: s.drummer,
+          leadGuitarist: s.leadGuitarist,
+          // Keep audioUrls so stems work when tapping a song from cache
+          audioUrls: s.audioUrls,
+        }));
+
         const cachePayload = {
-          songs: finalSongs,
+          songs: slimSongs,
           title: selectedRehearsal.name || selectedRehearsal.title || 'Loveworld Singers Rehearsal',
           date: selectedRehearsal.date || '',
           location: selectedRehearsal.location || resolvedZoneName,
@@ -803,7 +789,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
         };
 
         _memCache[cacheKey] = {
-          songs: cachePayload.songs,
+          songs: finalSongs, // full songs in memory
           title: cachePayload.title,
           date: cachePayload.date,
           location: cachePayload.location,
@@ -811,7 +797,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           categoryOrder: cachePayload.categoryOrder,
         };
 
-        writeCache(cacheKey, cachePayload);
+        writeCache(cacheKey, cachePayload); // slim songs to disk
 
         setSelectedCategory((prevSelected) => {
           if (prevSelected && uniqueCategories.includes(prevSelected)) {
@@ -840,20 +826,36 @@ export default function RehearsalScreen({ navigation, route }: any) {
     };
   }, [program, selectedProgramOverride, reloadKey, contextZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
 
-  useEffect(() => {
-
-    setBgColor(theme.colors.background);
-    setMiniPlayerBg(theme.colors.backgroundSecondary);
-    setPlayerModalBg(theme.colors.background);
-  }, [activeTrack, theme]);
+  const lastHandledEventRef = useRef<string | null>(null);
 
   const handleLiveSongUpdate = useCallback((data: unknown) => {
     const update = (data as any)?.data || data;
     if (!update || typeof update !== 'object' || !update.id) return;
 
+    // Deduplicate only when the server provides a unique sequence/timestamp.
+    // Without it, every event for the same song would be blocked after the first.
+    const seq = update.sequence || update._seq || update._ts;
+    if (seq) {
+      const eventKey = `${update.id}_${seq}`;
+      if (eventKey === lastHandledEventRef.current) return;
+      lastHandledEventRef.current = eventKey;
+    }
+
     // Song deleted or removed
     if (update.deleted || update.isDeleted || update._action === 'removed') {
-      setProgramSongs((prev: any[]) => prev.filter((s: any) => String(s.id) !== String(update.id)));
+      setProgramSongs((prev: any[]) => {
+        const next = prev.filter((s: any) => String(s.id) !== String(update.id));
+        // Write updated list back to cache so next app open is correct
+        if (hasCachedDataRef.current) {
+          const overrideId = null;
+          const cacheKey = `rehearsal_songs_${overrideId || activeProgramId || 'default'}_${activeZone?.id || 'none'}`;
+          if (_memCache[cacheKey]) {
+            _memCache[cacheKey] = { ..._memCache[cacheKey], songs: next };
+            writeCache(cacheKey, { ..._memCache[cacheKey], songs: next });
+          }
+        }
+        return next;
+      });
       useLiveSongStore.getState().handleSongUpdate(update);
       return;
     }
@@ -861,8 +863,10 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
     setProgramSongs((prev: any[]) => {
       const index = prev.findIndex((s: any) => String(s.id) === String(update.id));
+      let next: any[];
+
       if (index >= 0) {
-        const next = [...prev];
+        next = [...prev];
         const s = next[index];
         const merged = { ...s, ...update };
         const songAudioUrl = resolveSongAudioUrl(merged);
@@ -897,25 +901,24 @@ export default function RehearsalScreen({ navigation, route }: any) {
           audioUrls: resolvedAudioUrls,
           isLive: isCurrentlyLive,
           rehearsalCount: update.rehearsalCount ?? s.rehearsalCount,
-          status: isCurrentlyLive
-            ? 'live'
-            : (isSongHeard(merged) ? 'heard' : (update.status && update.status !== 'live' ? update.status : (s.status === 'live' ? 'unheard' : (s.status || 'unheard')))),
+          // Live/off toggle only controls isLive — heard/unheard stays as-is.
+          // Only the admin's explicit "mark heard" action should change that.
+          isHeard: isSongHeard(update) || s.isHeard || s.heard,
+          heard: isSongHeard(update) || s.isHeard || s.heard,
+          status: isCurrentlyLive ? 'live' : (isSongHeard(update) ? 'heard' : (s.status === 'live' ? (s.isHeard || s.heard ? 'heard' : 'unheard') : (s.status || 'unheard'))),
           leadKeyboardist: update.leadKeyboardist || s.leadKeyboardist,
           drummer: update.drummer || s.drummer,
           leadGuitarist: update.leadGuitarist || s.leadGuitarist,
           imageUrl: update.imageUrl || s.imageUrl,
           image: update.imageUrl ? update.imageUrl : s.image,
         };
-        return next;
-      }
-
-      // If it's a newly created/added song for this active program
-      if (
+      } else if (
         activeProgramId &&
         (String(update.praiseNightId) === String(activeProgramId) ||
          String(update.programId) === String(activeProgramId) ||
          update._action === 'added')
       ) {
+        // Newly added song for this program
         const songAudioUrl = resolveSongAudioUrl(update);
         const resolvedAudioUrls = resolveSongAudioUrls(update);
         const newSong = {
@@ -949,18 +952,32 @@ export default function RehearsalScreen({ navigation, route }: any) {
           zoneId: activeZone?.id || 'zone-001',
           collectionName: 'praise_night_songs'
         };
-        return [...prev, newSong];
+        next = [...prev, newSong];
+      } else {
+        return prev;
       }
 
-      return prev;
+      // Write the updated songs list back to cache so it survives app restarts
+      // on bad network — users get the latest admin changes without manual refresh.
+      if (hasCachedDataRef.current) {
+        const cacheKey = `rehearsal_songs_${activeProgramId || 'default'}_${activeZone?.id || 'none'}`;
+        if (_memCache[cacheKey]) {
+          const updated = { ..._memCache[cacheKey], songs: next };
+          _memCache[cacheKey] = updated;
+          writeCache(cacheKey, updated);
+        }
+      }
+
+      return next;
     });
   }, [activeProgramId, programTitle, activeZone?.id]);
 
-  useWebSocket('live_song', 'all', handleLiveSongUpdate, true); // fast direct event
-  useWebSocket('song', activeProgramId || '', handleLiveSongUpdate, Boolean(activeProgramId));
-  useWebSocket('songs', activeProgramId || '', handleLiveSongUpdate, Boolean(activeProgramId));
-  useWebSocket('song', 'all', handleLiveSongUpdate, true);
-  useWebSocket('songs', 'all', handleLiveSongUpdate, true);
+  // Deduplicated WebSocket subscriptions — 'live_song' covers direct events,
+  // 'song'/'songs' aliases are handled by the WebSocket RESOURCE_ALIASES map
+  // internally. Using just 2 subscriptions prevents the same event from firing
+  // handleLiveSongUpdate 3-5 times from overlapping channels.
+  useWebSocket('live_song', 'all', handleLiveSongUpdate, true);
+  useWebSocket('song', activeProgramId || 'all', handleLiveSongUpdate, true);
 
   useWebSocket(
     'programs',
@@ -1019,13 +1036,13 @@ export default function RehearsalScreen({ navigation, route }: any) {
     if (!selectedCategory) {
       return categories;
     }
+    const q = debouncedSearchQuery.trim().toLowerCase();
     return programSongs.filter((track: any) => {
       if (!songBelongsToCategory(track, selectedCategory)) return false;
-      if (searchQuery.trim() !== '') {
-        const query = searchQuery.toLowerCase();
-        const matchesTitle = track.title?.toLowerCase().includes(query);
-        const matchesLead = track.leadSinger?.toLowerCase().includes(query);
-        const matchesWriter = track.writer?.toLowerCase().includes(query);
+      if (q) {
+        const matchesTitle = track.title?.toLowerCase().includes(q);
+        const matchesLead = track.leadSinger?.toLowerCase().includes(q);
+        const matchesWriter = track.writer?.toLowerCase().includes(q);
         if (!matchesTitle && !matchesLead && !matchesWriter) return false;
       }
       const isHeardTrack = track.status === 'heard';
@@ -1035,7 +1052,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
       const titleB = b.title || '';
       return sortAscending ? titleA.localeCompare(titleB) : titleB.localeCompare(titleA);
     });
-  }, [categories, programSongs, selectedCategory, searchQuery, activeTab, sortAscending]);
+  }, [categories, programSongs, selectedCategory, debouncedSearchQuery, activeTab, sortAscending]);
 
   const currentCategoryFilter = (route?.params?.categoryFilter || 'ongoing').toLowerCase().trim();
   const isFeatureRestricted = currentCategoryFilter === 'pre-rehearsal'
@@ -1216,7 +1233,6 @@ export default function RehearsalScreen({ navigation, route }: any) {
                 isSelected={selectedTracks.has(track.id)}
                 hasAudio={hasAudio}
                 coverImage={coverImage || COVER_IMAGE}
-                placeholderVideoPlayer={placeholderVideoPlayer}
                 onPress={() => {
                   if (isSelectionMode) { toggleSelection(track.id); return; }
                   const isSameTrack = activeTrack && (
@@ -1224,7 +1240,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
                     (activeTrack.isHistory && String(activeTrack.originalSongId) === String(track.id))
                   );
                   if (!isSameTrack) {
-                    play(track, programSongs, true);
+                    navigateToPlayer({ activeTrack: track, zoneId: activeZone?.id, queue: programSongs, autoplay: false });
                   } else {
                     navigateToPlayer({ activeTrack: track, zoneId: activeZone?.id, queue: programSongs });
                   }

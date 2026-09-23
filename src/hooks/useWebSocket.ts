@@ -97,7 +97,17 @@ export async function connect() {
     const ws = new WebSocket(`${wsUrl}/ws?token=${encodeURIComponent(token)}`);
     socket = ws;
 
+    // If the WS handshake hangs (server accepts TCP but never completes upgrade),
+    // force-close after 10s so reconnect can proceed.
+    const openTimeout = setTimeout(() => {
+      if (socket === ws && ws.readyState !== WebSocket.OPEN) {
+        isConnecting = false;
+        ws.close();
+      }
+    }, 10000);
+
     ws.onopen = () => {
+      clearTimeout(openTimeout);
       if (socket !== ws) return;
       reconnectDelay = 1000;
       isConnecting = false;
@@ -259,6 +269,7 @@ export function disconnect() {
   clearReconnectTimer();
   clearPingInterval();
   subscriptions = [];
+  eventCursors.clear(); // clear stale cursors so next session gets fresh events
   socket?.close();
   socket = null;
   reconnectDelay = 1000;

@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const CACHE_VERSION = 'v1';
-const DEFAULT_TTL_MS = 5 * 60 * 1000; // 5 minutes — after this, bg refresh always runs
+const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 minutes — WebSocket keeps in-memory data live, so cache can last longer
 
 interface CacheEntry<T> {
   data: T;
@@ -29,7 +29,8 @@ export async function writeCache<T>(key: string, data: T): Promise<void> {
       version: CACHE_VERSION,
     };
     await AsyncStorage.setItem(`screen_cache_${key}`, JSON.stringify(entry));
-  } catch {
+  } catch (e) {
+    console.warn(`[screenCache] writeCache failed for key "${key}":`, e);
   }
 }
 export async function isCacheStale(key: string, ttlMs = DEFAULT_TTL_MS): Promise<boolean> {

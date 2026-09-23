@@ -122,12 +122,9 @@ export default function GlobalLiveSongWidget() {
   useWebSocket('live_song', 'all', handleSongUpdate, true);
   useWebSocket('song', 'all', handleSongUpdate, true);
 
-  // Initial fetch immediately on mount so active songs are loaded right away without waiting
-  useEffect(() => {
-    fetchActiveSongs(currentZone?.id);
-  }, [fetchActiveSongs]);
-
-  // Refetch when zone finishes loading or changes
+  // Fetch active songs once on mount. The second effect guards against the case
+  // where zone wasn't ready yet — only re-fetches when zone becomes available
+  // for the first time (hasInitialFetched prevents redundant re-fetches).
   useEffect(() => {
     if (!isZoneLoading && currentZone?.id) {
       fetchActiveSongs(currentZone.id);

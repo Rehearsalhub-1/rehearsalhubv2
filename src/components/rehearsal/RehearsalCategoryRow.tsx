@@ -10,7 +10,7 @@ interface Props {
   styles: any;
 }
 
-export const RehearsalCategoryRow: React.FC<Props> = ({ cat, songCount, onPress, theme, styles }) => (
+export const RehearsalCategoryRow: React.FC<Props> = React.memo(({ cat, songCount, onPress, theme, styles }) => (
   <View style={{ paddingHorizontal: 16 }}>
     <TouchableOpacity style={styles.categoryListItem} activeOpacity={0.7} onPress={onPress}>
       <View style={styles.categoryItemLeft}>
@@ -25,4 +25,4 @@ export const RehearsalCategoryRow: React.FC<Props> = ({ cat, songCount, onPress,
       <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
     </TouchableOpacity>
   </View>
-);
+));
