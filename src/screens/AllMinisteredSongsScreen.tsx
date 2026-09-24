@@ -12,7 +12,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { DoodleBackground } from '../components/DoodleBackground';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import { BlurView } from 'expo-blur';
 import TrackOptionsModal from '../components/TrackOptionsModal';
 import { isHQGroup } from '../config/zones';
@@ -27,7 +26,7 @@ import { searchSongMatch, HighlightedText, sanitizeProgramName } from '../lib/se
 import { navigateToPlayer } from '../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
+const APP_LOGO = require('../../assets/logo/logo.png');
 
 const getTrackImage = (track: any) => {
   if (track.image && typeof track.image === 'string' && track.image.startsWith('http')) return track.image;
@@ -72,12 +71,6 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
   
   const { currentTrack: activeTrack, isPlaying, play, togglePlayback } = useTrackPlayer();
   const { currentZone, isLoading: isZoneLoading, zoneVersion } = useZone();
-
-  const placeholderVideoPlayer = useVideoPlayer(TRACK_PLACEHOLDER_VIDEO, player => {
-    player.loop = true;
-    player.muted = true;
-    player.play();
-  });
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
   const isProfileLoading = useUserStore(s => s.isProfileLoading);
@@ -321,23 +314,6 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     }
   };
 
-  const handleBatchImport = async () => {
-    if (selectedTracks.size === 0) return;
-    const songIds = Array.from(selectedTracks);
-    try {
-      const res = await api.songs.importFromMinistered(songIds);
-      if (res?.success) {
-        Alert.alert('Imported', res.message || `${songIds.length} song(s) imported to repertoire.`);
-        setIsSelectionMode(false);
-        setSelectedTracks(new Set());
-      } else {
-        Alert.alert('Notice', 'Could not import selected songs.');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to import songs.');
-    }
-  };
-
   useEffect(() => {
     if (isZoneLoading || isProfileLoading || !user) return;
     isMountedRef.current = true;
@@ -531,7 +507,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             />
             <View style={s.heroContent}>
               <View style={s.heroLogoRow}>
-                <Image source={require('../../assets/logo/logo.png')} style={s.heroLogo} contentFit="contain" />
+                <Image source={APP_LOGO} style={s.heroLogo} contentFit="contain" />
                 <Text style={s.heroLogoText}>Loveworld Singers</Text>
               </View>
               <Text style={s.heroTitle}>Ministered Songs</Text>
@@ -758,14 +734,11 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 <View style={s.trackArtContainer}>
                   {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
                     <Image source={{ uri: track.imageUrl }} style={s.trackArt} contentFit="cover" />
+                  ) : track.image && typeof track.image === 'object' && track.image.uri ? (
+                    <Image source={track.image} style={s.trackArt} contentFit="cover" />
                   ) : (
-                    <View style={s.trackArtVideoWrap}>
-                      <VideoView
-                        player={placeholderVideoPlayer}
-                        style={StyleSheet.absoluteFill}
-                        contentFit="cover"
-                        nativeControls={false}
-                      />
+                    <View style={s.trackArtLogoWrap}>
+                      <Image source={APP_LOGO} style={s.trackArtLogo} contentFit="contain" />
                     </View>
                   )}
                   {!hasAudio && (
@@ -901,9 +874,6 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
               </TouchableOpacity>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <TouchableOpacity onPress={handleBatchImport} style={{ padding: 4 }}>
-                <Ionicons name="download-outline" size={24} color={theme.colors.accent} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={() => {
                 const tracks = Array.from(selectedTracks).map(id => songs.find(s => s.id === id)).filter(Boolean);
                 setSelectedOptionsTrack(null);
@@ -932,7 +902,11 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             onPress={() => navigateToPlayer({ activeTrack, fromAllSongs: true, zoneId: activeTrack.zoneId, queue: filteredTracks })}
           >
             <MiniPlayerProgressBar theme={theme} />
-            <Image source={activeTrack.image} style={s.miniArt} contentFit="cover" />
+            <Image
+              source={activeTrack.image || APP_LOGO}
+              style={[s.miniArt, !activeTrack.image && { padding: 4, backgroundColor: 'rgba(255,255,255,0.06)' }]}
+              contentFit={activeTrack.image ? "cover" : "contain"}
+            />
             <View style={s.miniInfo}>
               <Text style={s.miniTitle} numberOfLines={1}>{activeTrack.title}</Text>
               <Text style={s.miniSub} numberOfLines={1}>{activeTrack.leadSinger} · {activeTrack.program}</Text>
@@ -1181,7 +1155,8 @@ const getStyles = (theme: any) => {
   trackIndex: { color: T.textMuted, fontSize: 12, fontWeight: '700', width: 28, textAlign: 'center' },
   trackArtContainer: { width: 46, height: 46, borderRadius: 8, marginRight: 12, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26' },
   trackArt: { width: 46, height: 46, borderRadius: 8 },
-  trackArtVideoWrap: { width: 46, height: 46, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C26' },
+  trackArtLogoWrap: { width: 46, height: 46, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C26', alignItems: 'center', justifyContent: 'center' },
+  trackArtLogo: { width: 26, height: 26 },
   noAudioOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   trackInfo: { flex: 1, justifyContent: 'center' },
   trackTitle: { color: T.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 3 },

@@ -33,15 +33,26 @@ export function formatLyricsHtml(raw: any): string {
       return core ? `${leading}<strong${attrs}>${core}</strong>${trailing}` : content;
     });
 
-  // 3. Convert markdown bold and italic markers, keeping spaces outside delimiters
+  // 2.5 Normalize glued section headers and collapse runaway asterisks
+  // Use [ \t]* so we never strip blank lines preceding section headers!
   str = str
-    .replace(/\*\*([\s\S]*?)\*\*/g, (_, p1) => {
+    .replace(
+      /(^|\n)[ \t]*(?:\*\*)?[ \t]*(VERSE\s*\d*|CHORUS\s*\d*(?:\s*\(.*?\))?|BRIDGE|INTRO|OUTRO|VAMP|PRE-CHORUS\s*\d*|REFRAIN|PAN|CODA|\(x\d+\)|Solo:|All:|Duet:|Call:|Resp:)[ \t]*(?:\*\*)?[ \t]*(\*{2,4}|:)[ \t]*([A-Za-z0-9"“'‘])/gi,
+      '$1<strong>$2</strong><br>$4'
+    )
+    .replace(/\*{4,}/g, '**')
+    .replace(/(\*\*[^\n*]+\*\*)[ \t]+([A-Za-z0-9])/g, '$1\n$2');
+
+  // 3. Convert markdown bold and italic markers, keeping spaces outside delimiters
+  // Restrict bold to single line boundaries so bold never swallows subsequent verses
+  str = str
+    .replace(/\*\*([^*\n]+?)\*\*/g, (_, p1) => {
       const leading = p1.match(/^\s*/)?.[0] || '';
       const trailing = p1.match(/\s*$/)?.[0] || '';
       const core = p1.trim();
       return core ? `${leading}<strong>${core}</strong>${trailing}` : p1;
     })
-    .replace(/(?<!\*)\*(?!\*)([\s\S]*?)(?<!\*)\*(?!\*)/g, (_, p1) => {
+    .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, (_, p1) => {
       const leading = p1.match(/^\s*/)?.[0] || '';
       const trailing = p1.match(/\s*$/)?.[0] || '';
       const core = p1.trim();

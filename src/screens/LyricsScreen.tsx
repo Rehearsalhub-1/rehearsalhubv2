@@ -100,6 +100,26 @@ export default function LyricsScreen({ route, navigation }: any) {
     !!activeTrack?.id
   );
 
+  useWebSocket(
+    'live_song',
+    'all',
+    (data: unknown) => {
+      const d = (data as any)?.data || (data as any);
+      if (!d || !activeTrack?.id) return;
+      if (d.id && String(d.id) === String(activeTrack.id)) {
+        setActiveTrack((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            lyrics: d.lyrics !== undefined ? d.lyrics : prev.lyrics,
+            title: d.title !== undefined ? d.title : prev.title,
+          };
+        });
+      }
+    },
+    !!activeTrack?.id
+  );
+
 
   return (
     <View style={styles.container}>

@@ -503,7 +503,7 @@ export default function ChatListScreen({ route, navigation }: any) {
 
       {}
       {bgSource ? (
-        <Image source={bgSource} style={[StyleSheet.absoluteFill, { opacity: isLight ? 0.95 : 0.25 }]} contentFit="cover" />
+        <Image source={bgSource} style={[StyleSheet.absoluteFill, { opacity: isLight ? 0.95 : 0.25 }]} contentFit="cover" autoplay={false} priority="high" cachePolicy="memory-disk" />
       ) : (
         <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
       )}

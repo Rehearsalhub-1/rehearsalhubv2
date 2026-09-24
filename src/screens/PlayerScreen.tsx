@@ -216,6 +216,66 @@ export default function PlayerScreen({ route, navigation }: any) {
     };
   }, [activeTrack?.id]);
 
+  // Real-time WebSocket sync: update lyrics, solfas, and details live when edited in Admin
+  useWebSocket(
+    'songs',
+    activeTrack?.id || '',
+    (data: unknown) => {
+      const d = (data as any)?.data || (data as any);
+      if (!d || !activeTrack?.id) return;
+      if (d.id && String(d.id) !== String(activeTrack.id)) return;
+      setActiveTrack((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          ...d,
+          lyrics: d.lyrics !== undefined ? d.lyrics : prev.lyrics,
+          solfa: (d.notation || d.solfas || d.solfa) ?? prev.solfa,
+          conductorGuide: (d.solfas || d.conductorGuide || d.guide) ?? prev.conductorGuide,
+          title: d.title !== undefined ? d.title : prev.title,
+          leadSinger: d.leadSinger ?? prev.leadSinger,
+          writer: d.writer ?? prev.writer,
+          conductor: d.conductor ?? prev.conductor,
+          key: d.key ?? prev.key,
+          tempo: d.tempo ?? prev.tempo,
+          comments: d.comments ?? prev.comments,
+          notes: d.notes ?? prev.notes,
+        };
+      });
+    },
+    !!activeTrack?.id
+  );
+
+  useWebSocket(
+    'live_song',
+    'all',
+    (data: unknown) => {
+      const d = (data as any)?.data || (data as any);
+      if (!d || !activeTrack?.id) return;
+      if (d.id && String(d.id) === String(activeTrack.id)) {
+        setActiveTrack((prev: any) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ...d,
+            lyrics: d.lyrics !== undefined ? d.lyrics : prev.lyrics,
+            solfa: (d.notation || d.solfas || d.solfa) ?? prev.solfa,
+            conductorGuide: (d.solfas || d.conductorGuide || d.guide) ?? prev.conductorGuide,
+            title: d.title !== undefined ? d.title : prev.title,
+            leadSinger: d.leadSinger ?? prev.leadSinger,
+            writer: d.writer ?? prev.writer,
+            conductor: d.conductor ?? prev.conductor,
+            key: d.key ?? prev.key,
+            tempo: d.tempo ?? prev.tempo,
+            comments: d.comments ?? prev.comments,
+            notes: d.notes ?? prev.notes,
+          };
+        });
+      }
+    },
+    !!activeTrack?.id
+  );
+
   const { width } = useWindowDimensions();
   const [activePreviewTab, setActivePreviewTab] = useState('Lyrics');
 

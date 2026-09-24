@@ -591,7 +591,7 @@ const isBirthdayThisWeek = (rawBday: string): { isThisWeek: boolean; isToday: bo
     <View style={s.root}>
       <StatusBar style="light" />
       {bgSource ? (
-        <Image source={bgSource} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image source={bgSource} style={StyleSheet.absoluteFill} contentFit="cover" autoplay={false} priority="high" cachePolicy="memory-disk" />
       ) : (
         <LinearGradient colors={theme.gradients.bgBase} locations={theme.gradients.bgBaseLocations} style={StyleSheet.absoluteFill} />
       )}

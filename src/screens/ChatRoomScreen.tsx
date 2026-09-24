@@ -153,7 +153,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     tickColorRead: theme.colors.tickRead,
   };
 
-  const { room: incomingRoom, roomId: deepLinkRoomId, chatId } = route.params || {};
+  const { room: incomingRoom, roomId: deepLinkRoomId, chatId, card } = route.params || {};
+  const bgSource = card?.source;
   const effectiveRoomId = deepLinkRoomId || chatId;
   const [room, setRoom] = useState<any>(incomingRoom);
   const [isLoadingDeepLink, setIsLoadingDeepLink] = useState(!incomingRoom && !!effectiveRoomId);
@@ -2069,7 +2070,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         >
           <View style={{ flex:1, backgroundColor: APP_THEME.chatWallpaper }}>
             {chatWallpaperUri ? (
-              <Image source={{ uri: chatWallpaperUri }} style={[StyleSheet.absoluteFillObject, { opacity: chatWallpaperOpacity }]} contentFit="cover" />
+              <Image source={{ uri: chatWallpaperUri }} style={[StyleSheet.absoluteFillObject, { opacity: chatWallpaperOpacity }]} contentFit="cover" autoplay={false} priority="high" cachePolicy="memory-disk" />
+            ) : bgSource ? (
+              <Image source={bgSource} style={[StyleSheet.absoluteFillObject, { opacity: themeName === 'light' ? 0.9 : 0.25 }]} contentFit="cover" autoplay={false} priority="high" cachePolicy="memory-disk" />
             ) : (
               <View style={[StyleSheet.absoluteFillObject, { opacity: themeName === 'light' ? 0.04 : 0.02, overflow: 'hidden' }]} pointerEvents="none">
                 {Array.from({ length: 15 }).map((_, row) =>

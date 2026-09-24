@@ -75,12 +75,12 @@ export function isSongExplicitlyOff(s: any): boolean {
     v === '0' ||
     (typeof v === 'string' && (v.toLowerCase() === 'false' || v.toLowerCase() === 'off' || v.toLowerCase() === 'inactive'));
 
-  if (s.isActive !== undefined && isFalsy(s.isActive)) return true;
-  if (s.is_active !== undefined && isFalsy(s.is_active)) return true;
-  if (s.active !== undefined && isFalsy(s.active)) return true;
-  if (s.isLive !== undefined && isFalsy(s.isLive)) return true;
-  if (s.is_live !== undefined && isFalsy(s.is_live)) return true;
-  if (s.live !== undefined && isFalsy(s.live)) return true;
+  if (s.isActive !== undefined && isFalsy(s.isActive) && status !== 'live') return true;
+  if (s.is_active !== undefined && isFalsy(s.is_active) && status !== 'live') return true;
+  if (s.active !== undefined && isFalsy(s.active) && status !== 'live') return true;
+  if (s.isLive !== undefined && isFalsy(s.isLive) && status !== 'live') return true;
+  if (s.is_live !== undefined && isFalsy(s.is_live) && status !== 'live') return true;
+  if (s.live !== undefined && isFalsy(s.live) && status !== 'live') return true;
   return false;
 }
 
@@ -126,7 +126,12 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
     }
 
     const statusStr = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
-    const isExplicitTurnOff = statusStr === 'inactive' || statusStr === 'ended' || statusStr === 'off' || statusStr === 'stopped' || update.isLive === false || update.is_live === false;
+    const isExplicitTurnOff =
+      statusStr === 'inactive' ||
+      statusStr === 'ended' ||
+      statusStr === 'off' ||
+      statusStr === 'stopped' ||
+      update._action === 'deactivate';
 
     // If explicitly inactive / off / ended
     if (isExplicitTurnOff) {
