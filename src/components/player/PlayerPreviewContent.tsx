@@ -34,13 +34,13 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
   if (!activeTrack) return null;
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const isTablet = propIsTablet ?? (windowWidth >= 768 || (windowWidth >= 600 && windowHeight >= 900));
+  const isTablet = (propIsTablet === true) || (windowWidth >= 768) || (windowWidth >= 600 && windowHeight >= 750) || (windowHeight >= 950);
 
-  // Well-balanced: comfortable reading height on phone (~235px), spacious on tablet (~520px)
-  const previewMaxHeight = isTablet ? 520 : 235;
-  const previewMinHeight = isTablet ? 260 : 110;
-  const emptyMinHeight = isTablet ? 140 : 80;
-  const detailsMaxHeight = isTablet ? 240 : 110;
+  // Well-balanced: comfortable reading height on phone (~235px), expansive on tablet (min 380px, up to 55% screen height / 700px)
+  const previewMaxHeight = isTablet ? Math.min(Math.max(Math.round(windowHeight * 0.55), 450), 700) : 235;
+  const previewMinHeight = isTablet ? 380 : 110;
+  const emptyMinHeight = isTablet ? 160 : 80;
+  const detailsMaxHeight = isTablet ? 360 : 110;
 
   const resolvedConductorGuide =
     activeTrack.conductorGuide ||
@@ -349,7 +349,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             {(() => {
               let raw = activeTrack.comments || activeTrack.notes || (activeTrack as any).coordinatorComment;
               if (!raw) return (
-                <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                   <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                     No comments available.
                   </Text>
@@ -369,7 +369,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
               if (Array.isArray(raw)) {
                 if (raw.length === 0) {
                   return (
-                    <View style={{ minHeight: 100, justifyContent: 'center' }}>
+                    <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                       <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
                         No comments available.
                       </Text>

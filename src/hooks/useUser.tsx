@@ -27,6 +27,7 @@ export interface UserProfile {
   hasHqAccess: boolean;
   canAccessArchive: boolean;
   canAccessPreRehearsal: boolean;
+  canAnnotate: boolean;
   isZoneCoordinator: boolean;
   hiddenFeatures: Record<string, boolean>;
   rehearsalCount: number;
@@ -118,6 +119,7 @@ function parseProfile(uid: string, rawInput: Record<string, any>): UserProfile {
     hasHqAccess: !!(d.has_hq_access || d.hasHqAccess),
     canAccessArchive: !!(d.can_access_archive || d.canAccessArchive || d.canSeeArchive),
     canAccessPreRehearsal: !!(d.can_access_pre_rehearsal || d.canAccessPreRehearsal),
+    canAnnotate: !!(d.canAnnotate || d.can_annotate),
     isZoneCoordinator: isCoordinator,
     hiddenFeatures,
     rehearsalCount: d.rehearsalCount || 0,

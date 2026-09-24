@@ -16,7 +16,8 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
   const insets = useSafeAreaInsets();
   
   const [isAnnotationMode, setIsAnnotationMode] = useState(false);
-  const [isPrivileged, setIsPrivileged] = useState(false);
+  const profile = useUserStore(s => s.profile);
+  const isPrivileged = canUseAnnotations(profile);
   const [annotationTool, setAnnotationTool] = useState<'pen' | 'eraser' | 'line' | 'rectangle' | 'circle'>('pen');
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [showColorPalette, setShowColorPalette] = useState(true);
@@ -33,11 +34,6 @@ export function useAnnotationsAndNotes(trackId: string | undefined, trackTitle: 
   const [personalStrokes, setPersonalStrokes] = useState<any[]>([]);
   const [noteMode, setNoteMode] = useState<'text' | 'draw'>('text');
   const [isSavingNote, setIsSavingNote] = useState(false);
-  useEffect(() => {
-    const profile = useUserStore.getState().profile;
-    // Use centralized canUseAnnotations which respects hideAnnotations feature metric
-    setIsPrivileged(canUseAnnotations(profile));
-  }, []);
 
   useEffect(() => {
     if (!trackId) {

@@ -97,7 +97,7 @@ const isConductorGuideText = (text: string | null | undefined): boolean => {
 export default function PlayerScreen({ route, navigation }: any) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => getStyles(theme, insets, windowWidth), [theme, insets, windowWidth]);
   const user = useUserStore(s => s.user);
   const profile = useUserStore(s => s.profile);
@@ -1121,7 +1121,7 @@ export default function PlayerScreen({ route, navigation }: any) {
             isConductorGuideText={isConductorGuideText}
             navigation={navigation}
             theme={theme}
-            isTablet={windowWidth >= 768}
+            isTablet={(windowWidth >= 600 && windowHeight >= 750) || windowWidth >= 768 || windowHeight >= 950}
           />
 
           {/* A-B Section Looper Strip */}

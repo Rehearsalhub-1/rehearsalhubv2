@@ -32,18 +32,21 @@ export function canAccessArchive(profile: UserProfile | null | undefined): boole
   // HQ Admins are never blocked by the hideArchives flag — check role first
   if (isHQAdmin(profile)) return true;
 
-  const hf = getHiddenFeatures(profile);
-  if (hf.hideArchives === true) return false;
-
   const raw = (profile as any)?.raw || {};
-  return !!(
+  const hasExplicitAccess = !!(
     profile.canAccessArchive ||
     (profile as any)?.canSeeArchive ||
-    (profile as any)?.canAccessArchive ||
+    (profile as any)?.can_access_archive ||
     raw.canSeeArchive ||
     raw.canAccessArchive ||
     raw.can_access_archive
   );
+  if (hasExplicitAccess) return true;
+
+  const hf = getHiddenFeatures(profile);
+  if (hf.hideArchives === true) return false;
+
+  return false;
 }
 
 /**
@@ -51,17 +54,21 @@ export function canAccessArchive(profile: UserProfile | null | undefined): boole
  */
 export function canAccessPreRehearsal(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
-  const hf = getHiddenFeatures(profile);
-  if (hf.hidePreRehearsal === true) return false;
   if (isHQAdmin(profile)) return true;
   if (isZoneCoordinator(profile)) return true;
 
   const raw = (profile as any)?.raw || {};
-  return !!(
+  const hasExplicitAccess = !!(
     profile.canAccessPreRehearsal ||
     raw.can_access_pre_rehearsal ||
     raw.canAccessPreRehearsal
   );
+  if (hasExplicitAccess) return true;
+
+  const hf = getHiddenFeatures(profile);
+  if (hf.hidePreRehearsal === true) return false;
+
+  return false;
 }
 
 /**
@@ -104,15 +111,21 @@ export function isFeatureHidden(profile: UserProfile | null | undefined, feature
  */
 export function canUseAnnotations(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
-  // Feature metric toggle: if hideAnnotations is set, deny access
-  const hf = getHiddenFeatures(profile);
-  if (hf.hideAnnotations) return false;
-  // Check explicit permission fields
+  if (isHQAdmin(profile)) return true;
+
   const raw = (profile as any)?.raw || {};
-  return !!(
+  const hasExplicitAccess = !!(
+    profile.canAnnotate === true ||
+    (profile as any).can_annotate === true ||
     raw.canAnnotate === true ||
+    raw.can_annotate === true ||
     raw.canUseBrush === true ||
-    raw.canUseAnnotation === true ||
-    (profile as any).canAnnotate === true
+    raw.canUseAnnotation === true
   );
+  if (hasExplicitAccess) return true;
+
+  const hf = getHiddenFeatures(profile);
+  if (hf.hideAnnotations === true) return false;
+
+  return false;
 }
