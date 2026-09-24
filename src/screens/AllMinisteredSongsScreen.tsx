@@ -163,9 +163,10 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     try {
       const isHQ = isHQGroup(resolvedZoneId);
 
-      const [songsResult, programsResult] = await Promise.all([
+      const [songsResult, programsResult, settingsOrderResult] = await Promise.all([
         api.songs.getMaster(),
-        api.programs.getMasterPrograms()
+        api.programs.getMasterPrograms(),
+        api.settings.get('master_collections_order').catch(() => null),
       ]);
       
       if (!isMountedRef.current) return;
@@ -258,8 +259,6 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           };
         });
 
-      validPrograms.sort((a, b) => b.songCount - a.songCount);
-
       const distinctCategories: string[] = Array.from(
         new Set(
           mappedSongs
@@ -268,10 +267,32 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         )
       ).sort() as string[];
 
+      const savedOrder = settingsOrderResult?.data?.order || settingsOrderResult?.data?.value?.order;
+      if (Array.isArray(savedOrder) && savedOrder.length > 0) {
+        const orderMap = new Map<string, number>();
+        savedOrder.forEach((name: string, i: number) => orderMap.set((name || '').toLowerCase(), i));
+        distinctCategories.sort((a, b) => {
+          const idxA = orderMap.has(a.toLowerCase()) ? orderMap.get(a.toLowerCase())! : 9999;
+          const idxB = orderMap.has(b.toLowerCase()) ? orderMap.get(b.toLowerCase())! : 9999;
+          if (idxA !== idxB) return idxA - idxB;
+          return a.localeCompare(b);
+        });
+        validPrograms.sort((a, b) => {
+          const idxA = orderMap.has(a.name.toLowerCase()) ? orderMap.get(a.name.toLowerCase())! : 9999;
+          const idxB = orderMap.has(b.name.toLowerCase()) ? orderMap.get(b.name.toLowerCase())! : 9999;
+          if (idxA !== idxB) return idxA - idxB;
+          return b.songCount - a.songCount;
+        });
+      } else {
+        validPrograms.sort((a, b) => b.songCount - a.songCount);
+      }
+
+      const distinctCategoriesSorted = distinctCategories;
+
       setSongs(mappedSongs);
       setSingers([...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[]);
       setPrograms(validPrograms);
-      setCategories(distinctCategories);
+      setCategories(distinctCategoriesSorted);
       setIsLoading(false);
 
       cachedSongs = mappedSongs;
@@ -344,8 +365,15 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     if (selectedProgramId) {
       const songProgram = (t.program || '').toLowerCase();
       const songProgramId = (t.programId || '').toLowerCase();
+      const songCategory = (t.category || '').toLowerCase();
+      const songCats = Array.isArray(t.categories) ? t.categories.map((c: string) => (c || '').toLowerCase()) : [];
       const target = selectedProgramId.toLowerCase();
-      const matches = songProgram === target || songProgramId === target || songProgram.includes(target);
+      const matches =
+        songProgram === target ||
+        songProgramId === target ||
+        songProgram.includes(target) ||
+        songCategory === target ||
+        songCats.includes(target);
       if (!matches) return false;
     }
     if (quickFilter !== 'all') {
@@ -395,12 +423,13 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       return;
     }
     const q = overrideQueue || filteredTracks;
-    const isSameTrack = activeTrack && String(activeTrack.id) === String(track.id);
-    if (!isSameTrack) {
-      play(track, q, true);
-    } else {
-      navigateToPlayer({ activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: q });
-    }
+    navigateToPlayer({
+      activeTrack: track,
+      fromAllSongs: true,
+      zoneId: track.zoneId,
+      queue: q,
+      autoplay: false,
+    });
   };
 
   const toggleSelection = (trackId: string) => {

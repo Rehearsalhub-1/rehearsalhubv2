@@ -93,9 +93,21 @@ export default function HistoryScreen({ route, navigation }: any) {
             const timeB = b.created_at?.seconds ? b.created_at.seconds * 1000 : new Date(b.created_at || b.date || 0).getTime();
             return timeB - timeA;
           });
-          setHistoryEntries(entries);
-          if (entries.length > 0) {
-            setExpandedId(entries[0].id);
+          const seen = new Set();
+          const uniqueEntries: any[] = [];
+          for (const item of entries) {
+            if (item && item.id) {
+              if (!seen.has(item.id)) {
+                seen.add(item.id);
+                uniqueEntries.push(item);
+              }
+            } else if (item) {
+              uniqueEntries.push(item);
+            }
+          }
+          setHistoryEntries(uniqueEntries);
+          if (uniqueEntries.length > 0) {
+            setExpandedId(uniqueEntries[0].id);
           }
         } else {
           setHistoryEntries([]);

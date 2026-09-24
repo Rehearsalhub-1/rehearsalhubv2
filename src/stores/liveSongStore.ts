@@ -125,34 +125,39 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
       return;
     }
 
-    // If explicitly inactive / off / heard / unheard
-    if (isSongExplicitlyOff(update)) {
+    const statusStr = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
+    const isExplicitTurnOff = statusStr === 'inactive' || statusStr === 'ended' || statusStr === 'off' || statusStr === 'stopped' || update.isLive === false || update.is_live === false;
+
+    // If explicitly inactive / off / ended
+    if (isExplicitTurnOff) {
       get().removeSong(songId);
       return;
     }
 
-    // If song is live / active now
-    if (isLiveSong(update)) {
+    const existingIndex = get().activeSongs.findIndex(s => String(s.id) === String(songId));
+
+    // If song is currently live OR already in activeSongs (e.g. lyrics/details edited while live)
+    if (isLiveSong(update) || existingIndex >= 0) {
       set((state) => {
-        const existingIndex = state.activeSongs.findIndex(
+        const idx = state.activeSongs.findIndex(
           (s) => String(s.id) === String(songId)
         );
         const resolvedAudioUrl = resolveSongAudioUrl(update);
         const resolvedAudioUrls = resolveSongAudioUrls(update);
 
-        if (existingIndex >= 0) {
+        if (idx >= 0) {
           const next = [...state.activeSongs];
-          next[existingIndex] = {
-            ...next[existingIndex],
+          next[idx] = {
+            ...next[idx],
             ...update,
             isActive: true,
             isLive: true,
             status: 'live',
-            audioUrl: resolvedAudioUrl || next[existingIndex].audioUrl,
+            audioUrl: resolvedAudioUrl || next[idx].audioUrl,
             audioUrls:
               resolvedAudioUrls && Object.keys(resolvedAudioUrls).length > 0
                 ? resolvedAudioUrls
-                : next[existingIndex].audioUrls,
+                : next[idx].audioUrls,
           };
           return { activeSongs: next, hasInitialFetched: true };
         } else {

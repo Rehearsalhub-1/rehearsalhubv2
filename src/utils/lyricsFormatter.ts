@@ -7,10 +7,7 @@ export function formatLyricsHtml(raw: any): string {
   let str = typeof raw === 'string' ? raw : JSON.stringify(raw);
   str = str.trim();
 
-  // 1. Decode &nbsp; entities to clean whitespace
-  str = str.replace(/&nbsp;/gi, ' ');
-
-  // If text contains escaped HTML tags (&lt;div&gt;, &lt;b&gt;), unescape them so renderer parses them as tags
+  // 1. Unescape escaped tags if text contains &lt;b&gt; etc.
   if (/&lt;(div|p|br|b|strong|span|i|em)[^&]*&gt;/i.test(str)) {
     str = str
       .replace(/&lt;/gi, '<')
@@ -20,15 +17,48 @@ export function formatLyricsHtml(raw: any): string {
       .replace(/&amp;/gi, '&');
   }
 
-  // 2. Convert markdown bold and italic markers
+  // 2. Move any whitespace trapped INSIDE <b> or <strong> outside the tag
+  // This prevents HTML renderers from collapsing trailing whitespace inside inline elements.
   str = str
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<strong>$1</strong>');
+    .replace(/<b([^>]*)>([\s\S]*?)<\/b>/gi, (_, attrs, content) => {
+      const leading = content.match(/^\s*/)?.[0] || '';
+      const trailing = content.match(/\s*$/)?.[0] || '';
+      const core = content.trim();
+      return core ? `${leading}<b${attrs}>${core}</b>${trailing}` : content;
+    })
+    .replace(/<strong([^>]*)>([\s\S]*?)<\/strong>/gi, (_, attrs, content) => {
+      const leading = content.match(/^\s*/)?.[0] || '';
+      const trailing = content.match(/\s*$/)?.[0] || '';
+      const core = content.trim();
+      return core ? `${leading}<strong${attrs}>${core}</strong>${trailing}` : content;
+    });
 
-  // 3. Normalize CRLF to LF
+  // 3. Convert markdown bold and italic markers, keeping spaces outside delimiters
+  str = str
+    .replace(/\*\*([\s\S]*?)\*\*/g, (_, p1) => {
+      const leading = p1.match(/^\s*/)?.[0] || '';
+      const trailing = p1.match(/\s*$/)?.[0] || '';
+      const core = p1.trim();
+      return core ? `${leading}<strong>${core}</strong>${trailing}` : p1;
+    })
+    .replace(/(?<!\*)\*(?!\*)([\s\S]*?)(?<!\*)\*(?!\*)/g, (_, p1) => {
+      const leading = p1.match(/^\s*/)?.[0] || '';
+      const trailing = p1.match(/\s*$/)?.[0] || '';
+      const core = p1.trim();
+      return core ? `${leading}<strong>${core}</strong>${trailing}` : p1;
+    });
+
+  // 4. Guarantee spaces adjacent to bold/strong tags are not collapsed by react-native-render-html
+  str = str
+    .replace(/<\/b>(\s+)/gi, '</b>&nbsp;')
+    .replace(/<\/strong>(\s+)/gi, '</strong>&nbsp;')
+    .replace(/(\s+)<b(\s|>)/gi, '&nbsp;<b$2')
+    .replace(/(\s+)<strong(\s|>)/gi, '&nbsp;<strong$2');
+
+  // 5. Normalize CRLF to LF
   str = str.replace(/\r\n/g, '\n');
 
-  // 4. Preserve line breaks
+  // 6. Preserve line breaks
   if (/<(div|p|br|strong|b)[^>]*>/i.test(str)) {
     // Has HTML structure: preserve HTML and turn any loose raw newlines into <br>
     str = str
