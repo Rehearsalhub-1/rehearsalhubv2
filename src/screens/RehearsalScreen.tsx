@@ -52,7 +52,7 @@ const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const COVER_IMAGE = require('../../assets/banner/praisenight28.jpg');
+const COVER_IMAGE = require('../../assets/TRACK_PLACEHOLDER.png');
 
 
 
@@ -194,7 +194,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
               status: songDocData.status || 'unheard',
               isActive: songDocData.isActive !== false,
               rehearsalCount: songDocData.rehearsalCount || 0,
-              imageUrl: songDocData.imageUrl || '',
+              imageUrl: (songDocData.imageUrl && !songDocData.imageUrl.includes('/banner/')) ? songDocData.imageUrl : '',
               image: getTrackImage(songDocData, 0),
               zoneId: activeZone?.id || '',
             };
@@ -666,8 +666,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
             drummer: song.drummer || '',
             leadGuitarist: song.leadGuitarist || '',
             createdAt: song.createdAt ? typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString() : new Date().toISOString(),
-            imageUrl: song.imageUrl || getTrackImage(song) || '',
-            image: (song.imageUrl || getTrackImage(song)) ? { uri: song.imageUrl || getTrackImage(song) } : null,
+            imageUrl: (song.imageUrl && !song.imageUrl.includes('/banner/')) ? song.imageUrl : '',
+            image: getTrackImage(song),
             zoneId: resolvedZoneId,
             collectionName: (selectedRehearsal.scope === 'subgroup' || selectedRehearsal.subGroupId)
                ? 'subgroup_songs'
@@ -955,8 +955,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
             drummer: update.drummer || '',
             leadGuitarist: update.leadGuitarist || '',
             createdAt: update.createdAt || new Date().toISOString(),
-            imageUrl: update.imageUrl || '',
-            image: getTrackImage(update, prev.length),
+            imageUrl: (update.imageUrl && !update.imageUrl.includes('/banner/')) ? update.imageUrl : '',
+            image: getTrackImage(update),
             zoneId: activeZone?.id || 'zone-001',
             collectionName: 'praise_night_songs'
           };

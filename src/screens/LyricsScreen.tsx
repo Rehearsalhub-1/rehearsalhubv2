@@ -1,29 +1,37 @@
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions } from
-'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+  Dimensions,
+  Platform,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
 import { formatLyricsHtml } from '../utils/lyricsFormatter';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import Svg, { Path } from 'react-native-svg';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useAnnotationsAndNotes } from '../hooks/useAnnotationsAndNotes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DoodleBackground } from '../components/DoodleBackground';
+import { useTrackPlayer } from '../hooks/useTrackPlayer';
+import { PlayerProgressSlider } from '../components/player/PlayerHUDOverlays';
+import { PlayerControlsRow } from '../components/player/PlayerControlsRow';
+import { PlayerAnnotationFAB } from '../components/player/PlayerAnnotationFAB';
+import { api } from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function LyricsScreen({ route, navigation }: any) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
@@ -32,6 +40,88 @@ export default function LyricsScreen({ route, navigation }: any) {
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
 
+  const {
+    isPlaying,
+    isLoading,
+    togglePlayback,
+    seekTo,
+    skipToNext,
+    skipToPrevious,
+    isShuffle,
+    toggleShuffle,
+    repeatMode,
+    toggleRepeat,
+    currentTrack,
+    abLoop,
+  } = useTrackPlayer();
+
+  const hasAudio = !!(activeTrack?.audioUrl || currentTrack?.audioUrl);
+
+  const formatTime = useCallback((millis: number) => {
+    if (!millis || isNaN(millis)) return '0:00';
+    const totalSeconds = Math.floor(millis / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+  }, []);
+
+  const handlePlayPause = useCallback(async () => {
+    try {
+      await togglePlayback();
+    } catch (e) {
+      console.warn('Error toggling playback in LyricsScreen:', e);
+    }
+  }, [togglePlayback]);
+
+  const handleToggleShuffle = useCallback(() => {
+    toggleShuffle();
+  }, [toggleShuffle]);
+
+  const handleToggleRepeat = useCallback(() => {
+    toggleRepeat();
+  }, [toggleRepeat]);
+
+  const handleSkipNext = useCallback(async () => {
+    try {
+      await skipToNext();
+    } catch (e) {
+      console.warn('Error skipping next in LyricsScreen:', e);
+    }
+  }, [skipToNext]);
+
+  const handleSkipPrevious = useCallback(async () => {
+    try {
+      await skipToPrevious();
+    } catch (e) {
+      console.warn('Error skipping previous in LyricsScreen:', e);
+    }
+  }, [skipToPrevious]);
+
+  // Keep activeTrack in sync if player skips to next/previous song
+  useEffect(() => {
+    if (currentTrack && currentTrack.id && String(currentTrack.id) !== String(activeTrack?.id)) {
+      setActiveTrack(currentTrack);
+    }
+  }, [currentTrack]);
+
+  // If lyrics missing on active track, fetch full song details
+  useEffect(() => {
+    if (activeTrack?.id && !activeTrack?.lyrics) {
+      api.songs
+        .getById(activeTrack.id)
+        .then((res: any) => {
+          const songData = res?.data || res;
+          if (songData?.lyrics) {
+            setActiveTrack((prev: any) => ({
+              ...prev,
+              ...songData,
+              lyrics: songData.lyrics,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTrack?.id]);
 
   useEffect(() => {
     if (paramTrack && paramTrack.id && String(paramTrack.id) !== String(activeTrack?.id)) {
@@ -61,7 +151,6 @@ export default function LyricsScreen({ route, navigation }: any) {
     });
   };
 
-
   const {
     isPrivileged,
     isAnnotationMode,
@@ -78,8 +167,8 @@ export default function LyricsScreen({ route, navigation }: any) {
     getMyColor,
     showColorPalette,
     setShowColorPalette
-  } = useAnnotationsAndNotes(activeTrack?.id, activeTrack?.title, { isPlayer: false });
-
+  } = useAnnotationsAndNotes(activeTrack?.id, activeTrack?.title, { isPlayer: false });
+
   useWebSocket(
     'songs',
     activeTrack?.id || '',
@@ -120,7 +209,6 @@ export default function LyricsScreen({ route, navigation }: any) {
     !!activeTrack?.id
   );
 
-
   return (
     <View style={styles.container}>
       <LinearGradient
@@ -135,7 +223,7 @@ export default function LyricsScreen({ route, navigation }: any) {
         end={{ x: 1, y: 0.7 }}
         style={StyleSheet.absoluteFill} />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
 
         {}
         <View style={styles.header}>
@@ -222,91 +310,87 @@ export default function LyricsScreen({ route, navigation }: any) {
 
         {AnnotationLayer}
 
-        {isPrivileged && (
-          <View style={{ position: 'absolute', bottom: 40, right: 24, flexDirection: 'row', alignItems: 'flex-end', zIndex: 101, gap: 12 }} pointerEvents="box-none">
-            {isAnnotationMode && showColorPalette && (
-              <View style={{ flexDirection: 'row', gap: 10, backgroundColor: 'rgba(0,0,0,0.85)', padding: 8, borderRadius: 24, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, marginBottom: 6 }}>
-                {['#ff3b30', '#34c759', '#007aff', '#ffcc00', '#af52de', '#ffffff'].map(c => {
-                  const isCurrent = (selectedColor || getMyColor()) === c;
-                  return (
-                    <TouchableOpacity
-                      key={c}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: 12,
-                        backgroundColor: c,
-                        borderWidth: isCurrent ? 2.5 : 0,
-                        borderColor: '#fff',
-                        transform: [{ scale: isCurrent ? 1.15 : 1 }]
-                      }}
-                      onPress={() => setSelectedColor(c)}
-                    />
-                  );
-                })}
-              </View>
-            )}
-            <View style={{ alignItems: 'center', gap: 10 }} pointerEvents="box-none">
-              {isAnnotationMode && (
-                <>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: 'rgba(255,59,48,0.95)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 }}
-                    onPress={handleClearMyAnnotations}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="trash-outline" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: showColorPalette ? theme.colors.accent : 'rgba(0,0,0,0.7)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, borderWidth: 1, borderColor: showColorPalette ? theme.colors.accent : 'rgba(255,255,255,0.1)' }}
-                    onPress={() => setShowColorPalette(!showColorPalette)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="color-palette-outline" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: annotationTool === 'eraser' ? theme.colors.accent : 'rgba(0,0,0,0.7)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, borderWidth: 1, borderColor: annotationTool === 'eraser' ? theme.colors.accent : 'rgba(255,255,255,0.1)' }}
-                    onPress={() => setAnnotationTool('eraser')}
-                    activeOpacity={0.8}
-                  >
-                    <MaterialCommunityIcons name="eraser" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={{ backgroundColor: annotationTool === 'pen' ? theme.colors.accent : 'rgba(0,0,0,0.7)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5, borderWidth: 1, borderColor: annotationTool === 'pen' ? theme.colors.accent : 'rgba(255,255,255,0.1)' }}
-                    onPress={() => setAnnotationTool('pen')}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="create-outline" size={20} color="#ffffff" />
-                  </TouchableOpacity>
-                </>
-              )}
-              <TouchableOpacity
+        {/* Movable Annotation FAB */}
+        <PlayerAnnotationFAB
+          isPrivileged={isPrivileged}
+          isAnnotationMode={isAnnotationMode}
+          onToggleAnnotationMode={() => setIsAnnotationMode(!isAnnotationMode)}
+          showColorPalette={showColorPalette}
+          onToggleColorPalette={() => setShowColorPalette(!showColorPalette)}
+          selectedColor={selectedColor}
+          getMyColor={getMyColor}
+          onSelectColor={setSelectedColor}
+          annotationTool={annotationTool}
+          onSelectTool={setAnnotationTool}
+          onClearMyAnnotations={handleClearMyAnnotations}
+          theme={theme}
+          initialBottom={175 + Math.max(insets.bottom, 12)}
+          initialRight={20}
+        />
+
+        {/* Docked Player Controls */}
+        <View style={[styles.dockedControlsContainer, { paddingBottom: Math.max(insets.bottom + 6, 20) }]}>
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 45 : 100}
+            tint="dark"
+            style={StyleSheet.absoluteFill}
+          />
+          <LinearGradient
+            colors={['rgba(24, 16, 44, 0.72)', 'rgba(10, 6, 20, 0.94)']}
+            style={StyleSheet.absoluteFill}
+          />
+
+          <View style={{ alignItems: 'center', marginBottom: 2 }}>
+            <Text
+              style={{
+                color: theme.colors.textPrimary,
+                fontSize: 13,
+                fontWeight: '700',
+                letterSpacing: -0.2,
+              }}
+              numberOfLines={1}
+            >
+              {activeTrack?.title || 'Now Playing'}
+            </Text>
+            {!!activeTrack?.leadSinger && (
+              <Text
                 style={{
-                  backgroundColor: isAnnotationMode ? theme.colors.accent : 'rgba(0,0,0,0.6)',
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 4 },
-                  shadowOpacity: 0.3,
-                  shadowRadius: 6,
-                  elevation: 8,
-                  borderWidth: 1,
-                  borderColor: isAnnotationMode ? theme.colors.accent : 'rgba(255,255,255,0.1)'
+                  color: theme.colors.accent,
+                  fontSize: 11,
+                  fontWeight: '600',
+                  marginTop: 1,
                 }}
-                onPress={() => setIsAnnotationMode(!isAnnotationMode)}
-                activeOpacity={0.8}
+                numberOfLines={1}
               >
-                <Ionicons 
-                  name="brush" 
-                  size={24} 
-                  color="#ffffff" 
-                />
-              </TouchableOpacity>
-            </View>
+                {activeTrack.leadSinger}
+              </Text>
+            )}
           </View>
-        )}
+
+          <PlayerProgressSlider
+            theme={theme}
+            styles={styles}
+            formatTime={formatTime}
+            seekTo={seekTo}
+            hasAudio={hasAudio}
+            abLoop={abLoop}
+          />
+
+          <PlayerControlsRow
+            isShuffle={isShuffle}
+            onToggleShuffle={handleToggleShuffle}
+            onSkipPrevious={handleSkipPrevious}
+            isLoading={isLoading}
+            isPlaying={isPlaying}
+            hasAudio={hasAudio}
+            onPlayPause={handlePlayPause}
+            onSkipNext={handleSkipNext}
+            repeatMode={repeatMode}
+            onToggleRepeat={handleToggleRepeat}
+            theme={theme}
+            styles={styles}
+          />
+        </View>
 
       </SafeAreaView>
     </View>
@@ -339,7 +423,7 @@ const getStyles = (theme: any) => {
   fullLyricsScroll: {
     paddingHorizontal: 24,
     paddingTop: 32,
-    paddingBottom: 220
+    paddingBottom: 240
   },
   fullLyricsLineActive: {
     color: theme.colors.textPrimary,
@@ -360,15 +444,20 @@ const getStyles = (theme: any) => {
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 36,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 20,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.cardBackgroundLight
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 20,
+    overflow: 'hidden',
+    zIndex: 90,
   },
   progressContainer: {
-    marginBottom: 20
+    marginBottom: 4,
   },
   progressBar: {
     width: '100%',
@@ -393,12 +482,33 @@ const getStyles = (theme: any) => {
   },
   timeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    marginTop: -8,
   },
   timeText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.textSecondary || theme.colors.textMuted,
     fontSize: 12,
     fontWeight: '600'
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
+  playPauseBtn: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: theme.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: theme.colors.accent,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 8,
   },
   dockedControlsRow: {
     flexDirection: 'row',

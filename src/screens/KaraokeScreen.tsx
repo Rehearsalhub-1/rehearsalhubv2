@@ -37,9 +37,36 @@ interface LyricLine {
   text: string;
 }
 
+const extractPlainLyricsLines = (raw: any): LyricLine[] => {
+  if (!raw) return [];
+  let str = typeof raw === 'string' ? raw : String(raw);
+
+  // Unescape common HTML entities
+  str = str
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&nbsp;/gi, ' ');
+
+  // Convert HTML breaks and paragraph tags into newlines
+  str = str
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<[^>]+>/g, '');
+
+  return str
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .map(line => ({ time: -1, text: line }));
+};
+
 const parseLRCLyrics = (lrc: string): LyricLine[] => {
-  if (!lrc || !lrc.trim()) return [{ time: 0, text: 'No lyrics available' }];
-  const lines = lrc.split('\n');
+  if (!lrc || typeof lrc !== 'string' || !lrc.trim()) return [];
+  const lines = lrc.split(/\r?\n/);
   const parsed: LyricLine[] = [];
   const timeRegex = /\[(\d{1,2}):(\d{2})(?:\.(\d+))?\]/g;
 
@@ -72,7 +99,40 @@ const parseLRCLyrics = (lrc: string): LyricLine[] => {
     return parsed.sort((a, b) => a.time - b.time);
   }
 
-  return [{ time: 0, text: 'No synced lyrics available' }];
+  // If no timestamped lines found, return empty array so caller can fall back to plain lyrics
+  return [];
+};
+
+const getLyricsFromSong = (song: any): LyricLine[] => {
+  if (!song) return [];
+
+  // 1. Synced lyrics array with timestamps
+  if (Array.isArray(song.syncedLyrics) && song.syncedLyrics.length > 0) {
+    const valid = song.syncedLyrics.filter((l: any) => l && typeof l.text === 'string' && l.text.trim());
+    if (valid.length > 0) {
+      return [...valid].sort((a: LyricLine, b: LyricLine) => (a.time || 0) - (b.time || 0));
+    }
+  }
+
+  // 2. LRC text with [mm:ss] timestamps
+  const rawLrc = song.karaokeLrcText || song.lrcText || song.syncedLyricsText || song.lyrics_lrc || song.lyricsLrc || song.lrc;
+  if (rawLrc && typeof rawLrc === 'string' && rawLrc.trim()) {
+    const lrcParsed = parseLRCLyrics(rawLrc);
+    if (lrcParsed.length > 0) {
+      return lrcParsed;
+    }
+  }
+
+  // 3. Plain lyrics text / HTML from song.lyrics or song.lyricsText
+  const plainCandidate = song.lyrics || song.lyricsText || song.plainLyrics || (typeof rawLrc === 'string' ? rawLrc : '');
+  if (plainCandidate && typeof plainCandidate === 'string' && plainCandidate.trim()) {
+    const plainLines = extractPlainLyricsLines(plainCandidate);
+    if (plainLines.length > 0) {
+      return plainLines;
+    }
+  }
+
+  return [];
 };
 
 export default function KaraokeScreen({ route, navigation }: any) {
@@ -99,7 +159,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activePart, setActivePart] = useState<string>('full');
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
+  const [lyricsMode, setLyricsMode] = useState<'auto' | 'manual'>('auto');
+  const lyricsScrollRef = useRef<ScrollView>(null);
+  const lineHeightsRef = useRef<number[]>([]);
   const { isPlaying, isLoading: isTrackPlayerBuffering, play: tpPlay, pause: tpPause } = useTrackPlayer();
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<AudioRecorder | null>(null);
@@ -336,29 +400,61 @@ export default function KaraokeScreen({ route, navigation }: any) {
     if (!rawSong) return;
 
     const resolvedUrls = resolveSongAudioUrls(rawSong);
-    const song = {
-      ...rawSong,
-      audioUrls: resolvedUrls,
-    };
+
+    // Only keep known vocal/stem keys — filter out things like 'pre-live', status fields, etc.
+    const VALID_PART_KEYS = ['full', 'soprano', 'alto', 'tenor', 'bass', 'lead', 'instrumental', 'backing'];
+    const cleanedUrls: Record<string, string> = {};
+    for (const key of VALID_PART_KEYS) {
+      if (resolvedUrls[key]) cleanedUrls[key] = resolvedUrls[key];
+    }
+    // If nothing matched, keep original so player still works
+    const finalUrls = Object.keys(cleanedUrls).length > 0 ? cleanedUrls : resolvedUrls;
+
+    const song = { ...rawSong, audioUrls: finalUrls };
     setActiveSong(song);
 
-    const availableParts = Object.keys(resolvedUrls);
-    const initialPart = resolvedUrls.full ? 'full' : (availableParts[0] || 'full');
+    const availableParts = Object.keys(finalUrls);
+    const initialPart = finalUrls.full ? 'full' : (availableParts[0] || 'full');
     setActivePart(initialPart);
 
-    let parsedLyrics: LyricLine[];
-    const rawLrc = song.karaokeLrcText || song.lrcText || song.syncedLyricsText || song.lyrics_lrc || song.lyricsLrc || song.lrc;
-    if (Array.isArray(song.syncedLyrics) && song.syncedLyrics.length > 0) {
-      parsedLyrics = [...song.syncedLyrics].sort((a: LyricLine, b: LyricLine) => a.time - b.time);
-    } else if (rawLrc && typeof rawLrc === 'string' && rawLrc.trim()) {
-      parsedLyrics = parseLRCLyrics(rawLrc);
-    } else {
-      parsedLyrics = [{ time: 0, text: 'No synced lyrics available' }];
-    }
+    const parsedLyrics = getLyricsFromSong(song);
     setLyrics(parsedLyrics);
     setCurrentLineIndex(0);
+    setIsLoadingLyrics(parsedLyrics.length === 0 && Boolean(song.id));
+    // Auto mode now works seamlessly for both LRC and plain text (teleprompter style)
+    setLyricsMode('auto');
     setShowSongPicker(false);
   };
+
+  // Hydrate full song details from API if lyrics are missing (e.g. from summary lists)
+  useEffect(() => {
+    if (!activeSong?.id) return;
+    if (lyrics.length > 0) {
+      setIsLoadingLyrics(false);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingLyrics(true);
+    api.songs.getById(String(activeSong.id)).then((res: any) => {
+      if (!isMounted) return;
+      const songData = res?.data || res;
+      if (songData) {
+        const hydratedLyrics = getLyricsFromSong(songData);
+        if (hydratedLyrics.length > 0) {
+          setLyrics(hydratedLyrics);
+          setCurrentLineIndex(0);
+        }
+      }
+    }).catch(err => {
+      console.warn('[KaraokeScreen] Failed to hydrate song lyrics:', err);
+    }).finally(() => {
+      if (isMounted) setIsLoadingLyrics(false);
+    });
+
+    return () => { isMounted = false; };
+  }, [activeSong?.id, lyrics.length]);
+
   const { position: tpPos, duration: tpDur } = useTrackPlayerProgress(200);
   useEffect(() => {
     if (!isSeeking && tpPos > 0) {
@@ -428,16 +524,25 @@ export default function KaraokeScreen({ route, navigation }: any) {
       await TrackPlayer.reset();
     } catch { }
   };
+  // Sync active lyric line to playback position (uses exact LRC timestamps if available, or teleprompter pacing for plain lyrics)
   useEffect(() => {
     if (lyrics.length === 0 || isSeeking) return;
 
     let activeIdx = 0;
-    for (let i = 0; i < lyrics.length; i++) {
-      if (position >= lyrics[i].time) {
-        activeIdx = i;
-      } else {
-        break;
+    const hasTimestamps = lyrics.some(l => l.time >= 0);
+
+    if (hasTimestamps) {
+      for (let i = 0; i < lyrics.length; i++) {
+        if (lyrics[i].time >= 0 && position >= lyrics[i].time) {
+          activeIdx = i;
+        } else if (lyrics[i].time >= 0) {
+          break;
+        }
       }
+    } else if (duration > 0) {
+      // Plain text: distribute lines across song duration so it auto-scrolls like a teleprompter
+      const progressRatio = Math.min(1, Math.max(0, position / duration));
+      activeIdx = Math.min(lyrics.length - 1, Math.floor(progressRatio * lyrics.length));
     }
 
     if (activeIdx !== currentLineIndex) {
@@ -447,7 +552,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
         Animated.timing(waveformAnim, { toValue: 0, duration: 300, useNativeDriver: true })
       ]).start();
     }
-  }, [position, lyrics, isSeeking]);
+  }, [position, duration, lyrics, isSeeking]);
 
   const recordLatencyRef = useRef(0);
 
@@ -747,10 +852,23 @@ export default function KaraokeScreen({ route, navigation }: any) {
     }
   };
 
-  const prevLyric = currentLineIndex > 0 ? (lyrics[currentLineIndex - 1]?.text || '') : '';
-  const currentLyric = lyrics[currentLineIndex]?.text || ' ';
-  const nextLyric = lyrics[currentLineIndex + 1]?.text || '';
+  const hasLrc = lyrics.length > 0 && lyrics.some(l => l.time >= 0);
   const progress = duration > 0 ? (position / duration) : 0;
+
+  const PART_LABELS: Record<string, string> = {
+    full: 'Full Mix', soprano: 'Soprano', alto: 'Alto',
+    tenor: 'Tenor', bass: 'Bass', lead: 'Lead', instrumental: 'Instrumental', backing: 'Backing',
+  };
+  const partDisplayName = PART_LABELS[activePart] || activePart;
+
+  // Auto-scroll to active line whenever it changes (auto mode only)
+  useEffect(() => {
+    if (lyricsMode !== 'auto' || !lyricsScrollRef.current || lyrics.length === 0) return;
+    const offset = lineHeightsRef.current
+      .slice(0, currentLineIndex)
+      .reduce((sum, h) => sum + h, 0);
+    lyricsScrollRef.current.scrollTo({ y: Math.max(0, offset - 80), animated: true });
+  }, [currentLineIndex, lyricsMode]);
 
   return (
     <View style={styles.container}>
@@ -762,17 +880,17 @@ export default function KaraokeScreen({ route, navigation }: any) {
         </View>
       )}
       <ImageBackground
-        source={require('../../assets/image/home1.jpg')}
+        source={require('../../assets/karoake background.webp')}
         style={StyleSheet.absoluteFill}
         resizeMode="cover"
       />
 
       <View style={styles.overlay} />
       <LinearGradient
-        colors={theme.gradients.bgGlow}
-        locations={theme.gradients.bgGlowLocations}
-        start={{ x: 0, y: 0.3 }} end={{ x: 1, y: 0.7 }}
-        style={[StyleSheet.absoluteFill, { opacity: 0.3 }]}
+        colors={['rgba(10,4,30,0.55)', 'rgba(80,20,120,0.45)', 'rgba(10,4,30,0.75)']}
+        locations={[0, 0.5, 1]}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
       />
 
       <SafeAreaView style={styles.safeArea}>
@@ -805,14 +923,36 @@ export default function KaraokeScreen({ route, navigation }: any) {
               <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold', letterSpacing: 1 }}>REC</Text>
             </View>
           )}
-          {activeSong && (
-            <View style={{ position: 'absolute', top: 16, left: 20, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
-              <Ionicons name="mic-outline" size={12} color={T.accent} />
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
-                Part: {activePart}
-              </Text>
-            </View>
-          )}
+
+          {/* Mode toggle + part badge row */}
+          <View style={{ position: 'absolute', top: 12, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, zIndex: 50 }}>
+            {activeSong ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(0,0,0,0.45)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
+                <Ionicons name="mic-outline" size={12} color={T.accent} />
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
+                  {partDisplayName}
+                </Text>
+              </View>
+            ) : <View />}
+
+            {activeSong && (
+              <View style={{ flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 20, padding: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }}>
+                <TouchableOpacity
+                  onPress={() => setLyricsMode('auto')}
+                  style={[{ paddingHorizontal: 14, paddingVertical: 5, borderRadius: 16 }, lyricsMode === 'auto' && { backgroundColor: T.accent }]}
+                >
+                  <Text style={{ color: lyricsMode === 'auto' ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>AUTO</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setLyricsMode('manual')}
+                  style={[{ paddingHorizontal: 14, paddingVertical: 5, borderRadius: 16 }, lyricsMode === 'manual' && { backgroundColor: 'rgba(255,255,255,0.18)' }]}
+                >
+                  <Text style={{ color: lyricsMode === 'manual' ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 }}>MANUAL</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
           {!activeSong ? (
             <View style={styles.emptyStage}>
               <Ionicons name="musical-notes-outline" size={64} color="rgba(255,255,255,0.3)" />
@@ -822,19 +962,66 @@ export default function KaraokeScreen({ route, navigation }: any) {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.lyricsContainer}>
-              {prevLyric ? (
-                <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginBottom: 10, fontWeight: '500' }} numberOfLines={1}>
-                  {prevLyric}
-                </Text>
-              ) : null}
-              <Text style={styles.currentLyricText}>{currentLyric}</Text>
-              {nextLyric ? (
-                <Text style={{ fontSize: 17, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12, fontWeight: '600' }} numberOfLines={2}>
-                  {nextLyric}
-                </Text>
-              ) : null}
-            </View>
+            <ScrollView
+              ref={lyricsScrollRef}
+              style={{ flex: 1, width: '100%', marginTop: 56 }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 60 }}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={true}
+            >
+              {lyrics.length === 0 ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+                  {isLoadingLyrics ? (
+                    <>
+                      <ActivityIndicator size="small" color={T.accent} />
+                      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 12, fontWeight: '600' }}>
+                        Loading lyrics...
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="document-text-outline" size={48} color="rgba(255,255,255,0.2)" />
+                      <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 15, marginTop: 12, fontWeight: '600', textAlign: 'center' }}>
+                        No lyrics available
+                      </Text>
+                    </>
+                  )}
+                </View>
+              ) : (
+                lyrics.map((line, idx) => {
+                  const isActive = idx === currentLineIndex;
+                  const isPast = idx < currentLineIndex;
+                  return (
+                    <Text
+                      key={idx}
+                      onLayout={(e) => { lineHeightsRef.current[idx] = e.nativeEvent.layout.height; }}
+                      onPress={() => {
+                        if (line.time !== undefined && line.time >= 0) {
+                          TrackPlayer.seekTo(line.time).catch(() => {});
+                        } else if (duration > 0 && lyrics.length > 0) {
+                          const targetSec = (idx / lyrics.length) * duration;
+                          TrackPlayer.seekTo(targetSec).catch(() => {});
+                        }
+                      }}
+                      style={[
+                        {
+                          textAlign: 'center',
+                          marginBottom: 18,
+                          lineHeight: isActive ? 46 : 30,
+                        },
+                        isActive
+                          ? { fontSize: 28, fontWeight: '900', color: '#ffffff', textShadowColor: T.accent, textShadowRadius: 16, textShadowOffset: { width: 0, height: 0 } }
+                          : isPast
+                          ? { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.45)' }
+                          : { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
+                      ]}
+                    >
+                      {line.text}
+                    </Text>
+                  );
+                })
+              )}
+            </ScrollView>
           )}
         </View>
         {activeSong && (

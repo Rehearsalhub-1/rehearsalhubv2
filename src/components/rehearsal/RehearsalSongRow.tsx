@@ -3,6 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 
+const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
+
 interface Props {
   track: any;
   index: number;
@@ -87,9 +89,13 @@ export const RehearsalSongRow: React.FC<Props> = React.memo(({
         <View style={{ width: 44, height: 44, borderRadius: 8, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26', marginRight: 12 }}>
           <Image
             source={
-              track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http')
+              (track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') && !track.imageUrl.includes('/banner/'))
                 ? { uri: track.imageUrl }
-                : coverImage
+                : (track.image && typeof track.image === 'object' && track.image.uri && !track.image.uri.includes('/banner/'))
+                ? track.image
+                : (track.image && typeof track.image === 'number')
+                ? track.image
+                : TRACK_PLACEHOLDER
             }
             style={StyleSheet.absoluteFill}
             contentFit="cover"

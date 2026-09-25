@@ -127,7 +127,7 @@ export const PlayerBottomTabBar: React.FC<PlayerBottomTabBarProps> = ({
         onLongPress={onShareToChat}
       >
         <Ionicons name="chatbubbles-outline" size={20} color={theme.colors.textSecondary} />
-        <Text style={styles.playerTabLabel}>Chat</Text>
+        <Text style={styles.playerTabLabel}>DM</Text>
       </TouchableOpacity>
     </View>
   );

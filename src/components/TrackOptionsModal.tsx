@@ -163,7 +163,7 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
               <View style={styles.optionIconBox}>
                 <Ionicons name="chatbubbles-outline" size={22} color={theme.colors.textPrimary} />
               </View>
-              <Text style={styles.optionItemText}>Forward to Chat</Text>
+              <Text style={styles.optionItemText}>Share to DM</Text>
               <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
 

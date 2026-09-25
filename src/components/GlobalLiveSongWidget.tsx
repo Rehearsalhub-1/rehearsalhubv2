@@ -8,6 +8,7 @@ import {
   ScrollView,
   Animated,
   AppState,
+  PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,6 +54,35 @@ export default function GlobalLiveSongWidget() {
   const opacityAnim = useRef(new Animated.Value(0.7)).current;
   // Animated translateY offset — springs smoothly on native driver (GPU) when mini-player shows/hides
   const translateYAnim = useRef(new Animated.Value(0)).current;
+
+  // Movable pan coordinates so user can drag the widget anywhere on screen
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const isDragging = useRef(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4;
+      },
+      onPanResponderGrant: () => {
+        isDragging.current = false;
+        pan.extractOffset();
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (Math.abs(gestureState.dx) > 4 || Math.abs(gestureState.dy) > 4) {
+          isDragging.current = true;
+        }
+        Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false })(_, gestureState);
+      },
+      onPanResponderRelease: () => {
+        pan.flattenOffset();
+        setTimeout(() => {
+          isDragging.current = false;
+        }, 150);
+      },
+    })
+  ).current;
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -198,6 +228,7 @@ export default function GlobalLiveSongWidget() {
   };
 
   const handleWidgetPress = () => {
+    if (isDragging.current) return;
     if (activeSongs.length === 1) {
       handleTuneIn(activeSongs[0]);
     } else {
@@ -215,13 +246,17 @@ export default function GlobalLiveSongWidget() {
   return (
     <>
       <Animated.View
+        {...panResponder.panHandlers}
         style={[
           styles.floatingLiveWidget,
           {
             backgroundColor: theme.colors.background,
             borderColor: '#22c55e',
             bottom: baseBottom,
-            transform: [{ translateY: translateYAnim }],
+            transform: [
+              { translateX: pan.x },
+              { translateY: Animated.add(pan.y, translateYAnim) },
+            ],
           },
         ]}
       >

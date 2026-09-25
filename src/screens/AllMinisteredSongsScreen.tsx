@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ScrollView,
   Dimensions, TextInput, Modal, Pressable, ActivityIndicator,
-  FlatList, Platform, RefreshControl, Alert, KeyboardAvoidingView
+  FlatList, Platform, RefreshControl, Alert, KeyboardAvoidingView,
+  Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,7 +12,6 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { DoodleBackground } from '../components/DoodleBackground';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import TrackOptionsModal from '../components/TrackOptionsModal';
 import { isHQGroup } from '../config/zones';
@@ -27,6 +27,7 @@ import { navigateToPlayer } from '../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const APP_LOGO = require('../../assets/logo/logo.png');
+const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
 
 const getTrackImage = (track: any) => {
   if (track.image && typeof track.image === 'string' && track.image.startsWith('http')) return track.image;
@@ -245,8 +246,8 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             drummer: song.drummer || '',
             leadGuitarist: song.leadGuitarist || '',
             createdAt: song.createdAt ? (typeof song.createdAt === 'string' ? song.createdAt : new Date().toISOString()) : new Date().toISOString(),
-            imageUrl: (song.imageUrl && !song.imageUrl.includes('/banner/')) ? song.imageUrl : (getTrackImage(song) || ''),
-            image: ((song.imageUrl && !song.imageUrl.includes('/banner/')) || getTrackImage(song)) ? { uri: song.imageUrl || getTrackImage(song) } : null,
+            imageUrl: (song.imageUrl && !song.imageUrl.includes('/banner/')) ? song.imageUrl : '',
+            image: (song.imageUrl && !song.imageUrl.includes('/banner/')) ? { uri: song.imageUrl } : null,
             zoneId: resolvedZoneId,
             collectionName: isHQ ? 'praise_night_songs' : 'zone_songs'
           };
@@ -497,8 +498,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             <Image
               source={require('../../assets/image/home1.jpg')}
               style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-              contentFit="cover"
-              transition={200}
+              resizeMode="cover"
             />
             <LinearGradient
               colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(11,11,16,0.92)']}
@@ -507,7 +507,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             />
             <View style={s.heroContent}>
               <View style={s.heroLogoRow}>
-                <Image source={APP_LOGO} style={s.heroLogo} contentFit="contain" />
+                <Image source={APP_LOGO} style={s.heroLogo} resizeMode="contain" />
                 <Text style={s.heroLogoText}>Loveworld Singers</Text>
               </View>
               <Text style={s.heroTitle}>Ministered Songs</Text>
@@ -733,13 +733,13 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 )}
                 <View style={s.trackArtContainer}>
                   {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
-                    <Image source={{ uri: track.imageUrl }} style={s.trackArt} contentFit="cover" />
+                    <Image source={{ uri: track.imageUrl }} style={s.trackArt} resizeMode="cover" />
                   ) : track.image && typeof track.image === 'object' && track.image.uri ? (
-                    <Image source={track.image} style={s.trackArt} contentFit="cover" />
+                    <Image source={track.image} style={s.trackArt} resizeMode="cover" />
+                  ) : track.image && typeof track.image === 'number' ? (
+                    <Image source={track.image} style={s.trackArt} resizeMode="cover" />
                   ) : (
-                    <View style={s.trackArtLogoWrap}>
-                      <Image source={APP_LOGO} style={s.trackArtLogo} contentFit="contain" />
-                    </View>
+                    <Image source={TRACK_PLACEHOLDER} style={s.trackArt} resizeMode="cover" />
                   )}
                   {!hasAudio && (
                     <View style={s.noAudioOverlay}>
@@ -905,7 +905,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             <Image
               source={activeTrack.image || APP_LOGO}
               style={[s.miniArt, !activeTrack.image && { padding: 4, backgroundColor: 'rgba(255,255,255,0.06)' }]}
-              contentFit={activeTrack.image ? "cover" : "contain"}
+              resizeMode={activeTrack.image ? "cover" : "contain"}
             />
             <View style={s.miniInfo}>
               <Text style={s.miniTitle} numberOfLines={1}>{activeTrack.title}</Text>

@@ -290,7 +290,7 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
           <View style={styles.handle} />
 
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Share to Chat</Text>
+            <Text style={styles.headerTitle}>Share to DM</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={T.textSecondary} />
             </TouchableOpacity>

@@ -12,9 +12,10 @@ import { Ionicons } from '@expo/vector-icons';
 export interface PlayerMoreAssetsModalProps {
   visible: boolean;
   onClose: () => void;
-  canViewHistory: boolean;
-  onOpenHistory: () => void;
-  onOpenSolfa: () => void;
+  canViewHistory?: boolean;
+  onOpenConductor?: () => void;
+  onOpenHistory?: () => void;
+  onOpenSolfa?: () => void;
   theme: any;
   styles: any;
 }
@@ -22,7 +23,8 @@ export interface PlayerMoreAssetsModalProps {
 export const PlayerMoreAssetsModal: React.FC<PlayerMoreAssetsModalProps> = ({
   visible,
   onClose,
-  canViewHistory,
+  canViewHistory = true,
+  onOpenConductor,
   onOpenHistory,
   onOpenSolfa,
   theme,
@@ -39,36 +41,37 @@ export const PlayerMoreAssetsModal: React.FC<PlayerMoreAssetsModalProps> = ({
               <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
             </TouchableOpacity>
           </View>
-          {canViewHistory && (
-            <>
-              <TouchableOpacity
-                style={styles.optionItem}
-                onPress={() => {
-                  onClose();
-                  onOpenHistory();
-                }}
-              >
-                <View style={styles.optionIconBox}>
-                  <Ionicons name="time-outline" size={22} color={theme.colors.textPrimary} />
-                </View>
-                <Text style={styles.optionItemText}>Song History</Text>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-              </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.optionItem}
-                onPress={() => {
-                  onClose();
-                  onOpenSolfa();
-                }}
-              >
-                <View style={styles.optionIconBox}>
-                  <Ionicons name="musical-note-outline" size={22} color={theme.colors.textPrimary} />
-                </View>
-                <Text style={styles.optionItemText}>Solfa Notation</Text>
-                <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-              </TouchableOpacity>
-            </>
+          {onOpenConductor && (
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                onClose();
+                onOpenConductor();
+              }}
+            >
+              <View style={styles.optionIconBox}>
+                <Ionicons name="musical-notes-outline" size={22} color={theme.colors.textPrimary} />
+              </View>
+              <Text style={styles.optionItemText}>Conductor's Guide</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
+
+          {onOpenSolfa && (
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                onClose();
+                onOpenSolfa();
+              }}
+            >
+              <View style={styles.optionIconBox}>
+                <Ionicons name="musical-note-outline" size={22} color={theme.colors.textPrimary} />
+              </View>
+              <Text style={styles.optionItemText}>Solfa Notation</Text>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+            </TouchableOpacity>
           )}
 
           <View style={{ height: 24 }} />

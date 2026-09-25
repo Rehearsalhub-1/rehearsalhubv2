@@ -30,10 +30,9 @@ import { DoodleLayer } from '../components/DoodleLayer';
 import { MiniDoodleCanvas } from '../components/MiniDoodleCanvas';
 
 import { Image } from 'expo-image';
-import { useVideoPlayer, VideoView } from 'expo-video';
 import Constants from 'expo-constants';
 
-const TRACK_PLACEHOLDER_VIDEO = require('../../assets/TRACK_PLACEHOLDER.mp4');
+const TRACK_PLACEHOLDER_IMAGE = require('../../assets/TRACK_PLACEHOLDER.png');
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -288,9 +287,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     historyFetchedForRef.current = null;
   }, [activeTrack?.id]);
 
-  // Lazy-load history only when the Conductor tab is opened — not on every track change
+  // Lazy-load history only when the History tab is opened — not on every track change
   useEffect(() => {
-    if (activePreviewTab !== 'Conductor') return;
+    if (activePreviewTab !== 'History') return;
     if (!activeTrack?.id) return;
     if (historyFetchedForRef.current === String(activeTrack.id)) return; // already fetched
 
@@ -338,7 +337,6 @@ export default function PlayerScreen({ route, navigation }: any) {
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
-  const [mediaMode, setMediaMode] = useState<'video' | 'art'>('video');
 
   const showToast = useCallback((text: string, icon?: string) => {
     const id = Date.now();
@@ -499,21 +497,6 @@ export default function PlayerScreen({ route, navigation }: any) {
     adjustLoopPointA,
     adjustLoopPointB,
   } = useTrackPlayer();
-
-  const placeholderVideoPlayer = useVideoPlayer(TRACK_PLACEHOLDER_VIDEO, player => {
-    player.loop = true;
-    player.muted = true;
-    player.play();
-  });
-
-  useEffect(() => {
-    if (!placeholderVideoPlayer) return;
-    if (isPlaying) {
-      placeholderVideoPlayer.play();
-    } else {
-      placeholderVideoPlayer.pause();
-    }
-  }, [isPlaying, placeholderVideoPlayer]);
 
   // Sync activeTrack metadata automatically when TrackPlayer advances to next/prev song
   useEffect(() => {
@@ -762,7 +745,7 @@ export default function PlayerScreen({ route, navigation }: any) {
     }
   };
 
-  const previewTabs = ['Lyrics', 'Comments', 'Conductor'];
+  const previewTabs = ['Lyrics', 'Comments', 'History'];
 
   // Track the last audioUrl we actually loaded so WS patches that preserve the
   // same URL string don't retrigger play() and interrupt playback.
@@ -1012,7 +995,7 @@ export default function PlayerScreen({ route, navigation }: any) {
 
         <View style={{ flex: 1 }}>
         <ScrollView 
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 16 }} 
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 8 }} 
           showsVerticalScrollIndicator={false} 
           scrollEnabled={!isAnnotationMode}
         >
@@ -1028,7 +1011,7 @@ export default function PlayerScreen({ route, navigation }: any) {
               style={StyleSheet.absoluteFill}
               onPress={handleArtPress}
             >
-              {mediaMode === 'art' && (activeTrack?.imageUrl && typeof activeTrack.imageUrl === 'string' && activeTrack.imageUrl.startsWith('http')) ? (
+              {activeTrack?.imageUrl && typeof activeTrack.imageUrl === 'string' && activeTrack.imageUrl.startsWith('http') && !activeTrack.imageUrl.includes('/banner/') ? (
                 <Image
                   source={{ uri: activeTrack.imageUrl }}
                   style={StyleSheet.absoluteFill}
@@ -1037,11 +1020,11 @@ export default function PlayerScreen({ route, navigation }: any) {
                   blurRadius={8}
                 />
               ) : (
-                <VideoView
-                  player={placeholderVideoPlayer}
+                <Image
+                  source={TRACK_PLACEHOLDER_IMAGE}
                   style={StyleSheet.absoluteFill}
                   contentFit="cover"
-                  nativeControls={false}
+                  cachePolicy="disk"
                 />
               )}
               <LinearGradient
@@ -1123,10 +1106,14 @@ export default function PlayerScreen({ route, navigation }: any) {
                     return (
                       <TouchableOpacity
                         key={tab}
-                        style={{ alignItems: 'center', opacity: isActive ? 1 : 0.6 }}
+                        style={{ alignItems: 'center', opacity: isActive ? 1 : 0.7 }}
                         activeOpacity={0.8}
                         onPress={() => {
-                          setActivePreviewTab(tab);
+                          if (tab === 'History') {
+                            navigation.navigate('History', { activeTrack, backgroundColor: '#8b5cf6' });
+                          } else {
+                            setActivePreviewTab(tab);
+                          }
                         }}
                       >
                         <Ionicons name={getTabIcon(tab)} size={22} color={isActive ? theme.colors.accent : 'rgba(255,255,255,0.7)'} />
@@ -1222,35 +1209,34 @@ export default function PlayerScreen({ route, navigation }: any) {
             styles={styles}
           />
 
-          {/* Clean, Spacious Player Controls & Progress */}
-          <View style={{ marginTop: 'auto', marginBottom: 8 }}>
-            <PlayerProgressSlider
-              theme={theme}
-              styles={styles}
-              formatTime={formatTime}
-              seekTo={seekTo}
-              hasAudio={!!activeTrack?.audioUrl}
-              abLoop={abLoop}
-            />
-
-            {/* Playback Controls */}
-            <PlayerControlsRow
-              isShuffle={isShuffle}
-              onToggleShuffle={handleToggleShuffle}
-              onSkipPrevious={skipToPrevious}
-              isLoading={isLoading}
-              isPlaying={isPlaying}
-              hasAudio={!!activeTrack?.audioUrl}
-              onPlayPause={handlePlayPause}
-              onSkipNext={skipToNext}
-              repeatMode={repeatMode}
-              onToggleRepeat={handleToggleRepeat}
-              theme={theme}
-              styles={styles}
-            />
-          </View>
           </View>
         </ScrollView>
+
+        {/* Fixed Player Controls — always visible, never scrolled away */}
+        <View style={{ paddingHorizontal: 24, paddingTop: 6, paddingBottom: 2 }}>
+          <PlayerProgressSlider
+            theme={theme}
+            styles={styles}
+            formatTime={formatTime}
+            seekTo={seekTo}
+            hasAudio={!!activeTrack?.audioUrl}
+            abLoop={abLoop}
+          />
+          <PlayerControlsRow
+            isShuffle={isShuffle}
+            onToggleShuffle={handleToggleShuffle}
+            onSkipPrevious={skipToPrevious}
+            isLoading={isLoading}
+            isPlaying={isPlaying}
+            hasAudio={!!activeTrack?.audioUrl}
+            onPlayPause={handlePlayPause}
+            onSkipNext={skipToNext}
+            repeatMode={repeatMode}
+            onToggleRepeat={handleToggleRepeat}
+            theme={theme}
+            styles={styles}
+          />
+        </View>
         
         {AnnotationLayer}
 
@@ -1356,6 +1342,7 @@ export default function PlayerScreen({ route, navigation }: any) {
         visible={showMoreAssetsModal}
         onClose={() => setShowMoreAssetsModal(false)}
         canViewHistory={!fromAllSongs || isHQ}
+        onOpenConductor={() => navigation.navigate('Conductor', { activeTrack, backgroundColor: '#8b5cf6' })}
         onOpenHistory={() => navigation.navigate('History', { activeTrack, backgroundColor: '#8b5cf6' })}
         onOpenSolfa={() => navigation.navigate('Solfa', { activeTrack, backgroundColor: '#8b5cf6' })}
         theme={theme}

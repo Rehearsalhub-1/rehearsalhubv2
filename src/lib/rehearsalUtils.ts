@@ -31,11 +31,20 @@ export const isSongHeard = (s: any): boolean => {
   return false;
 };
 
+const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
+
 export const getTrackImage = (track: any, _index?: number): any => {
-  if (track?.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http')) {
-    return { uri: track.imageUrl };
+  if (track?.image && typeof track.image === 'number') {
+    return track.image;
   }
-  return null;
+  if (track?.image && typeof track.image === 'object' && track.image.uri && !track.image.uri.includes('/banner/')) {
+    return track.image;
+  }
+  const url = track?.imageUrl || (typeof track?.image === 'string' ? track.image : null);
+  if (url && typeof url === 'string' && url.startsWith('http') && !url.includes('/banner/')) {
+    return { uri: url };
+  }
+  return TRACK_PLACEHOLDER;
 };
 
 export const getRehearsalCount = (song: any): number => {

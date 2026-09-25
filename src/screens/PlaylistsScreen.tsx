@@ -33,14 +33,19 @@ import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { navigateToPlayer } from '../navigation/navigationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const getTrackImage = (track: any, index: number) => {
-  if (track.image) {
+const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
+
+const getTrackImage = (track: any, _index?: number) => {
+  if (track?.image) {
     if (typeof track.image === 'number') return track.image;
-    if (typeof track.image === 'string' && track.image.startsWith('http')) return { uri: track.image };
+    if (typeof track.image === 'string' && track.image.startsWith('http') && !track.image.includes('/banner/')) return { uri: track.image };
+    if (typeof track.image === 'object' && track.image.uri && !track.image.uri.includes('/banner/')) return track.image;
   }
-  if (track.imageUrl) return { uri: track.imageUrl };
+  if (track?.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') && !track.imageUrl.includes('/banner/')) {
+    return { uri: track.imageUrl };
+  }
   
-  return require('../../assets/banner/praisenight28.jpg');
+  return TRACK_PLACEHOLDER;
 };
 
 const programCache: Record<string, string> = {};

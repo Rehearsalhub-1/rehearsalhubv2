@@ -258,7 +258,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
         </View>
       )}
 
-      {activePreviewTab === 'History' && (!fromAllSongs || isHQ) && (
+      {activePreviewTab === 'History' && (
         <View
           style={{
             flexDirection: 'row',
