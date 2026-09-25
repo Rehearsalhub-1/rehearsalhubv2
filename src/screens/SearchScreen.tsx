@@ -46,16 +46,21 @@ const MiniPlayerProgressBar = ({ theme }: any) => {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
+
 // Resolved track image: returns real album art only. NEVER falls back to Praise Night banners.
 const getTrackImage = (track: any): any => {
-  const url = track?.imageUrl || track?.image || track?.coverArt || track?.artwork;
+  const url = track?.imageUrl || (typeof track?.image === 'string' ? track.image : track?.image?.uri) || track?.coverArt || track?.artwork;
   if (url && typeof url === 'string' && url.startsWith('http') && !url.includes('/banner/')) {
     return { uri: url };
   }
   if (track?.image && typeof track.image === 'object' && track.image.uri && !track.image.uri.includes('/banner/')) {
     return track.image;
   }
-  return null;
+  if (typeof track?.image === 'number') {
+    return track.image;
+  }
+  return TRACK_PLACEHOLDER;
 };
 
 let cachedSearchSongs: any[] | null = null;
@@ -124,7 +129,7 @@ export default function SearchScreen({ navigation }: any) {
       setIsRefreshing(true);
       const resolvedZoneId = contextZone?.id || 'zone-001';
       try {
-        const res: any = await api.songs.universalSearch(debouncedQuery, 60, resolvedZoneId);
+        const res: any = await api.songs.universalSearch(debouncedQuery, 150, resolvedZoneId);
         if (res?.success && Array.isArray(res.data)) {
           setRemoteSearchResults(res.data);
         }
@@ -179,7 +184,7 @@ export default function SearchScreen({ navigation }: any) {
     setHasError(false);
     const resolvedZoneId = contextZone?.id || 'zone-001';
 
-    api.songs.universalSearch(debouncedQuery, 60, resolvedZoneId)
+    api.songs.universalSearch(debouncedQuery, 150, resolvedZoneId)
       .then((res: any) => {
         if (!active) return;
         if (res?.success && Array.isArray(res.data)) {
@@ -297,16 +302,7 @@ export default function SearchScreen({ navigation }: any) {
       >
         {/* Album Art */}
         <View style={styles.trackArtWrap}>
-          {track.image ? (
-            <Image source={track.image} style={styles.trackArt} contentFit="cover" />
-          ) : (
-            <LinearGradient
-              colors={['#1e293b', '#0f172a']}
-              style={[styles.trackArt, styles.trackArtPlaceholder]}
-            >
-              <Ionicons name="disc-outline" size={22} color={theme.colors.accent} />
-            </LinearGradient>
-          )}
+          <Image source={getTrackImage(track)} style={styles.trackArt} contentFit="cover" />
           {!hasAudio && (
             <View style={styles.noAudioBadge}>
               <Ionicons name="volume-mute" size={14} color="rgba(255,255,255,0.85)" />
