@@ -14,7 +14,6 @@ import { DoodleBackground } from '../components/DoodleBackground';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import QRCode from 'react-native-qrcode-svg';
 import * as Location from 'expo-location';
 import * as LocalAuthentication from 'expo-local-authentication';
 
@@ -73,8 +72,6 @@ export default function SettingsScreen({ navigation }: any) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [toast, setToast] = useState('');
   const toastAnim = useRef(new Animated.Value(0)).current;
-  const [qrToken, setQrToken] = useState('');
-  const [qrTimeLeft, setQrTimeLeft] = useState(5);
   const [subgroupRequest, setSubgroupRequest] = useState('');
   const [submittingSubgroup, setSubmittingSubgroup] = useState(false);
   const [userSubgroups, setUserSubgroups] = useState<any[]>([]);
@@ -87,7 +84,6 @@ export default function SettingsScreen({ navigation }: any) {
   const [attendanceRate, setAttendanceRate] = useState(0);
   const [clockingIn, setClockingIn] = useState(false);
   const [checkingOta, setCheckingOta] = useState(false);
-  const [attendanceTab, setAttendanceTab] = useState<'biometric' | 'qr'>('biometric');
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -156,30 +152,7 @@ export default function SettingsScreen({ navigation }: any) {
     loadSubgroups();
     loadAttendance();
   }, [currentUser?.uid]);
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!currentUser?.uid) return;
 
-      const generateQR = () => {
-        const timestamp = Math.floor(Date.now() / 1000); // 1-second precision
-        const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        setQrToken(`LW-ATTEND-${currentUser?.uid || ""}-${timestamp}-${randomCode}`);
-        setQrTimeLeft(300); // 5 minutes max
-      };
-
-      generateQR();
-      // Generate QR every 5 minutes (300 seconds) — max validity
-      const tokenInterval = setInterval(generateQR, 300000);
-      const countdownInterval = setInterval(() => {
-        setQrTimeLeft(prev => (prev > 0 ? prev - 1 : 0));
-      }, 1000);
-
-      return () => {
-        clearInterval(tokenInterval);
-        clearInterval(countdownInterval);
-      };
-    }, [currentUser?.uid])
-  );
 
   const handleCheckForUpdates = async () => {
     if (checkingOta) return;
@@ -291,6 +264,17 @@ export default function SettingsScreen({ navigation }: any) {
       }
 
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const isMockedLocation = Boolean((location as any)?.mocked);
+
+      if (isMockedLocation) {
+        Alert.alert(
+          'Mock Location Detected',
+          'Fake GPS or simulated mock location is detected. Please turn off mock location tools to clock in.'
+        );
+        setClockingIn(false);
+        return;
+      }
+
       const myLat = location.coords.latitude;
       const myLon = location.coords.longitude;
 
@@ -364,6 +348,7 @@ export default function SettingsScreen({ navigation }: any) {
         timestamp: new Date().toISOString(),
         latitude: myLat,
         longitude: myLon,
+        isMocked: isMockedLocation,
         zoneId: effectiveZoneId,
         churchId: effectiveChurchId,
       });
@@ -911,82 +896,40 @@ export default function SettingsScreen({ navigation }: any) {
               
               {expanded.qr && (
                 <View style={s.sectionContent}>
-                  <View style={{ flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 24, padding: 4, marginBottom: 24, borderWidth: 1, borderColor: T.border }}>
-                    <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 10, borderRadius: 20, alignItems: 'center', backgroundColor: attendanceTab === 'biometric' ? '#34D399' : 'transparent' }}
-                      onPress={() => setAttendanceTab('biometric')}
-                      activeOpacity={0.8}
+                  <View style={{ backgroundColor: 'rgba(52,211,153,0.05)', padding: 18, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(52,211,153,0.2)', alignItems: 'center' }}>
+                    <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(52,211,153,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                      <Ionicons name="finger-print" size={34} color="#34D399" />
+                    </View>
+                    <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: 'bold', marginBottom: 6 }}>Biometric Venue Clock-in</Text>
+                    <Text style={{ color: T.textSecondary, textAlign: 'center', fontSize: 13, marginBottom: 18, lineHeight: 18 }}>
+                      Make sure you are within the rehearsal venue. Your location and identity will be verified securely on-device.
+                    </Text>
+                    <TouchableOpacity 
+                      style={[
+                        s.requestBtn, 
+                        { 
+                          backgroundColor: isClockedInToday ? 'rgba(52,211,153,0.15)' : '#34D399', 
+                          width: '100%', 
+                          paddingVertical: 14,
+                          borderColor: isClockedInToday ? '#34D399' : 'transparent',
+                          borderWidth: isClockedInToday ? 1 : 0,
+                        }
+                      ]} 
+                      onPress={handleGeofencedClockIn}
+                      disabled={clockingIn || isClockedInToday}
                     >
-                      <Text style={{ color: attendanceTab === 'biometric' ? '#111' : T.textSecondary, fontWeight: 'bold', fontSize: 13 }}>Biometric</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ flex: 1, paddingVertical: 10, borderRadius: 20, alignItems: 'center', backgroundColor: attendanceTab === 'qr' ? theme.colors.accent : 'transparent' }}
-                      onPress={() => setAttendanceTab('qr')}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={{ color: attendanceTab === 'qr' ? '#fff' : T.textSecondary, fontWeight: 'bold', fontSize: 13 }}>QR Scanner</Text>
+                      {clockingIn ? (
+                        <ActivityIndicator color="#111" />
+                      ) : isClockedInToday ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <Ionicons name="checkmark-circle" size={18} color="#34D399" />
+                          <Text style={[s.requestBtnTxt, { color: '#34D399', fontSize: 16, fontWeight: 'bold' }]}>Clocked In Today ✓</Text>
+                        </View>
+                      ) : (
+                        <Text style={[s.requestBtnTxt, { color: '#111', fontSize: 16, fontWeight: 'bold' }]}>Clock In Now</Text>
+                      )}
                     </TouchableOpacity>
                   </View>
-
-                  {attendanceTab === 'biometric' ? (
-                    <View style={{ backgroundColor: 'rgba(52,211,153,0.05)', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(52,211,153,0.2)', alignItems: 'center' }}>
-                      <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(52,211,153,0.15)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
-                        <Ionicons name="finger-print" size={32} color="#34D399" />
-                      </View>
-                      <Text style={{ color: theme.colors.textPrimary, fontSize: 16, fontWeight: 'bold', marginBottom: 6 }}>Biometric Clock-in</Text>
-                      <Text style={{ color: T.textSecondary, textAlign: 'center', fontSize: 13, marginBottom: 16 }}>
-                        Make sure you are within the rehearsal venue. Your location and identity will be verified securely on-device.
-                      </Text>
-                      <TouchableOpacity 
-                        style={[
-                          s.requestBtn, 
-                          { 
-                            backgroundColor: isClockedInToday ? 'rgba(52,211,153,0.15)' : '#34D399', 
-                            width: '100%', 
-                            paddingVertical: 14,
-                            borderColor: isClockedInToday ? '#34D399' : 'transparent',
-                            borderWidth: isClockedInToday ? 1 : 0,
-                          }
-                        ]} 
-                        onPress={handleGeofencedClockIn}
-                        disabled={clockingIn || isClockedInToday}
-                      >
-                        {clockingIn ? (
-                          <ActivityIndicator color="#111" />
-                        ) : isClockedInToday ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                            <Ionicons name="checkmark-circle" size={18} color="#34D399" />
-                            <Text style={[s.requestBtnTxt, { color: '#34D399', fontSize: 16, fontWeight: 'bold' }]}>Clocked In Today ✓</Text>
-                          </View>
-                        ) : (
-                          <Text style={[s.requestBtnTxt, { color: '#111', fontSize: 16, fontWeight: 'bold' }]}>Clock In Now</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View>
-                      <Text style={{ color: theme.colors.textPrimary, fontSize: 15, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>Manual QR Check-in</Text>
-                      {qrToken ? (
-                        <View style={s.qrWrap}>
-                          <View style={s.qrBoxOuter}>
-                            <View style={s.qrBoxInner}>
-                              <QRCode
-                                value={qrToken}
-                                size={180}
-                                color="#000000"
-                                backgroundColor="#ffffff"
-                              />
-                            </View>
-                          </View>
-                          <View style={s.qrTimerRow}>
-                            <Ionicons name="time-outline" size={18} color={T.textSecondary} />
-                            <Text style={s.qrTimerText}>Refreshing in {qrTimeLeft}s</Text>
-                          </View>
-                          <Text style={s.qrHint}>Present this to your coordinator at rehearsals</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  )}
                 </View>
               )}
             </View>
