@@ -92,27 +92,39 @@ export function resolveSongAudioUrl(song: any): string {
  */
 export function resolveSongAudioUrls(song: any): Record<string, string> {
   if (!song) return {};
-  const urls: Record<string, string> = {};
+  const rawUrls: Record<string, any> = {};
 
   if (song.audioUrls && typeof song.audioUrls === 'object' && !Array.isArray(song.audioUrls)) {
-    Object.assign(urls, song.audioUrls);
+    Object.assign(rawUrls, song.audioUrls);
   }
   if (song.audio_urls && typeof song.audio_urls === 'object' && !Array.isArray(song.audio_urls)) {
-    Object.assign(urls, song.audio_urls);
+    Object.assign(rawUrls, song.audio_urls);
   }
 
-  if (song.sopranoUrl || song.soprano_url) urls.soprano = song.sopranoUrl || song.soprano_url;
-  if (song.altoUrl || song.alto_url) urls.alto = song.altoUrl || song.alto_url;
-  if (song.tenorUrl || song.tenor_url) urls.tenor = song.tenorUrl || song.tenor_url;
-  if (song.bassUrl || song.bass_url) urls.bass = song.bassUrl || song.bass_url;
-  if (song.leadVocalUrl || song.lead_vocal_url) urls.lead = song.leadVocalUrl || song.lead_vocal_url;
-  if (song.instrumentalUrl || song.instrumental_url) urls.instrumental = song.instrumentalUrl || song.instrumental_url;
+  if (song.sopranoUrl || song.soprano_url) rawUrls.soprano = song.sopranoUrl || song.soprano_url;
+  if (song.altoUrl || song.alto_url) rawUrls.alto = song.altoUrl || song.alto_url;
+  if (song.tenorUrl || song.tenor_url) rawUrls.tenor = song.tenorUrl || song.tenor_url;
+  if (song.bassUrl || song.bass_url) rawUrls.bass = song.bassUrl || song.bass_url;
+  if (song.leadVocalUrl || song.lead_vocal_url) rawUrls.lead = song.leadVocalUrl || song.lead_vocal_url;
+  if (song.instrumentalUrl || song.instrumental_url) rawUrls.instrumental = song.instrumentalUrl || song.instrumental_url;
 
   const primary = resolveSongAudioUrl(song);
-  if (primary && !urls.full) {
-    urls.full = primary;
+  if (primary && !rawUrls.full) {
+    rawUrls.full = primary;
   }
 
-  return urls;
+  const cleanUrls: Record<string, string> = {};
+  for (const [key, val] of Object.entries(rawUrls)) {
+    if (
+      !key.startsWith('_') &&
+      typeof val === 'string' &&
+      val.trim().length > 0 &&
+      (val.startsWith('http://') || val.startsWith('https://') || val.startsWith('file://') || val.startsWith('/'))
+    ) {
+      cleanUrls[key] = val;
+    }
+  }
+
+  return cleanUrls;
 }
 

@@ -20,6 +20,21 @@ export interface PlayerAudioPartsModalProps {
   styles: any;
 }
 
+const PART_LABELS: Record<string, string> = {
+  full: 'Full Mix',
+  soprano: 'Soprano',
+  alto: 'Alto',
+  tenor: 'Tenor',
+  bass: 'Bass',
+  lead: 'Lead Vocal',
+  band: 'Band',
+  instrumental: 'Instrumental',
+  backing: 'Backup Vocals',
+  bvs: 'Backup Vocals',
+  'backup vocals': 'Backup Vocals',
+  'lead vocals': 'Lead Vocals',
+};
+
 export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
   visible,
   onClose,
@@ -31,7 +46,12 @@ export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
 }) => {
   const parts = resolveSongAudioUrls(activeTrack);
   const entries = Object.entries(parts).filter(
-    ([partName, url]) => url && typeof url === 'string' && partName.toLowerCase() !== 'full'
+    ([partName, url]) =>
+      !partName.startsWith('_') &&
+      typeof url === 'string' &&
+      url.trim().length > 0 &&
+      (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('file://') || url.startsWith('/')) &&
+      partName.toLowerCase() !== 'full'
   );
 
   return (
@@ -50,7 +70,8 @@ export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
             <TouchableOpacity
               style={styles.playlistItem}
               onPress={() => {
-                onSelectTrack(activeTrack);
+                const fullUrl = parts.full || activeTrack?.audioUrl;
+                onSelectTrack({ ...activeTrack, audioUrl: fullUrl });
                 onClose();
               }}
             >
@@ -58,11 +79,11 @@ export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
                 <Ionicons name="musical-notes" size={24} color={theme.colors.textPrimary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.playlistItemName}>Main Track</Text>
-                <Text style={styles.playlistItemCount}>Full recording</Text>
+                <Text style={styles.playlistItemName}>Full Mix</Text>
+                <Text style={styles.playlistItemCount}>Master recording</Text>
               </View>
-              {(currentTrack?.audioUrl === activeTrack?.audioUrl ||
-                currentTrack?.url === activeTrack?.audioUrl) && (
+              {(currentTrack?.audioUrl === (parts.full || activeTrack?.audioUrl) ||
+                currentTrack?.url === (parts.full || activeTrack?.audioUrl)) && (
                 <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />
               )}
             </TouchableOpacity>
@@ -83,6 +104,8 @@ export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
               entries.map(([partName, url]) => {
                 const isSelected =
                   currentTrack?.audioUrl === url || currentTrack?.url === url;
+                const isBand = partName.toLowerCase().includes('band') || partName.toLowerCase().includes('instrumental');
+                const displayName = PART_LABELS[partName.toLowerCase()] || (partName.charAt(0).toUpperCase() + partName.slice(1));
                 return (
                   <TouchableOpacity
                     key={partName}
@@ -93,13 +116,19 @@ export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
                     }}
                   >
                     <View style={styles.playlistIconBox}>
-                      <Ionicons name="mic-outline" size={24} color={theme.colors.textPrimary} />
+                      <Ionicons
+                        name={isBand ? 'radio-outline' : 'mic-outline'}
+                        size={24}
+                        color={isSelected ? theme.colors.accent : theme.colors.textPrimary}
+                      />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.playlistItemName}>
-                        {partName.charAt(0).toUpperCase() + partName.slice(1)}
+                      <Text style={[styles.playlistItemName, isSelected && { color: theme.colors.accent, fontWeight: '700' }]}>
+                        {displayName}
                       </Text>
-                      <Text style={styles.playlistItemCount}>Isolated part</Text>
+                      <Text style={styles.playlistItemCount}>
+                        {isBand ? 'Instrumental track' : 'Vocal track'}
+                      </Text>
                     </View>
                     {isSelected && (
                       <Ionicons name="checkmark-circle" size={24} color={theme.colors.accent} />

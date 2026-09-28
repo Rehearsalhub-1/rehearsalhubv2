@@ -24,6 +24,8 @@ export interface PlayerOptionsMenuModalProps {
   onOpenSleepTimer: () => void;
   onOpenPlaylist: () => void;
   formatTime: (secondsOrMs: number) => string;
+  hasAudioParts?: boolean;
+  onOpenAudioParts?: () => void;
   theme: any;
   styles: any;
 }
@@ -42,6 +44,8 @@ export const PlayerOptionsMenuModal: React.FC<PlayerOptionsMenuModalProps> = ({
   onOpenSleepTimer,
   onOpenPlaylist,
   formatTime,
+  hasAudioParts,
+  onOpenAudioParts,
   theme,
   styles,
 }) => {
@@ -56,6 +60,30 @@ export const PlayerOptionsMenuModal: React.FC<PlayerOptionsMenuModalProps> = ({
               <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
             </TouchableOpacity>
           </View>
+
+          {/* Audio Parts / Stems Option */}
+          {hasAudioParts && onOpenAudioParts && (
+            <TouchableOpacity
+              style={styles.optionItem}
+              onPress={() => {
+                onClose();
+                setTimeout(onOpenAudioParts, 250);
+              }}
+            >
+              <View style={[styles.optionIconBox, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
+                <Ionicons name="layers-outline" size={22} color={theme.colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.optionItemText, { color: theme.colors.textPrimary }]}>
+                  Vocal & Band Parts
+                </Text>
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
+                  Switch between Lead, Band, Tenor, Alto, etc.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          )}
 
           {/* Section Looper Option */}
           <TouchableOpacity

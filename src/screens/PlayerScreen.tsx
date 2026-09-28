@@ -317,6 +317,9 @@ export default function PlayerScreen({ route, navigation }: any) {
   const [isDownloadedOffline, setIsDownloadedOffline] = useState(false);
   const [isDownloadingOffline, setIsDownloadingOffline] = useState(false);
 
+  const activeTrackAudioUrls = resolveSongAudioUrls(activeTrack);
+  const hasAudioParts = Object.keys(activeTrackAudioUrls).filter(k => k.toLowerCase() !== 'full').length > 0;
+
   // Sleep Timer state
   const [sleepTimerMinutes, setSleepTimerMinutes] = useState<number | null>(null);
   const [sleepTimerRemaining, setSleepTimerRemaining] = useState<number | null>(null);
@@ -982,6 +985,15 @@ export default function PlayerScreen({ route, navigation }: any) {
             </TouchableOpacity>
           )}
 
+          {hasAudioParts && (
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => setShowAudioPartsModal(true)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="layers-outline" size={22} color={theme.colors.accentBright || theme.colors.accent || '#c084fc'} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowScheduleSheet(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="calendar-outline" size={22} color="#ffffff" />
           </TouchableOpacity>
@@ -1298,6 +1310,8 @@ export default function PlayerScreen({ route, navigation }: any) {
         onOpenSleepTimer={() => setShowSleepTimerModal(true)}
         onOpenPlaylist={() => setShowPlaylistModal(true)}
         formatTime={formatTime}
+        hasAudioParts={hasAudioParts}
+        onOpenAudioParts={() => setShowAudioPartsModal(true)}
         theme={theme}
         styles={styles}
       />

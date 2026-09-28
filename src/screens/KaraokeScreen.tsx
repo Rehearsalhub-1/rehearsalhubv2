@@ -400,21 +400,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
     if (!rawSong) return;
 
     const resolvedUrls = resolveSongAudioUrls(rawSong);
-
-    // Only keep known vocal/stem keys — filter out things like 'pre-live', status fields, etc.
-    const VALID_PART_KEYS = ['full', 'soprano', 'alto', 'tenor', 'bass', 'lead', 'instrumental', 'backing'];
-    const cleanedUrls: Record<string, string> = {};
-    for (const key of VALID_PART_KEYS) {
-      if (resolvedUrls[key]) cleanedUrls[key] = resolvedUrls[key];
-    }
-    // If nothing matched, keep original so player still works
-    const finalUrls = Object.keys(cleanedUrls).length > 0 ? cleanedUrls : resolvedUrls;
-
-    const song = { ...rawSong, audioUrls: finalUrls };
+    const song = { ...rawSong, audioUrls: resolvedUrls };
     setActiveSong(song);
 
-    const availableParts = Object.keys(finalUrls);
-    const initialPart = finalUrls.full ? 'full' : (availableParts[0] || 'full');
+    const availableParts = Object.keys(resolvedUrls);
+    const initialPart = resolvedUrls.full ? 'full' : (availableParts[0] || 'full');
     setActivePart(initialPart);
 
     const parsedLyrics = getLyricsFromSong(song);
@@ -856,10 +846,20 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const progress = duration > 0 ? (position / duration) : 0;
 
   const PART_LABELS: Record<string, string> = {
-    full: 'Full Mix', soprano: 'Soprano', alto: 'Alto',
-    tenor: 'Tenor', bass: 'Bass', lead: 'Lead', instrumental: 'Instrumental', backing: 'Backing',
+    full: 'Full Mix',
+    soprano: 'Soprano',
+    alto: 'Alto',
+    tenor: 'Tenor',
+    bass: 'Bass',
+    lead: 'Lead Vocal',
+    band: 'Band',
+    instrumental: 'Instrumental',
+    backing: 'Backup Vocals',
+    bvs: 'Backup Vocals',
+    'backup vocals': 'Backup Vocals',
+    'lead vocals': 'Lead Vocals',
   };
-  const partDisplayName = PART_LABELS[activePart] || activePart;
+  const partDisplayName = PART_LABELS[activePart.toLowerCase()] || activePart;
 
   // Auto-scroll to active line whenever it changes (auto mode only)
   useEffect(() => {
@@ -1200,7 +1200,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.stemTitle, isActive && { color: theme.colors.textPrimary }]}>
-                            {partName.charAt(0).toUpperCase() + partName.slice(1)}
+                            {PART_LABELS[partName.toLowerCase()] || (partName.charAt(0).toUpperCase() + partName.slice(1))}
                           </Text>
                           {isActive && <Text style={styles.stemActiveText}>CURRENTLY PLAYING</Text>}
                         </View>

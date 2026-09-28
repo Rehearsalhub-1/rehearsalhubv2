@@ -502,10 +502,8 @@ export const useTrackPlayer = () => {
         globalIsSimulating = false;
         const currentAudio = globalCurrentTrack?.audioUrl || globalCurrentTrack?.url || globalCurrentTrack?.audioFile;
         const incomingAudio = track.audioUrl || track.url || track.audioFile;
-        const isSameSong = Boolean(
-          (currentAudio && incomingAudio && currentAudio === incomingAudio) ||
-          (globalCurrentTrack?.id && track?.id && String(globalCurrentTrack.id) === String(track.id))
-        );
+        const isSameAudio = Boolean(currentAudio && incomingAudio && currentAudio === incomingAudio);
+        const isSameSong = isSameAudio || (!incomingAudio && globalCurrentTrack?.id && track?.id && String(globalCurrentTrack.id) === String(track.id));
         if (isSameSong) {
           globalCurrentTrack = { ...globalCurrentTrack, ...track }; // Seamlessly adopt the rich track metadata
           globalIsLoading = false;
