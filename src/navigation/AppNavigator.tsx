@@ -162,8 +162,9 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
         component={SafeCategoryProgramsScreen} 
         options={{ animation: 'slide_from_bottom' }}
       />
+  
       <Stack.Screen 
-        name="Audiolab" 
+        name="Compose" 
         component={SafeAudiolabScreen} 
         options={{ animation: 'slide_from_bottom' }}
       />
