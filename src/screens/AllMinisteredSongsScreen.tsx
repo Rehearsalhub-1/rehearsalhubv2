@@ -24,6 +24,7 @@ import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer'
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { searchSongMatch, HighlightedText, sanitizeProgramName } from '../lib/searchUtils';
 import { navigateToPlayer } from '../navigation/navigationService';
+import { PlayerAudioPartsModal } from '../components/player/modals/PlayerAudioPartsModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const APP_LOGO = require('../../assets/logo/logo.png');
@@ -88,12 +89,20 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
   const [shareTrack, setShareTrack] = useState<any>(null);
   const [shareTracks, setShareTracks] = useState<any[] | null>(null);
 
-  const [quickFilter, setQuickFilter] = useState<'all' | 'praise-night' | 'communion' | 'gfap' | 'special'>('all');
+  const [quickFilter, setQuickFilter] = useState<'all' | 'parts' | 'praise-night' | 'communion' | 'gfap' | 'special'>('all');
   const [searchProgramQuery, setSearchProgramQuery] = useState('');
+  const [partsModalTrack, setPartsModalTrack] = useState<any>(null);
 
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
   const [tracksForOptions, setTracksForOptions] = useState<any[]>([]);
+
+  const multiPartsCount = useMemo(() => {
+    return (songs || []).filter(s => {
+      const u = resolveSongAudioUrls(s);
+      return Object.keys(u).filter(k => k.toLowerCase() !== 'full').length > 0;
+    }).length;
+  }, [songs]);
 
   const PAGE_SIZE = 15;
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -356,6 +365,11 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
     if (quickFilter !== 'all') {
       const prog = (t.program || '').toLowerCase();
       const cat = (t.category || '').toLowerCase();
+      if (quickFilter === 'parts') {
+        const u = resolveSongAudioUrls(t);
+        const count = Object.keys(u).filter(k => k.toLowerCase() !== 'full').length;
+        if (count === 0) return false;
+      }
       if (quickFilter === 'praise-night' && !prog.includes('praise night') && !cat.includes('praise')) return false;
       if (quickFilter === 'communion' && !prog.includes('communion') && !cat.includes('communion')) return false;
       if (quickFilter === 'gfap' && !prog.includes('gfap') && !prog.includes('gdop') && !cat.includes('gfap')) return false;
@@ -566,6 +580,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           >
             {[
               { id: 'all', label: 'All Songs', icon: 'musical-notes', count: songs.length },
+              { id: 'parts', label: 'Multi-Parts', icon: 'layers-outline', count: multiPartsCount },
               { id: 'praise-night', label: 'Praise Nights', icon: 'flame', count: null },
               { id: 'communion', label: 'Communion', icon: 'wine', count: null },
               { id: 'gfap', label: 'GFAP / GDOP', icon: 'globe-outline', count: null },
@@ -631,7 +646,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                 >
                   <Ionicons name="funnel" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
                   <Text style={s.activeFilterPillText}>
-                    {quickFilter === 'praise-night' ? 'Praise Nights' : quickFilter === 'communion' ? 'Communion' : quickFilter === 'gfap' ? 'GFAP / GDOP' : 'Special Programs'}
+                    {quickFilter === 'parts' ? 'Multi-Parts' : quickFilter === 'praise-night' ? 'Praise Nights' : quickFilter === 'communion' ? 'Communion' : quickFilter === 'gfap' ? 'GFAP / GDOP' : 'Special Programs'}
                   </Text>
                   <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
                 </TouchableOpacity>
@@ -799,14 +814,36 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
                       </>
                     ) : null}
                   </View>
-                  {track.program ? (
-                    <View style={[s.trackProgramBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.2)' }]}>
-                      <Ionicons name="musical-notes" size={9} color={theme.colors.accent} style={{ marginRight: 4 }} />
-                      <Text style={[s.trackProgramBadgeText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
-                        {sanitizeProgramName(track.program, 'Loveworld Singers', programMap)}
-                      </Text>
-                    </View>
-                  ) : null}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                    {track.program ? (
+                      <View style={[s.trackProgramBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.2)' }]}>
+                        <Ionicons name="musical-notes" size={9} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                        <Text style={[s.trackProgramBadgeText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
+                          {sanitizeProgramName(track.program, 'Loveworld Singers', programMap)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {(() => {
+                      const songParts = resolveSongAudioUrls(track);
+                      const extraCount = Object.keys(songParts).filter(k => k.toLowerCase() !== 'full' && !k.startsWith('_')).length;
+                      if (extraCount === 0) return null;
+                      return (
+                        <TouchableOpacity
+                          style={[s.trackPartsBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.25)' }]}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setPartsModalTrack(track);
+                          }}
+                          activeOpacity={0.75}
+                        >
+                          <Ionicons name="layers-outline" size={10} color={theme.colors.accent} style={{ marginRight: 3 }} />
+                          <Text style={[s.trackPartsBadgeText, isActiveTrack && { color: theme.colors.accent }]}>
+                            {extraCount + 1} Parts
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
+                  </View>
                 </View>
                 {!isSelectionMode && (
                   <TouchableOpacity
@@ -1056,6 +1093,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           }
           setShowShareSheet(true);
         }}
+        onOpenAudioParts={(track) => setPartsModalTrack(track)}
       />
       <ShareToChatSheet
         visible={showShareSheet}
@@ -1070,6 +1108,16 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           setShareTrack(null);
           setShareTracks(null);
         }}
+      />
+      <PlayerAudioPartsModal
+        visible={!!partsModalTrack}
+        onClose={() => setPartsModalTrack(null)}
+        activeTrack={partsModalTrack}
+        currentTrack={activeTrack}
+        onSelectTrack={(trackToPlay) => {
+          openTrack(trackToPlay);
+        }}
+        theme={theme}
       />
     </View>
       )}
@@ -1292,6 +1340,23 @@ const getStyles = (theme: any) => {
     marginTop: 4,
   },
   trackProgramBadgeText: {
+    color: T.accent,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  trackPartsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(192, 132, 252, 0.16)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(192, 132, 252, 0.35)',
+  },
+  trackPartsBadgeText: {
     color: T.accent,
     fontSize: 10,
     fontWeight: '700',

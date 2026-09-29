@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { resolveSongAudioUrls } from '../../../lib/mediaUtils';
+import { StyleSheet } from 'react-native';
 
 export interface PlayerAudioPartsModalProps {
   visible: boolean;
@@ -17,7 +18,7 @@ export interface PlayerAudioPartsModalProps {
   currentTrack: any;
   onSelectTrack: (trackToPlay: any) => void;
   theme: any;
-  styles: any;
+  styles?: any;
 }
 
 const PART_LABELS: Record<string, string> = {
@@ -42,8 +43,43 @@ export const PlayerAudioPartsModal: React.FC<PlayerAudioPartsModalProps> = ({
   currentTrack,
   onSelectTrack,
   theme,
-  styles,
+  styles: customStyles,
 }) => {
+  const fallbackStyles = StyleSheet.create({
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
+    modalDismissArea: { flex: 1 },
+    bottomSheet: {
+      backgroundColor: theme.colors.bottomSheetBackground || theme.colors.cardBackground || '#181824',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.surfaceBorder || 'rgba(255,255,255,0.1)',
+    },
+    bottomSheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+    bottomSheetTitle: { fontSize: 18, fontWeight: '700', color: theme.colors.textPrimary },
+    closeModalBtn: { padding: 6, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 16 },
+    playlistItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.bottomTabBorder || theme.colors.divider || 'rgba(255,255,255,0.08)',
+    },
+    playlistIconBox: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: theme.colors.cardBackgroundLight || '#242436',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14,
+    },
+    playlistItemName: { fontSize: 15, fontWeight: '600', color: theme.colors.textPrimary },
+    playlistItemCount: { fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
+  });
+
+  const styles = { ...fallbackStyles, ...(customStyles || {}) };
   const parts = resolveSongAudioUrls(activeTrack);
   const entries = Object.entries(parts).filter(
     ([partName, url]) =>

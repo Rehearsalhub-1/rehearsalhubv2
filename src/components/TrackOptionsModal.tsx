@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { apiClient } from '../lib/apiClient';
 import { useUserStore } from '../hooks/useUser';
+import { resolveSongAudioUrls } from '../lib/mediaUtils';
 
 interface TrackOptionsModalProps {
   visible: boolean;
@@ -27,11 +28,12 @@ interface TrackOptionsModalProps {
   track?: any;
   tracks?: any[];
   onForwardToChat?: () => void;
+  onOpenAudioParts?: (track: any) => void;
   currentPlaylistId?: string;
   isFavoritesView?: boolean;
 }
 
-export default function TrackOptionsModal({ visible, onClose, track, tracks, onForwardToChat, currentPlaylistId, isFavoritesView }: TrackOptionsModalProps) {
+export default function TrackOptionsModal({ visible, onClose, track, tracks, onForwardToChat, onOpenAudioParts, currentPlaylistId, isFavoritesView }: TrackOptionsModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme, insets);
@@ -151,6 +153,34 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
                 <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
               </TouchableOpacity>
             </View>
+
+            {track && (!tracks || tracks.length <= 1) && (() => {
+              const parts = resolveSongAudioUrls(track);
+              const extraParts = Object.keys(parts).filter(k => k.toLowerCase() !== 'full' && !k.startsWith('_'));
+              if (extraParts.length === 0) return null;
+              return (
+                <TouchableOpacity
+                  style={styles.optionItem}
+                  onPress={() => {
+                    onClose();
+                    if (onOpenAudioParts) {
+                      setTimeout(() => onOpenAudioParts(track), 250);
+                    }
+                  }}
+                >
+                  <View style={[styles.optionIconBox, { backgroundColor: (theme.colors.accent || '#c084fc') + '20' }]}>
+                    <Ionicons name="layers-outline" size={22} color={theme.colors.accent || '#c084fc'} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.optionItemText}>Vocal & Band Parts</Text>
+                    <Text style={{ fontSize: 12, color: theme.colors.textMuted, marginTop: 2 }}>
+                      {extraParts.length + 1} parts available
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              );
+            })()}
 
             <TouchableOpacity style={styles.optionItem} onPress={() => {
               onClose();
