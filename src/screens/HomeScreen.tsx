@@ -132,6 +132,15 @@ const INITIAL_CARDS = [
   durationMs: 15800,
   contentPosition: { x: 0.5, y: 0.5 },
 },
+{
+  id: '4',
+  title: 'All Ministered Songs',
+  subtitle: 'Browse Songs & Multi-Parts',
+  mainValue: 'SONGS',
+  route: 'AllSongs',
+  durationMs: 15800,
+  contentPosition: { x: 0.5, y: 0.5 },
+},
 ];
 
 export default function HomeScreen({ navigation }: any) {
@@ -144,6 +153,7 @@ export default function HomeScreen({ navigation }: any) {
     { ...INITIAL_CARDS[0], source: CLOUD_ASSETS[0] },
     { ...INITIAL_CARDS[1], source: CLOUD_ASSETS[1] },
     { ...INITIAL_CARDS[2], source: CLOUD_ASSETS[2] },
+    { ...INITIAL_CARDS[3], source: CLOUD_ASSETS[0] },
   ]);
 
   const isFocused = useIsFocused();
@@ -428,7 +438,12 @@ export default function HomeScreen({ navigation }: any) {
           </View>
 
           <View style={styles.smallCardsContainer}>
-            {cards.filter(c => !(c.route === 'Rehearsal' && getHiddenFeatures(contextProfile).hideOngoing)).map((card) =>
+            {cards.filter(c => {
+              const hf = getHiddenFeatures(contextProfile);
+              if (c.route === 'Rehearsal' && hf.hideOngoing) return false;
+              if (c.route === 'AllSongs' && hf.hideMinisteredSongs) return false;
+              return true;
+            }).map((card) =>
             <TouchableOpacity
               key={card.id}
               style={styles.smallVideoWrapper}
