@@ -64,9 +64,9 @@ const MENU_SECTIONS = [
 
 },
 {
-  header: 'Audiolab ',
+  header: 'COMPOSE',
   items:[
-    { id: 'studio', title: 'Studio', icon: 'mic' },
+    { id: 'studio', title: 'Compose', icon: 'mic' },
   ]
 },
 {

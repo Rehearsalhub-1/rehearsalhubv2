@@ -1407,7 +1407,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
           onPress={() => { navigation.navigate('Audiolab'); }}
           activeOpacity={0.7}>
           <Ionicons name={'radio-outline'} size={22} color={theme.colors.textMuted} />
-          <Text style={styles.bottomTabText}>AudioLab</Text>
+          <Text style={styles.bottomTabText}>Compose</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

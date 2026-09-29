@@ -386,7 +386,7 @@ export default function AudiolabScreen({ navigation }: any) {
           try {
             await Share.share({
               url: finalPath,
-              title: `Audiolab Export (${format})`,
+              title: `Compose Export (${format})`,
             });
             showToast(`Exported successfully as ${format}`);
           } catch {
@@ -1236,7 +1236,7 @@ export default function AudiolabScreen({ navigation }: any) {
           <Ionicons name="lock-closed" size={80} color={theme.colors.accent} style={{ marginBottom: 24 }} />
           <Text style={{ color: theme.colors.textPrimary, fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 12 }}>Access Restricted</Text>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 }}>
-            Audiolab is currently not enabled for your account.
+            Compose is currently not enabled for your account.
           </Text>
           <TouchableOpacity
             style={{ backgroundColor: theme.colors.accent, paddingHorizontal: 32, paddingVertical: 16, borderRadius: 12 }}
@@ -1276,7 +1276,7 @@ export default function AudiolabScreen({ navigation }: any) {
             <Ionicons name={activeTab === 'waveform' ? "arrow-back" : "close-outline"} size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {activeTab === 'waveform' && 'Audiolab'}
+            {activeTab === 'waveform' && 'Compose'}
             {activeTab === 'feather' && 'Notepad & Lyrics'}
             {activeTab === 'projects' && 'Saved Projects'}
             {activeTab === 'settings' && 'Settings'}

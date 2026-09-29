@@ -1055,7 +1055,7 @@ export const AudiolabModalContent: React.FC<Props> = ({
             style={[styles.modalActionBtn, { backgroundColor: '#10b981' }]}
             onPress={() => {
               Share.share({
-                message: `Join my Audiolab studio session! ${tracks.length} tracks active.`,
+                message: `Join my Compose studio session! ${tracks.length} tracks active.`,
               }).catch(() => {});
             }}
           >
