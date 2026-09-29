@@ -24,6 +24,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PlayerSpeedModal, SPEED_OPTIONS } from '../components/player/modals/PlayerSpeedModal';
+import { PlayerSleepTimerModal, SLEEP_TIMER_OPTIONS } from '../components/player/modals/PlayerSleepTimerModal';
 import { resolveSongAudioUrls } from '../lib/mediaUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -164,7 +166,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [lyricsMode, setLyricsMode] = useState<'auto' | 'manual'>('auto');
   const lyricsScrollRef = useRef<ScrollView>(null);
   const lineHeightsRef = useRef<number[]>([]);
-  const { isPlaying, isLoading: isTrackPlayerBuffering, play: tpPlay, pause: tpPause } = useTrackPlayer();
+  const { isPlaying, isLoading: isTrackPlayerBuffering, play: tpPlay, pause: tpPause, abLoop, setLoopPointA, setLoopPointB, clearABLoop, toggleABLoop, playbackRate, setPlaybackRate } = useTrackPlayer();
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<AudioRecorder | null>(null);
   const [takes, setTakes] = useState<any[]>([]);
@@ -679,6 +681,109 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [shareTake, setShareTake] = useState<any | null>(null);
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [lastViewedTakeCount, setLastViewedTakeCount] = useState(0);
+
+  // --- Takes Player: Speed, Sleep Timer, A-B Loop state ---
+  const [showTakeSpeedModal, setShowTakeSpeedModal] = useState(false);
+  const [showTakeSleepTimerModal, setShowTakeSleepTimerModal] = useState(false);
+  const [takeSleepTimerMinutes, setTakeSleepTimerMinutes] = useState<number | null>(null);
+  const [takeSleepTimerRemaining, setTakeSleepTimerRemaining] = useState<number | null>(null);
+  const [takeAbLoopStep, setTakeAbLoopStep] = useState<'idle' | 'a_set' | 'active'>('idle');
+
+  // Sleep timer countdown
+  useEffect(() => {
+    if (takeSleepTimerRemaining === null || takeSleepTimerRemaining <= 0) return;
+    const interval = setInterval(() => {
+      setTakeSleepTimerRemaining(prev => {
+        if (prev === null || prev <= 1) {
+          stopReviewTake();
+          setTakeSleepTimerMinutes(null);
+          Alert.alert('Sleep Timer', 'Playback paused by sleep timer 🌙');
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [takeSleepTimerRemaining]);
+
+  const handleTakeSelectSpeed = async (rate: number) => {
+    setShowTakeSpeedModal(false);
+    await setPlaybackRate(rate);
+  };
+
+  const handleTakeSelectSleepTimer = (mins: number) => {
+    setShowTakeSleepTimerModal(false);
+    if (mins === 0) {
+      setTakeSleepTimerMinutes(null);
+      setTakeSleepTimerRemaining(null);
+    } else if (mins === -1) {
+      setTakeSleepTimerMinutes(-1);
+      setTakeSleepTimerRemaining(null);
+    } else {
+      setTakeSleepTimerMinutes(mins);
+      setTakeSleepTimerRemaining(mins * 60);
+    }
+  };
+
+  const handleTakeABLoopPress = async () => {
+    if (takeAbLoopStep === 'idle') {
+      // Set Point A at current position
+      const posMs = Math.floor(position * 1000);
+      await setLoopPointA(posMs);
+      setTakeAbLoopStep('a_set');
+    } else if (takeAbLoopStep === 'a_set') {
+      // Set Point B and activate loop
+      const posMs = Math.floor(position * 1000);
+      await setLoopPointB(posMs);
+      setTakeAbLoopStep('active');
+    } else {
+      // Clear the loop
+      clearABLoop();
+      setTakeAbLoopStep('idle');
+    }
+  };
+
+  const formatTimeMs = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const sleepTimerDisplay = takeSleepTimerRemaining !== null
+    ? `${Math.floor(takeSleepTimerRemaining / 60)}:${(takeSleepTimerRemaining % 60).toString().padStart(2, '0')}`
+    : takeSleepTimerMinutes === -1 ? 'End' : null;
+
+  // Fallback styles for Speed/Sleep modals (they expect PlayerScreen-style props)
+  const takeModalStyles = {
+    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' as const },
+    modalDismissArea: { flex: 1 },
+    bottomSheet: {
+      backgroundColor: theme.colors.backgroundDark || theme.colors.background || '#181824',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
+    },
+    bottomSheetHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 12 },
+    bottomSheetTitle: { fontSize: 18, fontWeight: '700' as const, color: theme.colors.textPrimary },
+    closeModalBtn: { padding: 6, backgroundColor: theme.colors.cardBackgroundLight, borderRadius: 16 },
+    playlistItem: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      paddingVertical: 12,
+      borderBottomWidth: 0.5,
+      borderBottomColor: 'rgba(255,255,255,0.08)',
+    },
+    playlistIconBox: {
+      width: 42, height: 42, borderRadius: 14,
+      backgroundColor: 'rgba(255,255,255,0.06)',
+      alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: 14,
+    },
+    playlistItemName: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' as const },
+    playlistItemCount: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
+  };
   useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event: any) => {
     if (showTakesModal) {
       if (event.type === Event.PlaybackQueueEnded || (event.type === Event.PlaybackState && (event.state === State.Stopped || event.state === State.Ended))) {
@@ -834,6 +939,12 @@ export default function KaraokeScreen({ route, navigation }: any) {
 
   const closeTakesModal = async () => {
     await stopReviewTake();
+    // Reset takes player controls
+    clearABLoop();
+    setTakeAbLoopStep('idle');
+    setPlaybackRate(1.0);
+    setTakeSleepTimerMinutes(null);
+    setTakeSleepTimerRemaining(null);
     setShowTakesModal(false);
     if (activeSong && isPlayerReady) {
       setTimeout(() => {
@@ -1344,6 +1455,72 @@ export default function KaraokeScreen({ route, navigation }: any) {
                                   <Ionicons name="trash-outline" size={22} color="red" />
                                 </TouchableOpacity>
                              </View>
+
+                             {/* ── Takes Player Toolbar: A-B Loop · Speed · Sleep Timer ── */}
+                             <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.08)' }}>
+                                {/* A-B Loop Button */}
+                                <TouchableOpacity
+                                  onPress={handleTakeABLoopPress}
+                                  style={{ alignItems: 'center', gap: 4 }}
+                                >
+                                  <View style={[
+                                    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+                                    takeAbLoopStep === 'active' && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
+                                    takeAbLoopStep === 'a_set' && { borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.15)' },
+                                  ]}>
+                                    <Ionicons
+                                      name="infinite"
+                                      size={18}
+                                      color={takeAbLoopStep === 'active' ? '#fff' : takeAbLoopStep === 'a_set' ? '#38bdf8' : theme.colors.textMuted}
+                                    />
+                                  </View>
+                                  <Text style={{ color: takeAbLoopStep !== 'idle' ? theme.colors.accent : theme.colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
+                                    {takeAbLoopStep === 'idle' ? 'A-B' : takeAbLoopStep === 'a_set'
+                                      ? `A: ${abLoop.start !== null ? formatTimeMs(abLoop.start) : '--'}`
+                                      : `${abLoop.start !== null ? formatTimeMs(abLoop.start) : '--'} ⇄ ${abLoop.end !== null ? formatTimeMs(abLoop.end) : '--'}`}
+                                  </Text>
+                                </TouchableOpacity>
+
+                                {/* Speed Button */}
+                                <TouchableOpacity
+                                  onPress={() => setShowTakeSpeedModal(true)}
+                                  style={{ alignItems: 'center', gap: 4 }}
+                                >
+                                  <View style={[
+                                    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+                                    Math.abs(playbackRate - 1.0) > 0.01 && { borderColor: theme.colors.accent, backgroundColor: theme.colors.accent + '20' },
+                                  ]}>
+                                    <Ionicons
+                                      name="speedometer-outline"
+                                      size={18}
+                                      color={Math.abs(playbackRate - 1.0) > 0.01 ? theme.colors.accent : theme.colors.textMuted}
+                                    />
+                                  </View>
+                                  <Text style={{ color: Math.abs(playbackRate - 1.0) > 0.01 ? theme.colors.accent : theme.colors.textMuted, fontSize: 9, fontWeight: '800' }}>
+                                    {playbackRate}x
+                                  </Text>
+                                </TouchableOpacity>
+
+                                {/* Sleep Timer Button */}
+                                <TouchableOpacity
+                                  onPress={() => setShowTakeSleepTimerModal(true)}
+                                  style={{ alignItems: 'center', gap: 4 }}
+                                >
+                                  <View style={[
+                                    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+                                    takeSleepTimerMinutes !== null && { borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.15)' },
+                                  ]}>
+                                    <Ionicons
+                                      name={takeSleepTimerMinutes !== null ? "moon" : "moon-outline"}
+                                      size={18}
+                                      color={takeSleepTimerMinutes !== null ? '#a78bfa' : theme.colors.textMuted}
+                                    />
+                                  </View>
+                                  <Text style={{ color: takeSleepTimerMinutes !== null ? '#a78bfa' : theme.colors.textMuted, fontSize: 9, fontWeight: '800' }}>
+                                    {sleepTimerDisplay || 'Sleep'}
+                                  </Text>
+                                </TouchableOpacity>
+                             </View>
                           </View>
                         )}
                       </View>
@@ -1359,6 +1536,26 @@ export default function KaraokeScreen({ route, navigation }: any) {
         visible={showShareSheet} 
         take={shareTake} 
         onClose={() => { setShowShareSheet(false); setTimeout(() => setShareTake(null), 300); }} 
+      />
+
+      {/* Takes Player: Speed Modal */}
+      <PlayerSpeedModal
+        visible={showTakeSpeedModal}
+        onClose={() => setShowTakeSpeedModal(false)}
+        playbackRate={playbackRate}
+        onSelectSpeed={handleTakeSelectSpeed}
+        theme={theme}
+        styles={takeModalStyles}
+      />
+
+      {/* Takes Player: Sleep Timer Modal */}
+      <PlayerSleepTimerModal
+        visible={showTakeSleepTimerModal}
+        onClose={() => setShowTakeSleepTimerModal(false)}
+        sleepTimerMinutes={takeSleepTimerMinutes}
+        onSelectSleepTimer={handleTakeSelectSleepTimer}
+        theme={theme}
+        styles={takeModalStyles}
       />
 
     </View>
