@@ -96,11 +96,6 @@ export default function AttendanceArchiveScreen({ navigation }: any) {
     try {
       const res = await api.attendance.getMyRecords().catch(() => null);
       const raw: any[] = res?.data || [];
-      console.log('[AttendanceArchive] total records:', raw.length);
-      raw.forEach((r, i) => {
-        const ts = r.checkInTime || r.check_in_time || r.timestamp || r.createdAt || r.created_at;
-        console.log(`[AttendanceArchive] record[${i}]:`, r.eventName, '|', ts, '| status:', r.status);
-      });
       setAllRecords(raw);
     } catch (e) {
       console.error('[AttendanceArchiveScreen] load error:', e);
