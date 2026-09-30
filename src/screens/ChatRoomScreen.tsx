@@ -20,7 +20,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
 import { resolveMediaUrl } from '../lib/mediaUtils';
-import { AudioModule, setAudioModeAsync, AudioRecorder, RecordingPresets } from 'expo-audio'; // kept for recording only — playback uses TrackPlayer
+import { AudioModule, AudioRecorder } from 'expo-audio'; // kept for recording only — playback uses TrackPlayer
+import {
+  VOICE_NOTE_RECORDING_OPTIONS,
+  setRecordingAudioModeAsync,
+  resetRecordingAudioModeAsync,
+} from '../lib/audioRecordingConfig';
 import {
   SafeTrackPlayer as TrackPlayer,
   SafeState as State,
@@ -774,9 +779,9 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     try {
       const { status } = await AudioModule.requestRecordingPermissionsAsync();
       if (status !== 'granted') { showToast('Microphone permission required'); return; }
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await setRecordingAudioModeAsync();
       recordingMeteringRef.current = [];
-      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      const rec = new AudioModule.AudioRecorder(VOICE_NOTE_RECORDING_OPTIONS);
       await rec.prepareToRecordAsync();
       rec.record();
       setRecording(rec); setIsRecording(true); setRecDuration(0);
@@ -801,11 +806,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (meteringIntervalRef.current) { clearInterval(meteringIntervalRef.current); meteringIntervalRef.current = null; }
     setIsRecording(false);
     await recording.stop();
-    await setAudioModeAsync({
-      allowsRecording: false,
-      playsInSilentMode: true,
-      shouldPlayInBackground: false,
-    }).catch(() => {});
+    await resetRecordingAudioModeAsync().catch(() => {});
     const uri = recording.uri;
     const capturedWaveform = [...recordingMeteringRef.current];
     recordingMeteringRef.current = [];
@@ -820,11 +821,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (meteringIntervalRef.current) { clearInterval(meteringIntervalRef.current); meteringIntervalRef.current = null; }
     setIsRecording(false);
     await recording.stop().catch(()=>{});
-    await setAudioModeAsync({
-      allowsRecording: false,
-      playsInSilentMode: true,
-      shouldPlayInBackground: false,
-    }).catch(() => {});
+    await resetRecordingAudioModeAsync().catch(() => {});
     setRecording(null); setRecDuration(0); recordingMeteringRef.current = [];
     setLiveBars(new Array(40).fill(0));
   };
@@ -928,11 +925,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   useEffect(() => {
     return () => {
       (async () => {
-        await setAudioModeAsync({
-          allowsRecording: false,
-          playsInSilentMode: true,
-          shouldPlayInBackground: false,
-        }).catch(() => {});
+        await resetRecordingAudioModeAsync().catch(() => {});
         
         if (playingIdRef.current) {
           (global as any).isChatAudio = false;

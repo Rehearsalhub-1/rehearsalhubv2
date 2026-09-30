@@ -7,7 +7,7 @@ import {
   Image
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { DoodleBackground } from '../components/DoodleBackground';
@@ -63,14 +63,15 @@ const MiniPlayerProgressBar = ({ theme }: any) => {
 
 export default function AllMinisteredSongsScreen({ navigation }: any) {
   const { theme } = useTheme();
-  const s = useMemo(() => getStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const s = useMemo(() => getStyles(theme, insets), [theme, insets]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [songs, setSongs] = useState<any[]>([]);
   const [singers, setSingers] = useState<string[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-  
+
   const { currentTrack: activeTrack, isPlaying, play, togglePlayback } = useTrackPlayer();
   const { currentZone, isLoading: isZoneLoading, zoneVersion } = useZone();
   const user = useUserStore(s => s.user);
@@ -151,7 +152,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           cachedPrograms = storedPrograms ? JSON.parse(storedPrograms) : [];
           cachedSingers = storedSingers ? JSON.parse(storedSingers) : [];
           cachedCategories = storedCategories ? JSON.parse(storedCategories) : [];
-          
+
           setSongs(cachedSongs || []);
           setPrograms(cachedPrograms || []);
           setSingers(cachedSingers || []);
@@ -171,7 +172,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         api.programs.getMasterPrograms(),
         api.settings.get('master_collections_order').catch(() => null),
       ]);
-      
+
       if (!isMountedRef.current) return;
 
       const songsFailed = !songsResult || songsResult.success === false;
@@ -179,7 +180,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       if (songsFailed) {
         throw new Error('Songs fetch failed');
       }
-      
+
       const rawSongs = Array.isArray(songsResult) ? songsResult : (songsResult?.success ? (songsResult.data || []) : []);
       const fetchedPrograms = Array.isArray(programsResult) ? programsResult : (programsResult?.success ? (programsResult.data || []) : []);
 
@@ -217,7 +218,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           });
         }
       });
-      
+
       const mappedSongs = (rawSongs || [])
         .filter((song: any) => isHQ || !song.isHQOnly)
         .map((song: any, index: number) => {
@@ -250,7 +251,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
             rehearsalCount: getRehearsalCount(song),
             conductorGuide: song.solfas || song.conductorGuide || song.guide || '',
             history: song.history || '',
-            comments: song.comments || '',
+            comments: song.comments || song.notes || song.coordinatorComment || '',
             leadKeyboardist: song.leadKeyboardist || '',
             drummer: song.drummer || '',
             leadGuitarist: song.leadGuitarist || '',
@@ -308,7 +309,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         AsyncStorage.setItem(`MINISTERED_PROGRAMS_CACHE_${resolvedZoneId}`, JSON.stringify(validPrograms)),
         AsyncStorage.setItem(`MINISTERED_SINGERS_CACHE_${resolvedZoneId}`, JSON.stringify(cachedSingers)),
         AsyncStorage.setItem(`MINISTERED_CATEGORIES_CACHE_${resolvedZoneId}`, JSON.stringify(cachedCategories))
-      ]).catch(() => {});
+      ]).catch(() => { });
 
     } catch (err) {
       console.error('Error fetching ministered songs:', err);
@@ -459,931 +460,981 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
         </>
       )}
       {(isProfileLoading || !hf.hideMinisteredSongs) && (
-      <View style={s.root}>
-      <StatusBar style="light" />
-      <LinearGradient
-        colors={theme.gradients.bgBase}
-        locations={theme.gradients.bgBaseLocations}
-        style={StyleSheet.absoluteFill} />
-      <DoodleBackground />
-      <LinearGradient
-        colors={theme.gradients.bgGlow}
-        locations={theme.gradients.bgGlowLocations}
-        start={{ x: 0, y: 0.3 }}
-        end={{ x: 1, y: 0.7 }}
-        style={StyleSheet.absoluteFill} />
+        <View style={s.root}>
+          <StatusBar style="light" />
+          <LinearGradient
+            colors={theme.gradients.bgBase}
+            locations={theme.gradients.bgBaseLocations}
+            style={StyleSheet.absoluteFill} />
+          <DoodleBackground />
+          <LinearGradient
+            colors={theme.gradients.bgGlow}
+            locations={theme.gradients.bgGlowLocations}
+            start={{ x: 0, y: 0.3 }}
+            end={{ x: 1, y: 0.7 }}
+            style={StyleSheet.absoluteFill} />
 
-      <SafeAreaView style={{ flex: 1 }}>
-        <View style={s.header}>
-          <TouchableOpacity
-            onPress={() => {
-              if (navigation.canGoBack()) navigation.goBack();
-              else navigation.navigate('Home');
-            }}
-            style={s.backBtn}
-          >
-            <Ionicons name="chevron-back" size={28} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>All Ministered Songs</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        <FlatList
-          data={displayedTracks}
-          keyExtractor={track => track.id}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          removeClippedSubviews={Platform.OS === 'android'}
-          updateCellsBatchingPeriod={50}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={() => loadData(true)}
-              tintColor={theme.colors.accent}
-              colors={[theme.colors.accent]}
-            />
-          }
-          ListHeaderComponent={
-            <>
-          <View style={s.heroBanner}>
-            <Image
-              source={require('../../assets/image/home1.jpg')}
-              style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
-              resizeMode="cover"
-            />
-            <LinearGradient
-              colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(11,11,16,0.92)']}
-              locations={[0, 0.45, 1]}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={s.heroContent}>
-              <View style={s.heroLogoRow}>
-                <Image source={APP_LOGO} style={s.heroLogo} resizeMode="contain" />
-                <Text style={s.heroLogoText}>Loveworld Singers</Text>
-              </View>
-              <Text style={s.heroTitle}>Ministered Songs</Text>
-              <Text style={s.heroSub}>
-                {selectedProgramId ? `Program: ${selectedProgramId}` : 'Browse by Praise Night, Service & Soloist'}
-              </Text>
-              <View style={s.heroStats}>
-                <View style={s.statItem}>
-                  <Text style={s.statNum}>{(songs || []).length}</Text>
-                  <Text style={s.statLbl}>Songs</Text>
-                </View>
-                <View style={s.statDivider} />
-                <View style={s.statItem}>
-                  <Text style={s.statNum}>{(programs || []).length}</Text>
-                  <Text style={s.statLbl}>Programs</Text>
-                </View>
-                <View style={s.statDivider} />
-                <View style={s.statItem}>
-                  <Text style={s.statNum}>{(singers || []).length}</Text>
-                  <Text style={s.statLbl}>Soloists</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {/* Search Row */}
-          <View style={s.searchRow}>
-            <View style={s.searchBox}>
-              <Ionicons name="search" size={17} color={theme.colors.textMuted} style={{ marginRight: 8 }} />
-              <TextInput
-                style={s.searchInput}
-                placeholder="Search songs, soloists, programs…"
-                placeholderTextColor={theme.colors.textMuted}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => { setSearchQuery(''); }}>
-                  <Ionicons name="close-circle" size={17} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity
-              style={[s.filterBtn, hasFilter && s.filterBtnActive]}
-              onPress={() => { setShowFilterModal(true); }}
-            >
-              <Ionicons name="options-outline" size={18} color={hasFilter ? '#ffffff' : theme.colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Quick Filter Horizontal Scroll Pills */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.quickFilterRow}
-          >
-            {[
-              { id: 'all', label: 'All Songs', icon: 'musical-notes', count: songs.length },
-              { id: 'parts', label: 'Multi-Parts', icon: 'layers-outline', count: multiPartsCount },
-              { id: 'praise-night', label: 'Praise Nights', icon: 'flame', count: null },
-              { id: 'communion', label: 'Communion', icon: 'wine', count: null },
-              { id: 'gfap', label: 'GFAP / GDOP', icon: 'globe-outline', count: null },
-              { id: 'special', label: 'Special Programs', icon: 'sparkles', count: null },
-            ].map((chip) => {
-              const isActive = quickFilter === chip.id;
-              return (
-                <TouchableOpacity
-                  key={chip.id}
-                  style={[s.chip, isActive && s.chipActive]}
-                  onPress={() => {
-                    setQuickFilter(chip.id as any);
-                    setSelectedProgramId(null);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons
-                    name={chip.icon as any}
-                    size={13}
-                    color={isActive ? '#ffffff' : theme.colors.accent}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={[s.chipText, isActive && s.chipTextActive]}>
-                    {chip.label}
-                  </Text>
-                  {chip.count !== null && (
-                    <View style={[s.chipBadge, isActive && { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
-                      <Text style={[s.chipBadgeText, isActive && { color: '#ffffff' }]}>{chip.count}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-
-          {/* Active Filter Badges */}
-          {hasFilter && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 12 }}>
-              {selectedProgramId && (
-                <TouchableOpacity
-                  style={s.activeFilterPill}
-                  onPress={() => setSelectedProgramId(null)}
-                >
-                  <Ionicons name="folder" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={s.activeFilterPillText}>{selectedProgramId}</Text>
-                  <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
-                </TouchableOpacity>
-              )}
-              {selectedSinger && (
-                <TouchableOpacity
-                  style={s.activeFilterPill}
-                  onPress={() => setSelectedSinger(null)}
-                >
-                  <Ionicons name="person" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={s.activeFilterPillText}>{selectedSinger}</Text>
-                  <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
-                </TouchableOpacity>
-              )}
-              {quickFilter !== 'all' && (
-                <TouchableOpacity
-                  style={s.activeFilterPill}
-                  onPress={() => setQuickFilter('all')}
-                >
-                  <Ionicons name="funnel" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
-                  <Text style={s.activeFilterPillText}>
-                    {quickFilter === 'parts' ? 'Multi-Parts' : quickFilter === 'praise-night' ? 'Praise Nights' : quickFilter === 'communion' ? 'Communion' : quickFilter === 'gfap' ? 'GFAP / GDOP' : 'Special Programs'}
-                  </Text>
-                  <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          <View style={s.actionRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Text style={s.countText}>{filteredTracks.length} songs</Text>
-              {hasFilter && (
-                <TouchableOpacity
-                  style={s.clearBadge}
-                  onPress={() => { setSelectedSinger(null); setSelectedProgramId(null); setQuickFilter('all'); }}
-                >
-                  <Text style={s.clearBadgeText}>Reset</Text>
-                  <Ionicons name="close" size={12} color={theme.colors.textPrimary} />
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <SafeAreaView style={{ flex: 1 }}>
+            <View style={s.header}>
               <TouchableOpacity
                 onPress={() => {
-                  setIsSelectionMode(!isSelectionMode);
-                  if (isSelectionMode) {
-                    setSelectedTracks(new Set());
-                  }
+                  if (navigation.canGoBack()) navigation.goBack();
+                  else navigation.navigate('Home');
                 }}
-                style={[s.sortBtn, isSelectionMode && { backgroundColor: 'rgba(192, 132, 252, 0.15)', borderColor: theme.colors.accent, borderWidth: 1 }]}
+                style={s.backBtn}
               >
-                <Ionicons name={isSelectionMode ? "close-circle-outline" : "checkmark-circle-outline"} size={14} color={isSelectionMode ? theme.colors.accent : theme.colors.textMuted} />
-                <Text style={[s.sortText, isSelectionMode && { color: theme.colors.accent }]}>{isSelectionMode ? 'Cancel' : 'Select'}</Text>
+                <Ionicons name="chevron-back" size={28} color={theme.colors.textPrimary} />
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => { setSortAsc(p => !p); }}
-                style={s.sortBtn}
-              >
-                <Ionicons name={sortAsc ? 'time-outline' : 'time'} size={14} color={theme.colors.textMuted} />
-                <Text style={s.sortText}>{sortAsc ? 'Newest' : 'Oldest'}</Text>
-              </TouchableOpacity>
+              <Text style={s.headerTitle}>All Ministered Songs</Text>
+              <View style={{ width: 40 }} />
             </View>
-          </View>
-          </>
-          }
-          ListEmptyComponent={
-            <View style={s.empty}>
-              {isLoading ? (
-                <ActivityIndicator size="large" color={theme.colors.accent} style={{ marginBottom: 12 }} />
-              ) : hasError ? (
-                <>
-                  <Ionicons name="cloud-offline-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
-                  <Text style={s.emptyText}>Failed to load songs</Text>
-                  <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginBottom: 16, textAlign: 'center', paddingHorizontal: 40 }}>
-                    Please check your internet connection and try again.
-                  </Text>
-                  <TouchableOpacity
-                    style={s.retryBtn}
-                    onPress={() => loadData(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="refresh" size={16} color={theme.colors.textPrimary} style={{ marginRight: 6 }} />
-                    <Text style={s.retryBtnText}>Retry</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="musical-note-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
-                  <Text style={s.emptyText}>No songs found</Text>
-                </>
-              )}
-            </View>
-          }
-          renderItem={({ item: track, index }) => {
-            const isActiveTrack = activeTrack && String(activeTrack.id) === String(track.id);
-            const hasAudio = !!track.audioUrl;
-            return (
-              <TouchableOpacity
-                key={track.id}
-                style={[s.trackRow, selectedTracks.has(track.id) && { backgroundColor: 'rgba(192,132,252,0.12)' }]}
-                activeOpacity={0.7}
-                onPress={() => openTrack(track)}
-                onLongPress={() => {
-                  if (!isSelectionMode) setIsSelectionMode(true);
-                  toggleSelection(track.id);
-                }}
-              >
-                {isSelectionMode ? (
-                  <View style={{ width: 28, alignItems: 'center' }}>
-                    <Ionicons name={selectedTracks.has(track.id) ? "checkmark-circle" : "ellipse-outline"} size={20} color={selectedTracks.has(track.id) ? theme.colors.accent : theme.colors.textMuted} />
-                  </View>
-                ) : isActiveTrack && isPlaying ? (
-                  <View style={{ width: 28, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 2, height: 18 }}>
-                    {[1, 0.6, 0.85].map((h, i) => (
-                      <View key={i} style={{ width: 3, height: 18 * h, backgroundColor: theme.colors.accent, borderRadius: 2 }} />
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={[s.trackIndex, isActiveTrack && { color: theme.colors.accent }]}>{String(index + 1).padStart(2, '0')}</Text>
-                )}
-                <View style={s.trackArtContainer}>
-                  {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
-                    <Image source={{ uri: track.imageUrl }} style={s.trackArt} resizeMode="cover" />
-                  ) : track.image && typeof track.image === 'object' && track.image.uri ? (
-                    <Image source={track.image} style={s.trackArt} resizeMode="cover" />
-                  ) : track.image && typeof track.image === 'number' ? (
-                    <Image source={track.image} style={s.trackArt} resizeMode="cover" />
-                  ) : (
-                    <Image source={TRACK_PLACEHOLDER} style={s.trackArt} resizeMode="cover" />
-                  )}
-                  {!hasAudio && (
-                    <View style={s.noAudioOverlay}>
-                      <Ionicons name="volume-mute" size={16} color="rgba(255,255,255,0.85)" />
-                    </View>
-                  )}
-                </View>
-                <View style={s.trackInfo}>
-                  <HighlightedText
-                    text={track.title}
-                    tokens={track.searchResult?.matchTokens}
-                    style={[s.trackTitle, isActiveTrack && { color: theme.colors.accent }]}
-                    highlightStyle={{ color: theme.colors.accent, fontWeight: '700', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderRadius: 3 }}
-                    numberOfLines={1}
-                  />
 
-                  {track.searchResult?.snippet ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginTop: 2, marginBottom: 3 }}>
-                      <Ionicons
-                        name={track.searchResult.matchField === 'comments' ? 'chatbubble-ellipses-outline' : 'document-text-outline'}
-                        size={11}
-                        color={theme.colors.accent}
-                        style={{ marginRight: 4, marginTop: 1 }}
-                      />
-                      <HighlightedText
-                        text={track.searchResult.snippet}
-                        tokens={track.searchResult.matchTokens}
-                        style={{ flex: 1, color: theme.colors.textMuted, fontSize: 11.5, fontStyle: 'italic', lineHeight: 16 }}
-                        highlightStyle={{ color: '#38bdf8', fontWeight: '700', backgroundColor: 'rgba(56, 189, 248, 0.22)', borderRadius: 3 }}
-                        numberOfLines={2}
-                      />
-                    </View>
-                  ) : null}
-
-                  <View style={s.trackMeta}>
-                    {!hasAudio ? (
-                      <>
-                        <Ionicons name="volume-mute-outline" size={11} color="#fb923c" style={{ marginRight: 4 }} />
-                        <Text style={[s.trackMetaText, { color: '#fb923c' }]} numberOfLines={1}>No audio yet</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.accent} style={{ marginRight: 4 }} />
-                        <HighlightedText
-                          text={track.leadSinger}
-                          tokens={track.searchResult?.matchTokens}
-                          style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]}
-                          highlightStyle={{ color: theme.colors.accent, fontWeight: '700', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderRadius: 3 }}
-                          numberOfLines={1}
-                        />
-                      </>
-                    )}
-                    {track.key ? (
-                      <>
-                        <Text style={[s.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
-                        <Text style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.key}</Text>
-                      </>
-                    ) : null}
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
-                    {track.program ? (
-                      <View style={[s.trackProgramBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.2)' }]}>
-                        <Ionicons name="musical-notes" size={9} color={theme.colors.accent} style={{ marginRight: 4 }} />
-                        <Text style={[s.trackProgramBadgeText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
-                          {sanitizeProgramName(track.program, 'Loveworld Singers', programMap)}
-                        </Text>
+            <FlatList
+              data={displayedTracks}
+              keyExtractor={track => track.id}
+              initialNumToRender={10}
+              maxToRenderPerBatch={10}
+              windowSize={10}
+              removeClippedSubviews={Platform.OS === 'android'}
+              updateCellsBatchingPeriod={50}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 140 }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={() => loadData(true)}
+                  tintColor={theme.colors.accent}
+                  colors={[theme.colors.accent]}
+                />
+              }
+              ListHeaderComponent={
+                <>
+                  <View style={s.heroBanner}>
+                    <Image
+                      source={require('../../assets/image/home1.jpg')}
+                      style={[StyleSheet.absoluteFill, { width: '100%', height: '100%' }]}
+                      resizeMode="cover"
+                    />
+                    <LinearGradient
+                      colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(11,11,16,0.92)']}
+                      locations={[0, 0.45, 1]}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={s.heroContent}>
+                      <View style={s.heroLogoRow}>
+                        <Image source={APP_LOGO} style={s.heroLogo} resizeMode="contain" />
+                        <Text style={s.heroLogoText}>Loveworld Singers</Text>
                       </View>
-                    ) : null}
-                    {(() => {
-                      const songParts = resolveSongAudioUrls(track);
-                      const extraCount = Object.keys(songParts).filter(k => k.toLowerCase() !== 'full' && !k.startsWith('_')).length;
-                      if (extraCount === 0) return null;
+                      <Text style={s.heroTitle}>Ministered Songs</Text>
+                      <Text style={s.heroSub}>
+                        {selectedProgramId ? `Program: ${selectedProgramId}` : 'Browse by Praise Night, Service & Soloist'}
+                      </Text>
+                      <View style={s.heroStats}>
+                        <View style={s.statItem}>
+                          <Text style={s.statNum}>{(songs || []).length}</Text>
+                          <Text style={s.statLbl}>Songs</Text>
+                        </View>
+                        <View style={s.statDivider} />
+                        <View style={s.statItem}>
+                          <Text style={s.statNum}>{(programs || []).length}</Text>
+                          <Text style={s.statLbl}>Programs</Text>
+                        </View>
+                        <View style={s.statDivider} />
+                        <View style={s.statItem}>
+                          <Text style={s.statNum}>{(singers || []).length}</Text>
+                          <Text style={s.statLbl}>Soloists</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Search Row */}
+                  <View style={s.searchRow}>
+                    <View style={s.searchBox}>
+                      <Ionicons name="search" size={17} color={theme.colors.textMuted} style={{ marginRight: 8 }} />
+                      <TextInput
+                        style={s.searchInput}
+                        placeholder="Search songs, soloists, programs…"
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                      />
+                      {searchQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => { setSearchQuery(''); }}>
+                          <Ionicons name="close-circle" size={17} color={theme.colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={[s.filterBtn, hasFilter && s.filterBtnActive]}
+                      onPress={() => { setShowFilterModal(true); }}
+                    >
+                      <Ionicons name="options-outline" size={18} color={hasFilter ? '#ffffff' : theme.colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Quick Filter Horizontal Scroll Pills */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={s.quickFilterRow}
+                  >
+                    {[
+                      { id: 'all', label: 'All Songs', icon: 'musical-notes', count: songs.length },
+                      { id: 'parts', label: 'Multi-Parts', icon: 'layers-outline', count: multiPartsCount },
+                      { id: 'praise-night', label: 'Praise Nights', icon: 'flame', count: null },
+                      { id: 'communion', label: 'Communion', icon: 'wine', count: null },
+                      { id: 'gfap', label: 'GFAP / GDOP', icon: 'globe-outline', count: null },
+                      { id: 'special', label: 'Special Programs', icon: 'sparkles', count: null },
+                    ].map((chip) => {
+                      const isActive = quickFilter === chip.id;
                       return (
                         <TouchableOpacity
-                          style={[s.trackPartsBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.25)' }]}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            setPartsModalTrack(track);
+                          key={chip.id}
+                          style={[s.chip, isActive && s.chipActive]}
+                          onPress={() => {
+                            setQuickFilter(chip.id as any);
+                            setSelectedProgramId(null);
                           }}
                           activeOpacity={0.75}
                         >
-                          <Ionicons name="layers-outline" size={10} color={theme.colors.accent} style={{ marginRight: 3 }} />
-                          <Text style={[s.trackPartsBadgeText, isActiveTrack && { color: theme.colors.accent }]}>
-                            {extraCount + 1} Parts
+                          <Ionicons
+                            name={chip.icon as any}
+                            size={13}
+                            color={isActive ? '#ffffff' : theme.colors.accent}
+                            style={{ marginRight: 6 }}
+                          />
+                          <Text style={[s.chipText, isActive && s.chipTextActive]}>
+                            {chip.label}
                           </Text>
+                          {chip.count !== null && (
+                            <View style={[s.chipBadge, isActive && { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
+                              <Text style={[s.chipBadgeText, isActive && { color: '#ffffff' }]}>{chip.count}</Text>
+                            </View>
+                          )}
                         </TouchableOpacity>
                       );
-                    })()}
+                    })}
+                  </ScrollView>
+
+                  {/* Active Filter Badges */}
+                  {hasFilter && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, marginBottom: 12 }}>
+                      {selectedProgramId && (
+                        <TouchableOpacity
+                          style={s.activeFilterPill}
+                          onPress={() => setSelectedProgramId(null)}
+                        >
+                          <Ionicons name="folder" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                          <Text style={s.activeFilterPillText}>{selectedProgramId}</Text>
+                          <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                      )}
+                      {selectedSinger && (
+                        <TouchableOpacity
+                          style={s.activeFilterPill}
+                          onPress={() => setSelectedSinger(null)}
+                        >
+                          <Ionicons name="person" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                          <Text style={s.activeFilterPillText}>{selectedSinger}</Text>
+                          <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                      )}
+                      {quickFilter !== 'all' && (
+                        <TouchableOpacity
+                          style={s.activeFilterPill}
+                          onPress={() => setQuickFilter('all')}
+                        >
+                          <Ionicons name="funnel" size={12} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                          <Text style={s.activeFilterPillText}>
+                            {quickFilter === 'parts' ? 'Multi-Parts' : quickFilter === 'praise-night' ? 'Praise Nights' : quickFilter === 'communion' ? 'Communion' : quickFilter === 'gfap' ? 'GFAP / GDOP' : 'Special Programs'}
+                          </Text>
+                          <Ionicons name="close-circle" size={14} color={theme.colors.accent} style={{ marginLeft: 6 }} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  <View style={s.actionRow}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <Text style={s.countText}>{filteredTracks.length} songs</Text>
+                      {hasFilter && (
+                        <TouchableOpacity
+                          style={s.clearBadge}
+                          onPress={() => { setSelectedSinger(null); setSelectedProgramId(null); setQuickFilter('all'); }}
+                        >
+                          <Text style={s.clearBadgeText}>Reset</Text>
+                          <Ionicons name="close" size={12} color={theme.colors.textPrimary} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setIsSelectionMode(!isSelectionMode);
+                          if (isSelectionMode) {
+                            setSelectedTracks(new Set());
+                          }
+                        }}
+                        style={[s.sortBtn, isSelectionMode && { backgroundColor: 'rgba(192, 132, 252, 0.15)', borderColor: theme.colors.accent, borderWidth: 1 }]}
+                      >
+                        <Ionicons name={isSelectionMode ? "close-circle-outline" : "checkmark-circle-outline"} size={14} color={isSelectionMode ? theme.colors.accent : theme.colors.textMuted} />
+                        <Text style={[s.sortText, isSelectionMode && { color: theme.colors.accent }]}>{isSelectionMode ? 'Cancel' : 'Select'}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => { setSortAsc(p => !p); }}
+                        style={s.sortBtn}
+                      >
+                        <Ionicons name={sortAsc ? 'time-outline' : 'time'} size={14} color={theme.colors.textMuted} />
+                        <Text style={s.sortText}>{sortAsc ? 'Newest' : 'Oldest'}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
+                </>
+              }
+              ListEmptyComponent={
+                <View style={s.empty}>
+                  {isLoading ? (
+                    <ActivityIndicator size="large" color={theme.colors.accent} style={{ marginBottom: 12 }} />
+                  ) : hasError ? (
+                    <>
+                      <Ionicons name="cloud-offline-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
+                      <Text style={s.emptyText}>Failed to load songs</Text>
+                      <Text style={{ color: theme.colors.textSecondary, fontSize: 13, marginBottom: 16, textAlign: 'center', paddingHorizontal: 40 }}>
+                        Please check your internet connection and try again.
+                      </Text>
+                      <TouchableOpacity
+                        style={s.retryBtn}
+                        onPress={() => loadData(true)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="refresh" size={16} color={theme.colors.textPrimary} style={{ marginRight: 6 }} />
+                        <Text style={s.retryBtnText}>Retry</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="musical-note-outline" size={48} color={theme.colors.textMuted} style={{ marginBottom: 12 }} />
+                      <Text style={s.emptyText}>No songs found</Text>
+                    </>
+                  )}
                 </View>
-                {!isSelectionMode && (
+              }
+              renderItem={({ item: track, index }) => {
+                const isActiveTrack = activeTrack && String(activeTrack.id) === String(track.id);
+                const hasAudio = !!track.audioUrl;
+                return (
                   <TouchableOpacity
-                    style={s.moreBtn}
-                    onPress={e => {
-                      e.stopPropagation();
-                      setSelectedOptionsTrack(track);
-                      setTracksForOptions([]);
-                      setShowTrackOptions(true);
+                    key={track.id}
+                    style={[s.trackRow, selectedTracks.has(track.id) && { backgroundColor: 'rgba(192,132,252,0.12)' }]}
+                    activeOpacity={0.7}
+                    onPress={() => openTrack(track)}
+                    onLongPress={() => {
+                      if (!isSelectionMode) setIsSelectionMode(true);
+                      toggleSelection(track.id);
                     }}
                   >
-                    <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textMuted} />
+                    {isSelectionMode ? (
+                      <View style={{ width: 28, alignItems: 'center' }}>
+                        <Ionicons name={selectedTracks.has(track.id) ? "checkmark-circle" : "ellipse-outline"} size={20} color={selectedTracks.has(track.id) ? theme.colors.accent : theme.colors.textMuted} />
+                      </View>
+                    ) : isActiveTrack && isPlaying ? (
+                      <View style={{ width: 28, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 2, height: 18 }}>
+                        {[1, 0.6, 0.85].map((h, i) => (
+                          <View key={i} style={{ width: 3, height: 18 * h, backgroundColor: theme.colors.accent, borderRadius: 2 }} />
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={[s.trackIndex, isActiveTrack && { color: theme.colors.accent }]}>{String(index + 1).padStart(2, '0')}</Text>
+                    )}
+                    <View style={s.trackArtContainer}>
+                      {track.imageUrl && typeof track.imageUrl === 'string' && track.imageUrl.startsWith('http') ? (
+                        <Image source={{ uri: track.imageUrl }} style={s.trackArt} resizeMode="cover" />
+                      ) : track.image && typeof track.image === 'object' && track.image.uri ? (
+                        <Image source={track.image} style={s.trackArt} resizeMode="cover" />
+                      ) : track.image && typeof track.image === 'number' ? (
+                        <Image source={track.image} style={s.trackArt} resizeMode="cover" />
+                      ) : (
+                        <Image source={TRACK_PLACEHOLDER} style={s.trackArt} resizeMode="cover" />
+                      )}
+                      {!hasAudio && (
+                        <View style={s.noAudioOverlay}>
+                          <Ionicons name="volume-mute" size={16} color="rgba(255,255,255,0.85)" />
+                        </View>
+                      )}
+                    </View>
+                    <View style={s.trackInfo}>
+                      <HighlightedText
+                        text={track.title}
+                        tokens={track.searchResult?.matchTokens}
+                        style={[s.trackTitle, isActiveTrack && { color: theme.colors.accent }]}
+                        highlightStyle={{ color: theme.colors.accent, fontWeight: '700', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderRadius: 3 }}
+                        numberOfLines={1}
+                      />
+
+                      {track.searchResult?.snippet ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, marginTop: 2, marginBottom: 3 }}>
+                          <Ionicons
+                            name={track.searchResult.matchField === 'comments' ? 'chatbubble-ellipses-outline' : 'document-text-outline'}
+                            size={11}
+                            color={theme.colors.accent}
+                            style={{ marginRight: 4, marginTop: 1 }}
+                          />
+                          <HighlightedText
+                            text={track.searchResult.snippet}
+                            tokens={track.searchResult.matchTokens}
+                            style={{ flex: 1, color: theme.colors.textMuted, fontSize: 11.5, fontStyle: 'italic', lineHeight: 16 }}
+                            highlightStyle={{ color: '#38bdf8', fontWeight: '700', backgroundColor: 'rgba(56, 189, 248, 0.22)', borderRadius: 3 }}
+                            numberOfLines={2}
+                          />
+                        </View>
+                      ) : null}
+
+                      <View style={s.trackMeta}>
+                        {!hasAudio ? (
+                          <>
+                            <Ionicons name="volume-mute-outline" size={11} color="#fb923c" style={{ marginRight: 4 }} />
+                            <Text style={[s.trackMetaText, { color: '#fb923c' }]} numberOfLines={1}>No audio yet</Text>
+                          </>
+                        ) : (
+                          <>
+                            <Ionicons name="person" size={11} color={isActiveTrack ? theme.colors.accent : theme.colors.accent} style={{ marginRight: 4 }} />
+                            <HighlightedText
+                              text={track.leadSinger}
+                              tokens={track.searchResult?.matchTokens}
+                              style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]}
+                              highlightStyle={{ color: theme.colors.accent, fontWeight: '700', backgroundColor: 'rgba(192, 132, 252, 0.2)', borderRadius: 3 }}
+                              numberOfLines={1}
+                            />
+                          </>
+                        )}
+                        {track.key ? (
+                          <>
+                            <Text style={[s.trackMetaDot, isActiveTrack && { color: theme.colors.accent }]}>·</Text>
+                            <Text style={[s.trackMetaText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>{track.key}</Text>
+                          </>
+                        ) : null}
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                        {track.program ? (
+                          <View style={[s.trackProgramBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.2)' }]}>
+                            <Ionicons name="musical-notes" size={9} color={theme.colors.accent} style={{ marginRight: 4 }} />
+                            <Text style={[s.trackProgramBadgeText, isActiveTrack && { color: theme.colors.accent }]} numberOfLines={1}>
+                              {sanitizeProgramName(track.program, 'Loveworld Singers', programMap)}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {(() => {
+                          const songParts = resolveSongAudioUrls(track);
+                          const extraCount = Object.keys(songParts).filter(k => k.toLowerCase() !== 'full' && !k.startsWith('_')).length;
+                          if (extraCount === 0) return null;
+                          return (
+                            <TouchableOpacity
+                              style={[s.trackPartsBadge, isActiveTrack && { borderColor: theme.colors.accent, backgroundColor: 'rgba(192, 132, 252, 0.25)' }]}
+                              onPress={(e) => {
+                                e.stopPropagation();
+                                setPartsModalTrack(track);
+                              }}
+                              activeOpacity={0.75}
+                            >
+                              <Ionicons name="layers-outline" size={10} color={theme.colors.accent} style={{ marginRight: 3 }} />
+                              <Text style={[s.trackPartsBadgeText, isActiveTrack && { color: theme.colors.accent }]}>
+                                {extraCount + 1} Parts
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
+                      </View>
+                    </View>
+                    {!isSelectionMode && (
+                      <TouchableOpacity
+                        style={s.moreBtn}
+                        onPress={e => {
+                          e.stopPropagation();
+                          setSelectedOptionsTrack(track);
+                          setTracksForOptions([]);
+                          setShowTrackOptions(true);
+                        }}
+                      >
+                        <Ionicons name="ellipsis-horizontal" size={20} color={theme.colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
                   </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-            );
-          }}
-          ListFooterComponent={
-            visibleCount < filteredTracks.length ? (
-              <TouchableOpacity
-                style={s.loadMoreBtn}
-                activeOpacity={0.8}
-                onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
-              >
-                <Text style={s.loadMoreBtnText}>Load More</Text>
-                <Ionicons name="chevron-down" size={16} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ height: 120 }} />
-            )
-          }
-          />
-        {isSelectionMode && (
-          <View style={[s.miniPlayer, { backgroundColor: theme.colors.backgroundSecondary, justifyContent: 'space-between' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '700' }}>
-                {selectedTracks.size} Selected
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  const allIds = filteredTracks.map(t => t.id);
-                  setSelectedTracks(new Set(allIds));
-                }}
-                style={{
-                  backgroundColor: 'rgba(192, 132, 252, 0.15)',
-                  paddingHorizontal: 8,
-                  paddingVertical: 5,
-                  borderRadius: 6,
-                }}
-              >
-                <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: '700' }}>Select All</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedTracks(new Set());
-                }}
-                style={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                  paddingHorizontal: 8,
-                  paddingVertical: 5,
-                  borderRadius: 6,
-                }}
-              >
-                <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '700' }}>Reset</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <TouchableOpacity onPress={() => {
-                const tracks = Array.from(selectedTracks).map(id => songs.find(s => s.id === id)).filter(Boolean);
-                setSelectedOptionsTrack(null);
-                setTracksForOptions(tracks);
-                setShowTrackOptions(true);
-              }}>
-                <Ionicons name="list-outline" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => {
-                const tracks = Array.from(selectedTracks).map(id => songs.find(s => s.id === id)).filter(Boolean);
-                setShareTracks(tracks);
-                setShowShareSheet(true);
-              }}>
-                <Ionicons name="chatbubbles-outline" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setIsSelectionMode(false); setSelectedTracks(new Set()); }}>
-                <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-        {!isSelectionMode && activeTrack && (
-          <TouchableOpacity
-            style={[s.miniPlayer, { backgroundColor: theme.colors.backgroundSecondary }]}
-            activeOpacity={0.9}
-            onPress={() => navigateToPlayer({ activeTrack, fromAllSongs: true, zoneId: activeTrack.zoneId, queue: filteredTracks })}
-          >
-            <MiniPlayerProgressBar theme={theme} />
-            <Image
-              source={activeTrack.image || APP_LOGO}
-              style={[s.miniArt, !activeTrack.image && { padding: 4, backgroundColor: 'rgba(255,255,255,0.06)' }]}
-              resizeMode={activeTrack.image ? "cover" : "contain"}
+                );
+              }}
+              ListFooterComponent={
+                visibleCount < filteredTracks.length ? (
+                  <TouchableOpacity
+                    style={s.loadMoreBtn}
+                    activeOpacity={0.8}
+                    onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+                  >
+                    <Text style={s.loadMoreBtnText}>Load More</Text>
+                    <Ionicons name="chevron-down" size={16} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ height: 120 }} />
+                )
+              }
             />
-            <View style={s.miniInfo}>
-              <Text style={s.miniTitle} numberOfLines={1}>{activeTrack.title}</Text>
-              <Text style={s.miniSub} numberOfLines={1}>{activeTrack.leadSinger} · {activeTrack.program}</Text>
-            </View>
-            <View style={s.miniActions}>
-              <TouchableOpacity style={s.miniBtn} onPress={e => { 
-                e.stopPropagation(); 
-                setShareTrack(activeTrack);
-                setShowShareSheet(true);
-              }}>
-                <Ionicons name="add-circle-outline" size={22} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-              <TouchableOpacity style={s.miniBtn} onPress={e => { e.stopPropagation(); togglePlayback(); }}>
-                <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        )}
-      </SafeAreaView>
-      <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
-        <KeyboardAvoidingView
-          behavior='padding'
-          style={{ flex: 1 }}
-        >
-        <BlurView intensity={60} tint="dark" style={{ flex: 1, justifyContent: 'flex-end' }}>
-          <Pressable style={{ flex: 1 }} onPress={() => setShowFilterModal(false)} />
-          <View style={s.modal}>
-            <View style={s.modalHandle} />
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Filter Songs</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)} style={s.modalClose}>
-                <Ionicons name="close" size={22} color={theme.colors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-            <View style={s.modalTabs}>
-              {(['singer', 'program'] as const).map(tab => (
-                <TouchableOpacity
-                  key={tab}
-                  style={[s.modalTab, filterTab === tab && s.modalTabActive]}
-                  onPress={() => { setFilterTab(tab); }}
-                >
-                  <Ionicons
-                    name={tab === 'singer' ? 'person-outline' : 'musical-notes-outline'}
-                    size={15}
-                    color={filterTab === tab ? theme.colors.textPrimary : theme.colors.textMuted}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={[s.modalTabText, filterTab === tab && s.modalTabTextActive]}>
-                    {tab === 'singer' ? 'Lead Singer' : 'Program / Category'}
+            {isSelectionMode && (
+              <View style={[s.miniPlayer, { backgroundColor: theme.colors.backgroundSecondary, justifyContent: 'space-between' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '700' }}>
+                    {selectedTracks.size} Selected
                   </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {filterTab === 'program' && (
-              <View style={s.modalSearchBox}>
-                <Ionicons name="search" size={15} color={theme.colors.textMuted} style={{ marginRight: 6 }} />
-                <TextInput
-                  style={s.modalSearchInput}
-                  placeholder="Search program (e.g. 28, 23, Communion)..."
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={searchProgramQuery}
-                  onChangeText={setSearchProgramQuery}
-                  autoCapitalize="none"
-                />
-                {searchProgramQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchProgramQuery('')}>
-                    <Ionicons name="close-circle" size={15} color={theme.colors.textMuted} />
+                  <TouchableOpacity
+                    onPress={() => {
+                      const allIds = filteredTracks.map(t => t.id);
+                      setSelectedTracks(new Set(allIds));
+                    }}
+                    style={{
+                      backgroundColor: 'rgba(192, 132, 252, 0.15)',
+                      paddingHorizontal: 8,
+                      paddingVertical: 5,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.accent, fontSize: 11, fontWeight: '700' }}>Select All</Text>
                   </TouchableOpacity>
-                )}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSelectedTracks(new Set());
+                    }}
+                    style={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                      paddingHorizontal: 8,
+                      paddingVertical: 5,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.textSecondary, fontSize: 11, fontWeight: '700' }}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+                  <TouchableOpacity onPress={() => {
+                    const tracks = Array.from(selectedTracks).map(id => songs.find(s => s.id === id)).filter(Boolean);
+                    setSelectedOptionsTrack(null);
+                    setTracksForOptions(tracks);
+                    setShowTrackOptions(true);
+                  }}>
+                    <Ionicons name="list-outline" size={24} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => {
+                    const tracks = Array.from(selectedTracks).map(id => songs.find(s => s.id === id)).filter(Boolean);
+                    setShareTracks(tracks);
+                    setShowShareSheet(true);
+                  }}>
+                    <Ionicons name="chatbubbles-outline" size={24} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setIsSelectionMode(false); setSelectedTracks(new Set()); }}>
+                    <Ionicons name="close" size={24} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
-            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
-              <View style={{ gap: 8, paddingBottom: 16 }}>
-                {filterTab === 'singer' ? (
-                  [null, ...singers].map(item => (
-                    <TouchableOpacity
-                      key={item || 'all'}
-                      style={[s.filterOption, selectedSinger === item && s.filterOptionActive]}
-                      onPress={() => { setSelectedSinger(item); }}
-                    >
-                      <Text style={[s.filterOptionText, selectedSinger === item && s.filterOptionTextActive]}>
-                        {item || 'All Singers'}
-                      </Text>
-                      {selectedSinger === item && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
+            {!isSelectionMode && activeTrack && (
+              <TouchableOpacity
+                style={[s.miniPlayer, { backgroundColor: theme.colors.backgroundSecondary }]}
+                activeOpacity={0.9}
+                onPress={() => navigateToPlayer({ activeTrack, fromAllSongs: true, zoneId: activeTrack.zoneId, queue: filteredTracks })}
+              >
+                <MiniPlayerProgressBar theme={theme} />
+                <Image
+                  source={activeTrack.image || APP_LOGO}
+                  style={[s.miniArt, !activeTrack.image && { padding: 4, backgroundColor: 'rgba(255,255,255,0.06)' }]}
+                  resizeMode={activeTrack.image ? "cover" : "contain"}
+                />
+                <View style={s.miniInfo}>
+                  <Text style={s.miniTitle} numberOfLines={1}>{activeTrack.title}</Text>
+                  <Text style={s.miniSub} numberOfLines={1}>{activeTrack.leadSinger} · {activeTrack.program}</Text>
+                </View>
+                <View style={s.miniActions}>
+                  <TouchableOpacity style={s.miniBtn} onPress={e => {
+                    e.stopPropagation();
+                    setShareTrack(activeTrack);
+                    setShowShareSheet(true);
+                  }}>
+                    <Ionicons name="add-circle-outline" size={22} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.miniBtn} onPress={e => { e.stopPropagation(); togglePlayback(); }}>
+                    <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color={theme.colors.textPrimary} />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            )}
+          </SafeAreaView>
+          <Modal visible={showFilterModal} transparent animationType="slide" onRequestClose={() => setShowFilterModal(false)}>
+            <KeyboardAvoidingView
+              behavior='padding'
+              style={{ flex: 1 }}
+            >
+              <BlurView intensity={60} tint="dark" style={{ flex: 1, justifyContent: 'flex-end' }}>
+                <Pressable style={{ flex: 1 }} onPress={() => setShowFilterModal(false)} />
+                <View style={s.modal}>
+                  <View style={s.modalHandle} />
+                  <View style={s.modalHeader}>
+                    <Text style={s.modalTitle}>Filter Songs</Text>
+                    <TouchableOpacity onPress={() => setShowFilterModal(false)} style={s.modalClose}>
+                      <Ionicons name="close" size={22} color={theme.colors.textPrimary} />
                     </TouchableOpacity>
-                  ))
-                ) : (
-                  [null, ...filteredProgramsInModal].map((item: any) => {
-                    const isAll = item === null;
-                    const itemName = isAll ? 'All Programs' : (item.name || item.title || item);
-                    const count = item?.songCount ? ` (${item.songCount} songs)` : '';
-                    const isSelected = isAll ? selectedProgramId === null : (selectedProgramId === itemName || selectedProgramId === item?.id);
-
-                    return (
+                  </View>
+                  <View style={s.modalTabs}>
+                    {(['singer', 'program'] as const).map(tab => (
                       <TouchableOpacity
-                        key={isAll ? 'all' : (item.id || itemName)}
-                        style={[s.filterOption, isSelected && s.filterOptionActive]}
-                        onPress={() => { setSelectedProgramId(isAll ? null : itemName); }}
+                        key={tab}
+                        style={[s.modalTab, filterTab === tab && s.modalTabActive]}
+                        onPress={() => { setFilterTab(tab); }}
                       >
-                        <View style={{ flex: 1, paddingRight: 8 }}>
-                          <Text style={[s.filterOptionText, isSelected && s.filterOptionTextActive]} numberOfLines={1}>
-                            {itemName}
-                          </Text>
-                          {item?.date ? <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>{item.date}</Text> : null}
-                        </View>
-                        {count ? <Text style={{ color: isSelected ? theme.colors.accent : theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginRight: 8 }}>{count}</Text> : null}
-                        {isSelected && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
+                        <Ionicons
+                          name={tab === 'singer' ? 'person-outline' : 'musical-notes-outline'}
+                          size={15}
+                          color={filterTab === tab ? theme.colors.textPrimary : theme.colors.textMuted}
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={[s.modalTabText, filterTab === tab && s.modalTabTextActive]}>
+                          {tab === 'singer' ? 'Lead Singer' : 'Program / Category'}
+                        </Text>
                       </TouchableOpacity>
-                    );
-                  })
-                )}
-              </View>
-            </ScrollView>
-            <View style={s.modalFooter}>
-              <TouchableOpacity
-                style={s.resetBtn}
-                onPress={() => { setSelectedSinger(null); setSelectedProgramId(null); setShowFilterModal(false); }}
-              >
-                <Text style={s.resetBtnText}>Reset</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={s.applyBtn}
-                onPress={() => { setShowFilterModal(false); }}
-              >
-                <Text style={s.applyBtnText}>Show {filteredTracks.length} songs</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </BlurView>
-        </KeyboardAvoidingView>
-      </Modal>
+                    ))}
+                  </View>
+                  {filterTab === 'program' && (
+                    <View style={s.modalSearchBox}>
+                      <Ionicons name="search" size={15} color={theme.colors.textMuted} style={{ marginRight: 6 }} />
+                      <TextInput
+                        style={s.modalSearchInput}
+                        placeholder="Search program (e.g. 28, 23, Communion)..."
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={searchProgramQuery}
+                        onChangeText={setSearchProgramQuery}
+                        autoCapitalize="none"
+                      />
+                      {searchProgramQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSearchProgramQuery('')}>
+                          <Ionicons name="close-circle" size={15} color={theme.colors.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+                    <View style={{ gap: 8, paddingBottom: 16 }}>
+                      {filterTab === 'singer' ? (
+                        [null, ...singers].map(item => (
+                          <TouchableOpacity
+                            key={item || 'all'}
+                            style={[s.filterOption, selectedSinger === item && s.filterOptionActive]}
+                            onPress={() => { setSelectedSinger(item); }}
+                          >
+                            <Text style={[s.filterOptionText, selectedSinger === item && s.filterOptionTextActive]}>
+                              {item || 'All Singers'}
+                            </Text>
+                            {selectedSinger === item && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
+                          </TouchableOpacity>
+                        ))
+                      ) : (
+                        [null, ...filteredProgramsInModal].map((item: any) => {
+                          const isAll = item === null;
+                          const itemName = isAll ? 'All Programs' : (item.name || item.title || item);
+                          const count = item?.songCount ? ` (${item.songCount} songs)` : '';
+                          const isSelected = isAll ? selectedProgramId === null : (selectedProgramId === itemName || selectedProgramId === item?.id);
 
-      <TrackOptionsModal 
-        visible={showTrackOptions} 
-        onClose={() => {
-          setShowTrackOptions(false);
-          setIsSelectionMode(false);
-          setSelectedTracks(new Set());
-        }} 
-        track={selectedOptionsTrack} 
-        tracks={tracksForOptions}
-        onForwardToChat={() => {
-          if (tracksForOptions && tracksForOptions.length > 0) {
-            setShareTracks(tracksForOptions);
-          } else {
-            setShareTrack(selectedOptionsTrack);
-          }
-          setShowShareSheet(true);
-        }}
-        onOpenAudioParts={(track) => setPartsModalTrack(track)}
-      />
-      <ShareToChatSheet
-        visible={showShareSheet}
-        song={shareTrack ? {
-          ...shareTrack,
-          id: shareTrack.id,
-          title: shareTrack.title,
-        } : null}
-        songs={shareTracks}
-        onClose={() => {
-          setShowShareSheet(false);
-          setShareTrack(null);
-          setShareTracks(null);
-        }}
-      />
-      <PlayerAudioPartsModal
-        visible={!!partsModalTrack}
-        onClose={() => setPartsModalTrack(null)}
-        activeTrack={partsModalTrack}
-        currentTrack={activeTrack}
-        onSelectTrack={(trackToPlay) => {
-          openTrack(trackToPlay);
-        }}
-        theme={theme}
-      />
-    </View>
+                          return (
+                            <TouchableOpacity
+                              key={isAll ? 'all' : (item.id || itemName)}
+                              style={[s.filterOption, isSelected && s.filterOptionActive]}
+                              onPress={() => { setSelectedProgramId(isAll ? null : itemName); }}
+                            >
+                              <View style={{ flex: 1, paddingRight: 8 }}>
+                                <Text style={[s.filterOptionText, isSelected && s.filterOptionTextActive]} numberOfLines={1}>
+                                  {itemName}
+                                </Text>
+                                {item?.date ? <Text style={{ color: theme.colors.textMuted, fontSize: 11, marginTop: 2 }}>{item.date}</Text> : null}
+                              </View>
+                              {count ? <Text style={{ color: isSelected ? theme.colors.accent : theme.colors.textMuted, fontSize: 12, fontWeight: '600', marginRight: 8 }}>{count}</Text> : null}
+                              {isSelected && <Ionicons name="checkmark-circle" size={18} color={theme.colors.accent} />}
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </View>
+                  </ScrollView>
+                  <View style={s.modalFooter}>
+                    <TouchableOpacity
+                      style={s.resetBtn}
+                      onPress={() => { setSelectedSinger(null); setSelectedProgramId(null); setShowFilterModal(false); }}
+                    >
+                      <Text style={s.resetBtnText}>Reset</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.applyBtn}
+                      onPress={() => { setShowFilterModal(false); }}
+                    >
+                      <Text style={s.applyBtnText}>Show {filteredTracks.length} songs</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </BlurView>
+            </KeyboardAvoidingView>
+          </Modal>
+
+          <TrackOptionsModal
+            visible={showTrackOptions}
+            onClose={() => {
+              setShowTrackOptions(false);
+              setIsSelectionMode(false);
+              setSelectedTracks(new Set());
+            }}
+            track={selectedOptionsTrack}
+            tracks={tracksForOptions}
+            onForwardToChat={() => {
+              if (tracksForOptions && tracksForOptions.length > 0) {
+                setShareTracks(tracksForOptions);
+              } else {
+                setShareTrack(selectedOptionsTrack);
+              }
+              setShowShareSheet(true);
+            }}
+            onOpenAudioParts={(track) => setPartsModalTrack(track)}
+          />
+          <ShareToChatSheet
+            visible={showShareSheet}
+            song={shareTrack ? {
+              ...shareTrack,
+              id: shareTrack.id,
+              title: shareTrack.title,
+            } : null}
+            songs={shareTracks}
+            onClose={() => {
+              setShowShareSheet(false);
+              setShareTrack(null);
+              setShareTracks(null);
+            }}
+          />
+          <PlayerAudioPartsModal
+            visible={!!partsModalTrack}
+            onClose={() => setPartsModalTrack(null)}
+            activeTrack={partsModalTrack}
+            currentTrack={activeTrack}
+            onSelectTrack={(trackToPlay) => {
+              openTrack(trackToPlay);
+            }}
+            theme={theme}
+          />
+        </View>
       )}
     </View>
   );
 }
 
-const getStyles = (theme: any) => {
+const getStyles = (theme: any, insets?: any) => {
   const T = theme.colors;
+  const bottomOffset = Math.max(insets?.bottom || 0, 16) + 14;
   return StyleSheet.create({
-  root: { flex: 1, backgroundColor: T.background },
+    root: { flex: 1, backgroundColor: T.background },
 
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { color: T.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+    backBtn: { width: 40, height: 40, justifyContent: 'center' },
+    headerTitle: { color: T.textPrimary, fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
 
-  heroBanner: {
-    width: '100%',
-    height: Math.round(Math.min(SCREEN_WIDTH * 0.62, 260)),
-    position: 'relative',
-    overflow: 'hidden',
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    marginBottom: 12,
-    backgroundColor: '#12111A',
-  },
-  heroContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  heroLogoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  heroLogo: { width: 18, height: 18 },
-  heroLogoText: { color: '#ffffff', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
-  heroTitle: { color: '#ffffff', fontSize: 26, fontWeight: '900', letterSpacing: -0.5, marginBottom: 2 },
-  heroSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12.5, fontWeight: '500', marginBottom: 14 },
-  heroStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderRadius: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  statItem: { alignItems: 'center', paddingHorizontal: 12 },
-  statNum: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
-  statLbl: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', marginTop: 1, textTransform: 'uppercase', letterSpacing: 0.5 },
-  statDivider: { width: 1, height: 22, backgroundColor: 'rgba(255,255,255,0.15)' },
+    heroBanner: {
+      width: '100%',
+      height: Math.round(Math.min(SCREEN_WIDTH * 0.62, 260)),
+      position: 'relative',
+      overflow: 'hidden',
+      borderBottomLeftRadius: 20,
+      borderBottomRightRadius: 20,
+      marginBottom: 12,
+      backgroundColor: '#12111A',
+    },
+    heroContent: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      paddingHorizontal: 20,
+      paddingBottom: 16,
+    },
+    heroLogoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 6,
+      gap: 8,
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      alignSelf: 'flex-start',
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    heroLogo: { width: 18, height: 18 },
+    heroLogoText: { color: '#ffffff', fontSize: 11, fontWeight: '700', letterSpacing: 0.3 },
+    heroTitle: { color: '#ffffff', fontSize: 26, fontWeight: '900', letterSpacing: -0.5, marginBottom: 2 },
+    heroSub: { color: 'rgba(255,255,255,0.75)', fontSize: 12.5, fontWeight: '500', marginBottom: 14 },
+    heroStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.35)',
+      borderRadius: 14,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      alignSelf: 'flex-start',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.1)',
+    },
+    statItem: { alignItems: 'center', paddingHorizontal: 12 },
+    statNum: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
+    statLbl: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', marginTop: 1, textTransform: 'uppercase', letterSpacing: 0.5 },
+    statDivider: { width: 1, height: 22, backgroundColor: 'rgba(255,255,255,0.15)' },
 
-  searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12, gap: 10 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: T.inputBackground, borderRadius: 12, paddingHorizontal: 12, height: 42, borderWidth: 1, borderColor: T.inputBorder },
-  searchInput: { flex: 1, color: T.inputText, fontSize: 14, fontWeight: '500' },
-  filterBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: T.inputBackground, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: T.inputBorder },
-  filterBtnActive: { backgroundColor: T.accent, borderColor: T.accent },
+    searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12, gap: 10 },
+    searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: T.inputBackground, borderRadius: 12, paddingHorizontal: 12, height: 42, borderWidth: 1, borderColor: T.inputBorder },
+    searchInput: { flex: 1, color: T.inputText, fontSize: 14, fontWeight: '500' },
+    filterBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: T.inputBackground, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: T.inputBorder },
+    filterBtnActive: { backgroundColor: T.accent, borderColor: T.accent },
 
-  actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 16 },
-  countText: { color: T.textSecondary, fontSize: 14, fontWeight: '600' },
-  clearBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(239,68,68,0.18)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  clearBadgeText: { color: T.textPrimary, fontSize: 12, fontWeight: '600' },
-  sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: T.cardBackgroundLight, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  sortText: { color: T.textMuted, fontSize: 12, fontWeight: '700' },
-  shuffleBtn: { padding: 4 },
-  playAllBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: T.accent, justifyContent: 'center', alignItems: 'center', shadowColor: T.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+    actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginBottom: 16 },
+    countText: { color: T.textSecondary, fontSize: 14, fontWeight: '600' },
+    clearBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(239,68,68,0.18)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+    clearBadgeText: { color: T.textPrimary, fontSize: 12, fontWeight: '600' },
+    sortBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: T.cardBackgroundLight, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+    sortText: { color: T.textMuted, fontSize: 12, fontWeight: '700' },
+    shuffleBtn: { padding: 4 },
+    playAllBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: T.accent, justifyContent: 'center', alignItems: 'center', shadowColor: T.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
 
-  trackList: { paddingHorizontal: 16, gap: 0 },
-  trackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.divider },
-  trackIndex: { color: T.textMuted, fontSize: 12, fontWeight: '700', width: 28, textAlign: 'center' },
-  trackArtContainer: { width: 46, height: 46, borderRadius: 8, marginRight: 12, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26' },
-  trackArt: { width: 46, height: 46, borderRadius: 8 },
-  trackArtLogoWrap: { width: 46, height: 46, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C26', alignItems: 'center', justifyContent: 'center' },
-  trackArtLogo: { width: 26, height: 26 },
-  noAudioOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  trackInfo: { flex: 1, justifyContent: 'center' },
-  trackTitle: { color: T.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 3 },
-  trackMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  trackMetaText: { color: T.textMuted, fontSize: 12, fontWeight: '500' },
-  trackMetaDot: { color: T.textMuted, fontSize: 12, marginHorizontal: 5 },
-  trackProgram: { color: T.textMuted, fontSize: 11, fontWeight: '500' },
-  moreBtn: { padding: 8 },
-  empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
-  emptyText: { color: T.textMuted, fontSize: 15, fontWeight: '600' },
-  loadMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    alignSelf: 'center',
-    backgroundColor: T.cardBackgroundLight,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 14,
-    marginVertical: 20,
-    borderWidth: 1,
-    borderColor: T.surfaceBorder,
-    marginBottom: 120,
-  },
-  loadMoreBtnText: {
-    color: T.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  retryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: T.accent,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    shadowColor: T.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  retryBtnText: {
-    color: T.textPrimary,
-    fontSize: 14,
-    fontWeight: '700',
-  },
+    trackList: { paddingHorizontal: 16, gap: 0 },
+    trackRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.divider },
+    trackIndex: { color: T.textMuted, fontSize: 12, fontWeight: '700', width: 28, textAlign: 'center' },
+    trackArtContainer: { width: 46, height: 46, borderRadius: 8, marginRight: 12, overflow: 'hidden', position: 'relative', backgroundColor: '#1C1C26' },
+    trackArt: { width: 46, height: 46, borderRadius: 8 },
+    trackArtLogoWrap: { width: 46, height: 46, borderRadius: 8, overflow: 'hidden', backgroundColor: '#1C1C26', alignItems: 'center', justifyContent: 'center' },
+    trackArtLogo: { width: 26, height: 26 },
+    noAudioOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+    trackInfo: { flex: 1, justifyContent: 'center' },
+    trackTitle: { color: T.textPrimary, fontSize: 15, fontWeight: '600', marginBottom: 3 },
+    trackMeta: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+    trackMetaText: { color: T.textMuted, fontSize: 12, fontWeight: '500' },
+    trackMetaDot: { color: T.textMuted, fontSize: 12, marginHorizontal: 5 },
+    trackProgram: { color: T.textMuted, fontSize: 11, fontWeight: '500' },
+    moreBtn: { padding: 8 },
+    empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },
+    emptyText: { color: T.textMuted, fontSize: 15, fontWeight: '600' },
+    loadMoreBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      alignSelf: 'center',
+      backgroundColor: T.cardBackgroundLight,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      borderRadius: 14,
+      marginVertical: 20,
+      borderWidth: 1,
+      borderColor: T.surfaceBorder,
+      marginBottom: 120,
+    },
+    loadMoreBtnText: {
+      color: T.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: T.accent,
+      paddingVertical: 10,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      shadowColor: T.accent,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 6,
+      elevation: 4,
+    },
+    retryBtnText: {
+      color: T.textPrimary,
+      fontSize: 14,
+      fontWeight: '700',
+    },
 
-  miniPlayer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: T.bottomTabBorder, shadowColor: T.background, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
-  miniArt: { width: 40, height: 40, borderRadius: 4, marginRight: 12 },
-  miniInfo: { flex: 1 },
-  miniTitle: { color: T.textPrimary, fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  miniSub: { color: T.textSecondary, fontSize: 12 },
-  miniActions: { flexDirection: 'row', alignItems: 'center' },
-  miniBtn: { marginLeft: 14 },
+    miniPlayer: {
+      position: 'absolute',
+      bottom: bottomOffset,
+      left: 12,
+      right: 12,
+      borderRadius: 18,
+      overflow: 'hidden',
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: T.bottomTabBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      elevation: 12,
+      zIndex: 100,
+    },
+    miniArt: { width: 40, height: 40, borderRadius: 8, marginRight: 12 },
+    miniInfo: { flex: 1 },
+    miniTitle: { color: T.textPrimary, fontSize: 13, fontWeight: '700', marginBottom: 2 },
+    miniSub: { color: T.textSecondary, fontSize: 12 },
+    miniActions: { flexDirection: 'row', alignItems: 'center' },
+    miniBtn: { marginLeft: 14 },
 
-  modal: { backgroundColor: T.bottomSheetBackground, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, borderWidth: 1, borderColor: T.surfaceBorder },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: T.cardBackgroundLight, alignSelf: 'center', marginBottom: 16 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  modalTitle: { color: T.textPrimary, fontSize: 18, fontWeight: '700' },
-  modalClose: { padding: 4, backgroundColor: T.cardBackgroundLight, borderRadius: 14 },
-  modalTabs: { flexDirection: 'row', backgroundColor: T.inputBackground, borderRadius: 14, padding: 4, marginBottom: 16 },
-  modalTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12 },
-  modalTabActive: { backgroundColor: T.accent },
-  modalTabText: { color: T.textMuted, fontSize: 14, fontWeight: '600' },
-  modalTabTextActive: { color: T.textPrimary, fontWeight: '700' },
-  filterOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: T.cardBackgroundLight, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: T.surfaceBorder },
-  filterOptionActive: { backgroundColor: T.accentSubtle, borderColor: T.accent },
-  filterOptionText: { color: T.textPrimary, fontSize: 15, fontWeight: '600' },
-  filterOptionTextActive: { color: T.textPrimary, fontWeight: '700' },
-  quickFilterRow: { paddingHorizontal: 16, marginBottom: 14, gap: 8 },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: T.cardBackgroundLight,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: T.surfaceBorder,
-  },
-  chipActive: {
-    backgroundColor: T.accent,
-    borderColor: T.accent,
-  },
-  chipText: {
-    color: T.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  chipTextActive: {
-    color: '#ffffff',
-    fontWeight: '800',
-  },
-  chipBadge: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 10,
-    marginLeft: 6,
-  },
-  chipBadgeText: {
-    color: T.textSecondary,
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  activeFilterPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(192, 132, 252, 0.15)',
-    borderWidth: 1,
-    borderColor: T.accent,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  activeFilterPillText: {
-    color: T.accent,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  trackProgramBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(192, 132, 252, 0.12)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(192, 132, 252, 0.25)',
-    marginTop: 4,
-  },
-  trackProgramBadgeText: {
-    color: T.accent,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  trackPartsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(192, 132, 252, 0.16)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(192, 132, 252, 0.35)',
-  },
-  trackPartsBadgeText: {
-    color: T.accent,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  modalSearchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: T.inputBackground,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 38,
-    borderWidth: 1,
-    borderColor: T.inputBorder,
-    marginBottom: 12,
-  },
-  modalSearchInput: {
-    flex: 1,
-    color: T.inputText,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  modalFooter: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  resetBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: T.cardBackgroundLight, alignItems: 'center' },
-  resetBtnText: { color: T.textPrimary, fontSize: 15, fontWeight: '600' },
-  applyBtn: { flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: T.accent, alignItems: 'center', shadowColor: T.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 8, elevation: 6 },
-  applyBtnText: { color: T.textPrimary, fontSize: 15, fontWeight: '700' },
-});
+    modal: { backgroundColor: T.bottomSheetBackground, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, borderWidth: 1, borderColor: T.surfaceBorder },
+    modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: T.cardBackgroundLight, alignSelf: 'center', marginBottom: 16 },
+    modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+    modalTitle: { color: T.textPrimary, fontSize: 18, fontWeight: '700' },
+    modalClose: { padding: 4, backgroundColor: T.cardBackgroundLight, borderRadius: 14 },
+    modalTabs: { flexDirection: 'row', backgroundColor: T.inputBackground, borderRadius: 14, padding: 4, marginBottom: 16 },
+    modalTab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12 },
+    modalTabActive: { backgroundColor: T.accent },
+    modalTabText: { color: T.textMuted, fontSize: 14, fontWeight: '600' },
+    modalTabTextActive: { color: T.textPrimary, fontWeight: '700' },
+    filterOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: T.cardBackgroundLight, paddingHorizontal: 16, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: T.surfaceBorder },
+    filterOptionActive: { backgroundColor: T.accentSubtle, borderColor: T.accent },
+    filterOptionText: { color: T.textPrimary, fontSize: 15, fontWeight: '600' },
+    filterOptionTextActive: { color: T.textPrimary, fontWeight: '700' },
+    quickFilterRow: { paddingHorizontal: 16, marginBottom: 14, gap: 8 },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: T.cardBackgroundLight,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: T.surfaceBorder,
+    },
+    chipActive: {
+      backgroundColor: T.accent,
+      borderColor: T.accent,
+    },
+    chipText: {
+      color: T.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    chipTextActive: {
+      color: '#ffffff',
+      fontWeight: '800',
+    },
+    chipBadge: {
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: 10,
+      marginLeft: 6,
+    },
+    chipBadgeText: {
+      color: T.textSecondary,
+      fontSize: 10,
+      fontWeight: '700',
+    },
+    activeFilterPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(192, 132, 252, 0.15)',
+      borderWidth: 1,
+      borderColor: T.accent,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 12,
+    },
+    activeFilterPillText: {
+      color: T.accent,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    trackProgramBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      backgroundColor: 'rgba(192, 132, 252, 0.12)',
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(192, 132, 252, 0.25)',
+      marginTop: 4,
+    },
+    trackProgramBadgeText: {
+      color: T.accent,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+    },
+    trackPartsBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      backgroundColor: 'rgba(192, 132, 252, 0.16)',
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(192, 132, 252, 0.35)',
+    },
+    trackPartsBadgeText: {
+      color: T.accent,
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+    },
+    modalSearchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: T.inputBackground,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      height: 38,
+      borderWidth: 1,
+      borderColor: T.inputBorder,
+      marginBottom: 12,
+    },
+    modalSearchInput: {
+      flex: 1,
+      color: T.inputText,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    modalFooter: {
+      flexDirection: 'row',
+      gap: 12,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: T.surfaceBorder,
+    },
+    resetBtn: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 14,
+      backgroundColor: T.cardBackgroundLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: T.surfaceBorder,
+    },
+    resetBtnText: {
+      color: T.textSecondary,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    applyBtn: {
+      flex: 2,
+      paddingVertical: 14,
+      borderRadius: 14,
+      backgroundColor: T.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    applyBtnText: {
+      color: '#ffffff',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+  });
 };
 

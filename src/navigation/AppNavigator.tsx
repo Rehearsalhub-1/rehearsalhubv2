@@ -37,6 +37,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import UserProfileScreen from '../screens/UserProfileScreen';
 import LinksScreen from '../screens/LinksScreen';
 import SongsScheduleScreen from '../screens/SongsScheduleScreen';
+import AttendanceArchiveScreen from '../screens/AttendanceArchiveScreen';
 import { useTheme } from '../context/ThemeContext';
 import MediaScreen from '@/screens/MediaScreen';
 
@@ -75,6 +76,7 @@ const SafeUserProfileScreen = withErrorBoundary(UserProfileScreen, 'UserProfile'
 const SafeMediaScreen = withErrorBoundary(MediaScreen, 'Media');
 const SafeLinksScreen = withErrorBoundary(LinksScreen, 'Links');
 const SafeSongsScheduleScreen = withErrorBoundary(SongsScheduleScreen, 'SongsSchedule');
+const SafeAttendanceArchiveScreen = withErrorBoundary(AttendanceArchiveScreen, 'AttendanceArchive');
 
 const SignupScreenWrapper = withErrorBoundary((props: any) => (
   <LoginScreen {...props} route={{ ...props.route, params: { ...props.route?.params, mode: 'signup' } }} />
@@ -162,7 +164,11 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
         component={SafeCategoryProgramsScreen} 
         options={{ animation: 'slide_from_bottom' }}
       />
-  
+      <Stack.Screen 
+        name="Audiolab" 
+        component={SafeAudiolabScreen} 
+        options={{ animation: 'slide_from_bottom' }}
+      />
       <Stack.Screen 
         name="Compose" 
         component={SafeAudiolabScreen} 
@@ -245,6 +251,7 @@ export default function AppNavigator({ initialRoute = 'Login' }: { initialRoute?
       />
       <Stack.Screen name="Links" component={SafeLinksScreen} options={{ animation: 'slide_from_bottom' }} />
       <Stack.Screen name="SongsSchedule" component={SafeSongsScheduleScreen} options={{ animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="AttendanceArchive" component={SafeAttendanceArchiveScreen} options={{ animation: 'slide_from_bottom' }} />
     </Stack.Navigator>
   );
 }

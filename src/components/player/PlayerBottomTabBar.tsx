@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { MsgPhoneChatIcon } from './icons/PlayerCustomIcons';
 
 export interface PlayerBottomTabBarProps {
   onOpenQueue: () => void;
@@ -126,8 +127,8 @@ export const PlayerBottomTabBar: React.FC<PlayerBottomTabBarProps> = ({
         onPress={onOpenChat}
         onLongPress={onShareToChat}
       >
-        <Ionicons name="chatbubbles-outline" size={20} color={theme.colors.textSecondary} />
-        <Text style={styles.playerTabLabel}>DM</Text>
+        <MsgPhoneChatIcon size={20} color={theme.colors.textSecondary} />
+        <Text style={styles.playerTabLabel}>MSG</Text>
       </TouchableOpacity>
     </View>
   );

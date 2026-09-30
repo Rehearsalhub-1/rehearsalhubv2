@@ -20,6 +20,7 @@ export const DoodleLayer = React.memo(({
   const activePathRef = useRef<any>(null);
   const latestStrokesRef = useRef<any[]>([]);
   const storeSetStrokes = useAnnotationStore(s => s.setStrokes);
+  const broadcastStrokes = useAnnotationStore(s => s.broadcastStrokes);
   const annotationToolRef = useRef(annotationTool);
 
   useEffect(() => {
@@ -40,24 +41,54 @@ export const DoodleLayer = React.memo(({
     }, 500);
   };
 
+  const isDrawingRef = useRef(false); // tracks if user is mid-stroke (don't overwrite during draw)
+  const lastServerStrokesRef = useRef<string>(''); // tracks last known server state to avoid re-setting unchanged data
+
+  const POLL_INTERVAL_MS = 5000; // poll every 5 seconds as WS fallback
+
+  const fetchAndApplyStrokes = async (trackId: string, active: { value: boolean }) => {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: any }>(`/songs/annotations/${trackId}`);
+      if (!active.value) return;
+      const serverStrokes = res?.data?.data?.strokes;
+      if (!Array.isArray(serverStrokes)) return;
+
+      // Stringify for cheap change detection — skip update if nothing changed
+      const serialized = JSON.stringify(serverStrokes);
+      if (serialized === lastServerStrokesRef.current) return;
+      lastServerStrokesRef.current = serialized;
+
+      // Don't overwrite if user is mid-stroke (would cause flicker/data loss)
+      if (isDrawingRef.current) return;
+
+      if (serverStrokes.length > 0) {
+        storeSetStrokes(serverStrokes);
+        if (setStrokes) setStrokes(serverStrokes);
+      }
+    } catch (e) {
+      // Silent — polling is a fallback, don't log noise
+    }
+  };
+
   useEffect(() => {
     if (!activeTrackId) return;
-    let active = true;
-    (async () => {
-      try {
-        const res = await apiClient.get<{ success: boolean; data: any }>(`/songs/annotations/${activeTrackId}`);
-        if (!active) return;
-        const serverStrokes = res?.data?.data?.strokes;
-        if (Array.isArray(serverStrokes) && serverStrokes.length > 0) {
-          storeSetStrokes(serverStrokes);
-          if (setStrokes) setStrokes(serverStrokes);
-        }
-      } catch (e) {
-        console.warn('[DoodleLayer] Failed to load annotation:', e);
-      }
-    })();
-    return () => { active = false; };
+    lastServerStrokesRef.current = '';
+    const active = { value: true };
+
+    // 1. Immediate initial load
+    fetchAndApplyStrokes(activeTrackId, active);
+
+    // 2. Polling fallback every 5s (covers backends that don't support WS annotation broadcast)
+    const pollTimer = setInterval(() => {
+      fetchAndApplyStrokes(activeTrackId, active);
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      active.value = false;
+      clearInterval(pollTimer);
+    };
   }, [activeTrackId]);
+
 
   useEffect(() => {
     return () => {
@@ -133,6 +164,7 @@ export const DoodleLayer = React.memo(({
         return !shouldRejectDrawingTouch(pageX, pageY);
       },
       onPanResponderGrant: (evt) => {
+        isDrawingRef.current = true; // pause polling while user draws
         const { pageX, pageY } = evt.nativeEvent;
         const x = pageX;
         const y = pageY;
@@ -150,6 +182,7 @@ export const DoodleLayer = React.memo(({
             latestStrokesRef.current = otherStrokes;
             storeSetStrokes(otherStrokes); // instant update across all screens
             if (setStrokes) setStrokes(otherStrokes);
+            broadcastStrokes(otherStrokes); // live sync to other users
           }
           return;
         }
@@ -192,6 +225,7 @@ export const DoodleLayer = React.memo(({
             latestStrokesRef.current = otherStrokes;
             storeSetStrokes(otherStrokes); // instant update across all screens
             if (setStrokes) setStrokes(otherStrokes);
+            broadcastStrokes(otherStrokes); // live sync to other users
           }
           return;
         }
@@ -232,6 +266,8 @@ export const DoodleLayer = React.memo(({
         const tool = annotationToolRef.current;
         if (tool === 'eraser') {
           scheduleSave(latestStrokesRef.current);
+          broadcastStrokes(latestStrokesRef.current); // broadcast erasure to others
+          isDrawingRef.current = false; // resume polling
           return;
         }
 
@@ -248,6 +284,8 @@ export const DoodleLayer = React.memo(({
         storeSetStrokes(updatedStrokes);
         if (setStrokes) setStrokes(updatedStrokes);
         scheduleSave(updatedStrokes);
+        broadcastStrokes(updatedStrokes); // live sync to other users
+        isDrawingRef.current = false; // resume polling now that stroke is committed
 
         if (!activeTrackId) return;
       }
@@ -264,7 +302,9 @@ export const DoodleLayer = React.memo(({
     };
   }, [isAnnotationMode, insets, annotationTool]);
 
-  if (!(strokes?.length > 0 || isAnnotationMode)) {
+  // Always render the layer so all users (privileged or not) can see strokes drawn by others.
+  // Only the pan responder (drawing) is gated on isAnnotationMode.
+  if (strokes?.length === 0 && !isAnnotationMode) {
     return null;
   }
 

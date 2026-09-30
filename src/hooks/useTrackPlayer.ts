@@ -905,7 +905,7 @@ export const useTrackPlayerProgress = (interval = 200) => {
     const poll = async () => {
       try {
         // Skip polling entirely when paused — saves battery and avoids re-renders
-        if (!globalIsPlaying && !globalABLoop.active) return;
+        if (!globalIsPlaying && !globalABLoop.active && !(global as any).isReviewPlaying) return;
         if (!isPlayerSetup) return;
         const posSec = await TrackPlayer.getPosition().catch(() => 0);
         const durSec = await TrackPlayer.getDuration().catch(() => 0);
@@ -923,6 +923,7 @@ export const useTrackPlayerProgress = (interval = 200) => {
             isSeekingLoop = true;
             // globalABLoop.start is in ms; seekTo expects seconds
             await TrackPlayer.seekTo(globalABLoop.start / 1000).catch(() => {});
+            await TrackPlayer.play().catch(() => {});
             setTimeout(() => { isSeekingLoop = false; }, 250);
             if (mounted) {
               // Store in seconds so the return below can multiply back to ms

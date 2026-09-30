@@ -193,7 +193,7 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
               <View style={styles.optionIconBox}>
                 <Ionicons name="chatbubbles-outline" size={22} color={theme.colors.textPrimary} />
               </View>
-              <Text style={styles.optionItemText}>Share to DM</Text>
+              <Text style={styles.optionItemText}>Share to MSG</Text>
               <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
 
@@ -212,7 +212,7 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
                   <Ionicons name="remove-circle-outline" size={22} color="#ef4444" />
                 </View>
                 <Text style={[styles.optionItemText, { color: '#ef4444' }]}>
-                  {isRemoving ? 'Removing…' : 'Remove from Playlist'}
+                  {isRemoving ? 'RemovingΓÇª' : 'Remove from Playlist'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -222,7 +222,7 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
                   <Ionicons name="heart-dislike-outline" size={22} color="#ef4444" />
                 </View>
                 <Text style={[styles.optionItemText, { color: '#ef4444' }]}>
-                  {isRemoving ? 'Removing…' : 'Remove from Liked Songs'}
+                  {isRemoving ? 'RemovingΓÇª' : 'Remove from Liked Songs'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -307,7 +307,7 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
               <View style={styles.noteWrap}>
                 <TextInput
                   style={styles.noteInput}
-                  placeholder={tracksToAdd.length > 1 ? "Add a note to all songs… (optional)" : "Add a note… (optional)"}
+                  placeholder={tracksToAdd.length > 1 ? "Add a note to all songsΓÇª (optional)" : "Add a noteΓÇª (optional)"}
                   placeholderTextColor={theme.colors.textMuted}
                   value={note}
                   onChangeText={setNote}
@@ -323,7 +323,7 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
                       <Text style={styles.eachNoteTitle} numberOfLines={1}>{t.title}</Text>
                       <TextInput
                         style={styles.eachNoteInput}
-                        placeholder="Comment…"
+                        placeholder="CommentΓÇª"
                         placeholderTextColor={theme.colors.textMuted}
                         value={eachNotes[t.id] || ''}
                         onChangeText={(val) => setEachNotes(prev => ({ ...prev, [t.id]: val }))}

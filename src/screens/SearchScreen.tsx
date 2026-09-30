@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,7 +67,8 @@ let cachedSearchSongs: any[] | null = null;
 
 export default function SearchScreen({ navigation }: any) {
   const { theme, themeName } = useTheme();
-  const styles = getStyles(theme);
+  const insets = useSafeAreaInsets();
+  const styles = getStyles(theme, insets);
 
   const [searchQuery, setSearchQuery] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -572,7 +573,8 @@ export default function SearchScreen({ navigation }: any) {
   );
 }
 
-const getStyles = (theme: any) => {
+const getStyles = (theme: any, insets?: any) => {
+  const bottomOffset = Math.max(insets?.bottom || 0, 16) + 14;
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
     safeArea: { flex: 1 },
@@ -697,17 +699,19 @@ const getStyles = (theme: any) => {
     },
     miniPlayerBar: {
       position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
+      bottom: bottomOffset,
+      left: 12,
+      right: 12,
+      borderRadius: 18,
+      overflow: 'hidden',
       backgroundColor: theme.colors.backgroundSecondary || '#1e1b4b',
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.bottomTabBorder || 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      borderColor: theme.colors.bottomTabBorder || 'rgba(255,255,255,0.1)',
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: -4 },
+      shadowOffset: { width: 0, height: 6 },
       shadowOpacity: 0.35,
-      shadowRadius: 8,
-      elevation: 10,
+      shadowRadius: 10,
+      elevation: 12,
       zIndex: 50,
     },
     miniPlayerInner: {

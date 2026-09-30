@@ -217,8 +217,8 @@ export default function SettingsScreen({ navigation }: any) {
       const res = await api.attendance.getMyRecords().catch(() => null);
       const rawRecords = res?.data || [];
       const records = rawRecords.map((r: any) => {
-        const rawDate = r.checkInTime || r.check_in_time || r.timestamp || r.createdAt || r.created_at || r.dateString || r.date_string;
-        const rawCheckIn = r.checkInTime || r.check_in_time || r.timestamp || r.createdAt || r.created_at;
+        const rawDate = r.checkInTime || r.scannedAt || r.check_in_time || r.timestamp || r.createdAt || r.created_at || r.dateString || r.date_string;
+        const rawCheckIn = r.checkInTime || r.scannedAt || r.check_in_time || r.timestamp || r.createdAt || r.created_at;
         return {
           ...r,
           parsedDate: parseDateValue(rawDate),
@@ -950,27 +950,50 @@ export default function SettingsScreen({ navigation }: any) {
                       <ActivityIndicator color={T.accent} />
                     </View>
                   ) : attendanceHistory.length > 0 ? (
-                    attendanceHistory.map((record, idx) => (
-                      <View key={idx} style={s.zoneCard}>
-                        <View style={s.zoneInfo}>
-                          <View style={[s.zoneIconWrap, { backgroundColor: 'rgba(52,211,153,0.1)' }]}>
-                            <Ionicons name="calendar" size={20} color="#34D399" />
+                    <View>
+                      {/* Last 3 records preview */}
+                      <Text style={{ color: T.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Recent</Text>
+                      {attendanceHistory.slice(0, 3).map((record: any, idx: number) => {
+                        const d: Date | null = record.parsedCheckIn || record.parsedDate;
+                        const _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                        const dateLabel = d && !isNaN(d.getTime())
+                          ? `${d.getDate()} ${_MONTHS[d.getMonth()]} ${d.getFullYear()}`
+                          : 'Unknown Date';
+                        const timeLabel = d && !isNaN(d.getTime())
+                          ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+                          : '--:--';
+                        return (
+                        <View key={idx} style={[s.zoneCard, { marginBottom: 8 }]}>
+                          <View style={s.zoneInfo}>
+                            <View style={[s.zoneIconWrap, { backgroundColor: 'rgba(52,211,153,0.1)' }]}>
+                              <Ionicons name="calendar" size={20} color="#34D399" />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={s.zoneName}>{record.eventName || record.event_name || 'Rehearsal'}</Text>
+                              <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{dateLabel}</Text>
+                            </View>
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={s.zoneName}>{record.eventName || record.event_name || 'Rehearsal'}</Text>
-                            <Text style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
-                              {record.parsedDate ? record.parsedDate.toDateString() : 'Unknown Date'}
-                            </Text>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ color: T.textPrimary, fontSize: 13, fontWeight: '600' }}>{timeLabel}</Text>
+                            <Text style={{ color: T.textSecondary, fontSize: 11 }}>In</Text>
                           </View>
                         </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={{ color: T.textPrimary, fontSize: 13, fontWeight: '600' }}>
-                            {record.parsedCheckIn ? record.parsedCheckIn.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--'}
-                          </Text>
-                          <Text style={{ color: T.textSecondary, fontSize: 11 }}>In</Text>
-                        </View>
-                      </View>
-                    ))
+                        );
+                      })}
+
+
+                      {/* View all button */}
+                      <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6, paddingVertical: 14, borderRadius: 14, borderWidth: 1, borderColor: T.bottomTabBorder, backgroundColor: T.cardBackgroundLight }}
+                        onPress={() => navigation.navigate('AttendanceArchive')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="archive-outline" size={16} color={T.accent} />
+                        <Text style={{ color: T.accent, fontSize: 14, fontWeight: '700' }}>View Full Attendance Archive</Text>
+                        <Ionicons name="chevron-forward" size={14} color={T.accent} />
+                      </TouchableOpacity>
+                    </View>
+
                   ) : (
                     <View style={s.subgroupEmpty}>
                       <View style={s.subgroupEmptyIcon}>

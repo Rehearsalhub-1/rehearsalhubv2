@@ -85,32 +85,6 @@ export const PlayerOptionsMenuModal: React.FC<PlayerOptionsMenuModalProps> = ({
             </TouchableOpacity>
           )}
 
-          {/* Section Looper Option */}
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              onClose();
-              onOpenABLooper();
-            }}
-          >
-            <View style={styles.optionIconBox}>
-              <Ionicons
-                name="infinite"
-                size={22}
-                color={abLoop.active ? theme.colors.accent : theme.colors.textPrimary}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.optionItemText}>Section Looper (A-B)</Text>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-                {abLoop.active
-                  ? `Active: ${formatTime(abLoop.start!)} – ${formatTime(abLoop.end!)}`
-                  : 'Set A-B repeat region'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-          </TouchableOpacity>
-
           {/* Clear Section Loop if active */}
           {(abLoop.active || abLoop.start !== null) && (
             <TouchableOpacity
@@ -134,6 +108,20 @@ export const PlayerOptionsMenuModal: React.FC<PlayerOptionsMenuModalProps> = ({
               <Ionicons name="close" size={20} color={theme.colors.textMuted} />
             </TouchableOpacity>
           )}
+             {/* Add to Playlist */}
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => {
+              onClose();
+              setTimeout(onOpenPlaylist, 300);
+            }}
+          >
+            <View style={styles.optionIconBox}>
+              <Ionicons name="list-outline" size={22} color={theme.colors.textPrimary} />
+            </View>
+            <Text style={styles.optionItemText}>Add to Playlist</Text>
+            <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
+          </TouchableOpacity>
 
           {/* Download for Offline Playback */}
           {activeTrack?.audioUrl && (
@@ -197,20 +185,6 @@ export const PlayerOptionsMenuModal: React.FC<PlayerOptionsMenuModalProps> = ({
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
           </TouchableOpacity>
 
-          {/* Add to Playlist */}
-          <TouchableOpacity
-            style={styles.optionItem}
-            onPress={() => {
-              onClose();
-              setTimeout(onOpenPlaylist, 300);
-            }}
-          >
-            <View style={styles.optionIconBox}>
-              <Ionicons name="list-outline" size={22} color={theme.colors.textPrimary} />
-            </View>
-            <Text style={styles.optionItemText}>Add to Playlist</Text>
-            <Ionicons name="chevron-forward" size={20} color={theme.colors.textMuted} />
-          </TouchableOpacity>
 
           <View style={{ height: 24 }} />
         </View>

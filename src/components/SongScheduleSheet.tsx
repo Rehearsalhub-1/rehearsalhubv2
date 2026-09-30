@@ -601,7 +601,11 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                     paddingVertical: 8, 
                     paddingHorizontal: 16, 
                     borderRadius: 20,
-                    backgroundColor: activeProgramId === p.id ? theme.colors.accent : theme.colors.cardBackgroundLight,
+                    backgroundColor: activeProgramId === p.id 
+                      ? (p.isCurrent ? 'rgba(16, 185, 129, 0.2)' : theme.colors.accent) 
+                      : (p.isCurrent ? 'rgba(16, 185, 129, 0.08)' : theme.colors.cardBackgroundLight),
+                    borderWidth: p.isCurrent ? 1.5 : 0,
+                    borderColor: p.isCurrent ? '#10b981' : 'transparent',
                     marginRight: 10,
                     flexDirection: 'row',
                     alignItems: 'center'
@@ -610,13 +614,13 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                   <Text style={{ 
                     fontSize: 13, 
                     fontWeight: '700', 
-                    color: activeProgramId === p.id ? '#FFFFFF' : theme.colors.textSecondary 
+                    color: activeProgramId === p.id ? (p.isCurrent ? '#10b981' : '#FFFFFF') : (p.isCurrent ? '#10b981' : theme.colors.textSecondary) 
                   }}>
                     {p.name}
                   </Text>
                   {p.isCurrent && (
-                    <View style={{ backgroundColor: activeProgramId === p.id ? 'rgba(255,255,255,0.2)' : 'rgba(245, 158, 11, 0.15)', borderRadius: 4, paddingVertical: 1, paddingHorizontal: 4, marginLeft: 6 }}>
-                      <Text style={{ fontSize: 9, fontWeight: '800', color: activeProgramId === p.id ? '#FFFFFF' : '#d97706' }}>
+                    <View style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', borderWidth: 1, borderColor: '#10b981', borderRadius: 4, paddingVertical: 1, paddingHorizontal: 4, marginLeft: 6 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#10b981' }}>
                         CURRENT
                       </Text>
                     </View>
@@ -678,7 +682,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                               style={{
                                 paddingVertical: 6,
                                 borderBottomWidth: 2,
-                                borderBottomColor: isSelected ? theme.colors.accent : 'transparent',
+                                borderBottomColor: isCurrent ? '#10b981' : (isSelected ? theme.colors.accent : 'transparent'),
                                 flexDirection: 'row',
                                 alignItems: 'center',
                                 gap: 4,
@@ -687,8 +691,8 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                               <Text style={{
                                 fontSize: 14,
                                 fontWeight: '700',
-                                color: isSelected ? theme.colors.accent : theme.colors.textSecondary,
-                                opacity: isSelected ? 1 : 0.6
+                                color: isCurrent ? '#10b981' : (isSelected ? theme.colors.accent : theme.colors.textSecondary),
+                                opacity: isSelected || isCurrent ? 1 : 0.6
                               }}>
                                 {w.name}
                               </Text>
@@ -696,8 +700,8 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                                 <Text style={{
                                   fontSize: 10,
                                   fontWeight: '800',
-                                  color: theme.colors.accent,
-                                  opacity: isSelected ? 0.95 : 0.65,
+                                  color: '#10b981',
+                                  opacity: isSelected ? 0.95 : 0.8,
                                 }}>
                                   (Current)
                                 </Text>
@@ -720,9 +724,11 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                                 paddingVertical: 6,
                                 paddingHorizontal: 16,
                                 borderRadius: 20,
-                                backgroundColor: isSelected ? theme.colors.accentSubtle : theme.colors.cardBackgroundLight,
-                                borderWidth: 1,
-                                borderColor: isSelected ? theme.colors.accent : 'transparent',
+                                backgroundColor: isCurrent 
+                                  ? (isSelected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(16, 185, 129, 0.08)')
+                                  : (isSelected ? theme.colors.accentSubtle : theme.colors.cardBackgroundLight),
+                                borderWidth: isCurrent ? 1.5 : 1,
+                                borderColor: isCurrent ? '#10b981' : (isSelected ? theme.colors.accent : 'transparent'),
                                 flexDirection: 'row',
                                 alignItems: 'center',
                                 gap: 4,
@@ -731,7 +737,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                               <Text style={{
                                 fontSize: 13,
                                 fontWeight: '700',
-                                color: isSelected ? theme.colors.accent : theme.colors.textSecondary,
+                                color: isCurrent ? '#10b981' : (isSelected ? theme.colors.accent : theme.colors.textSecondary),
                               }}>
                                 {d.name}
                               </Text>
@@ -739,7 +745,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
                                 <Text style={{
                                   fontSize: 10,
                                   fontWeight: '800',
-                                  color: theme.colors.accent,
+                                  color: '#10b981',
                                 }}>
                                   (Current)
                                 </Text>

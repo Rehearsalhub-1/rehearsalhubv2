@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { subscribe as wsSubscribe, sendWsMessage } from '../hooks/useWebSocket';
 
 interface AnnotationStore {
   strokes: any[];
@@ -9,6 +10,7 @@ interface AnnotationStore {
   subscribeToTrack: (trackId: string) => void;
   unsubscribe: () => void;
   saveStrokes: (strokes: any[]) => Promise<void>;
+  broadcastStrokes: (strokes: any[]) => void;
 }
 
 export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
@@ -18,12 +20,41 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
 
   setStrokes: (strokes) => set({ strokes }),
 
+  broadcastStrokes: (strokes: any[]) => {
+    const { activeTrackId } = get();
+    if (!activeTrackId) return;
+    // Broadcast to all other clients watching this song via WebSocket
+    sendWsMessage({
+      type: 'broadcast',
+      resource: 'annotation',
+      id: activeTrackId,
+      data: { strokes },
+    });
+  },
+
   subscribeToTrack: (trackId: string) => {
     const { _unsubscribe, activeTrackId } = get();
-    if (activeTrackId === trackId) return;
+
+    // Already subscribed to this track — no-op
+    if (activeTrackId === trackId && _unsubscribe) return;
+
+    // Clean up previous subscription
     if (_unsubscribe) _unsubscribe();
 
+    // Clear strokes immediately when switching songs
     set({ activeTrackId: trackId, strokes: [] });
+
+    // Subscribe to live annotation events for this track via WebSocket
+    const handler = (data: unknown) => {
+      const payload = data as any;
+      const incoming = payload?.strokes ?? payload?.data?.strokes;
+      if (Array.isArray(incoming)) {
+        set({ strokes: incoming });
+      }
+    };
+
+    const unsub = wsSubscribe('annotation', trackId, handler);
+    set({ _unsubscribe: unsub });
   },
 
   unsubscribe: () => {
@@ -38,3 +69,4 @@ export const useAnnotationStore = create<AnnotationStore>((set, get) => ({
     set({ strokes });
   },
 }));
+

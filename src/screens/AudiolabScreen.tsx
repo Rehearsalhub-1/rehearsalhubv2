@@ -24,6 +24,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { AudioModule, setAudioModeAsync, AudioPlayer, AudioRecorder, createAudioPlayer, RecordingPresets } from 'expo-audio';
+import {
+  STUDIO_RECORDING_OPTIONS,
+  setRecordingAudioModeAsync,
+  resetRecordingAudioModeAsync,
+} from '../lib/audioRecordingConfig';
 import Slider from '@react-native-community/slider';
 import { SafeTrackPlayer as TrackPlayer, SafeCapability as Capability } from '../lib/safeNativeModules';
 import Constants from 'expo-constants';
@@ -509,11 +514,7 @@ export default function AudiolabScreen({ navigation }: any) {
       if (playTimerInterval.current) clearInterval(playTimerInterval.current);
       if (tunerInterval.current) clearInterval(tunerInterval.current);
 
-      setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-        shouldPlayInBackground: false,
-      }).catch(() => {});
+      resetRecordingAudioModeAsync().catch(() => {});
     };
   }, []);
 
@@ -777,12 +778,7 @@ export default function AudiolabScreen({ navigation }: any) {
       } catch {}
 
       await AudioModule.requestRecordingPermissionsAsync();
-      await setAudioModeAsync({
-        allowsRecording: true,
-        playsInSilentMode: true,
-        shouldPlayInBackground: false,
-        shouldRouteThroughEarpiece: !monitorEnabled,
-      });
+      await setRecordingAudioModeAsync();
 
       if (countIn !== 'Off') {
         const beats = countIn === '1 Bar' ? 4 : 8;
@@ -823,7 +819,7 @@ export default function AudiolabScreen({ navigation }: any) {
         }
       ]);
 
-      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      const rec = new AudioModule.AudioRecorder(STUDIO_RECORDING_OPTIONS);
       await rec.prepareToRecordAsync();
       rec.record();
 
@@ -942,7 +938,8 @@ export default function AudiolabScreen({ navigation }: any) {
         allowsRecording: isRecordingSync,
         playsInSilentMode: true,
         shouldPlayInBackground: false,
-        shouldRouteThroughEarpiece: isRecordingSync ? !monitorEnabled : false,
+        interruptionMode: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
       });
 
       await stopPlayback(false);
@@ -965,6 +962,9 @@ export default function AudiolabScreen({ navigation }: any) {
           const delay = shouldPlayImmediately ? 0 : (trackStart - playTime);
 
           if (track.type === 'backing') {
+            if (isRecordingSync && !monitorEnabled) {
+              return;
+            }
             let trackPlayerSuccess = false;
             try {
               await TrackPlayer.reset();
@@ -1606,13 +1606,14 @@ export default function AudiolabScreen({ navigation }: any) {
               monitorEnabled={monitorEnabled}
               onMonitorChange={async (val) => {
                 setMonitorEnabled(val);
-                showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
+                showToast(val ? 'Speaker Monitoring: ON' : 'Speaker Monitoring: OFF (Muted)');
                 try {
                   await setAudioModeAsync({
                     allowsRecording: true,
                     playsInSilentMode: true,
                     shouldPlayInBackground: false,
-                    shouldRouteThroughEarpiece: !val,
+                    interruptionMode: 'duckOthers',
+                    shouldRouteThroughEarpiece: false,
                   });
                 } catch {}
               }}

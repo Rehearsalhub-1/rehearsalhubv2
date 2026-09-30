@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { setAudioModeAsync } from 'expo-audio';
@@ -36,12 +36,13 @@ export const AudiolabSettingsTab: React.FC<Props> = ({
           value={monitorEnabled}
           onValueChange={(val) => {
             onMonitorChange(val);
-            showToast(val ? 'Monitoring: Speaker ON' : 'Monitoring: Earpiece');
+            showToast(val ? 'Speaker Monitoring: ON' : 'Speaker Monitoring: OFF (Muted)');
             setAudioModeAsync({
               allowsRecording: true,
               playsInSilentMode: true,
               shouldPlayInBackground: false,
-              shouldRouteThroughEarpiece: !val,
+              interruptionMode: 'duckOthers',
+              shouldRouteThroughEarpiece: false,
             }).catch(() => {});
           }}
           trackColor={{ false: '#333', true: theme.colors.accent }}

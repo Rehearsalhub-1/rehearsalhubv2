@@ -19,7 +19,12 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { AudioModule, setAudioModeAsync, AudioRecorder, RecordingPresets } from 'expo-audio';
+import { AudioModule, AudioRecorder } from 'expo-audio';
+import {
+  STUDIO_RECORDING_OPTIONS,
+  setRecordingAudioModeAsync,
+  resetRecordingAudioModeAsync,
+} from '../lib/audioRecordingConfig';
 import * as FileSystem from 'expo-file-system/legacy';
 import Slider from '@react-native-community/slider';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
@@ -189,12 +194,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
   useEffect(() => {
     const initAudioAndTakes = async () => {
       try {
-        await setAudioModeAsync({
-          allowsRecording: true,
-          playsInSilentMode: true,
-          shouldPlayInBackground: false,
-          interruptionMode: 'mixWithOthers',
-        });
+        await setRecordingAudioModeAsync();
       } catch (e) {
         console.error('Failed to init audio mode:', e);
       }
@@ -225,11 +225,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
       (global as any).isReviewPlaying = false;
       (global as any).isRecording = false;
       TrackPlayer.reset().catch(() => { });
-      setAudioModeAsync({
-        allowsRecording: false,
-        playsInSilentMode: true,
-        shouldPlayInBackground: false,
-      }).catch(() => { });
+      resetRecordingAudioModeAsync().catch(() => { });
     };
   }, []);
 
@@ -449,7 +445,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
 
   const { position: tpPos, duration: tpDur } = useTrackPlayerProgress(200);
   useEffect(() => {
-    if (!isSeeking && tpPos > 0) {
+    if (!isSeeking) {
       setPosition(tpPos / 1000);
     }
     if (tpDur > 0) {
@@ -558,7 +554,8 @@ export default function KaraokeScreen({ route, navigation }: any) {
       setRecordStartPos(position);
       const initStartTime = Date.now();
 
-      const rec = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      await setRecordingAudioModeAsync();
+      const rec = new AudioModule.AudioRecorder(STUDIO_RECORDING_OPTIONS);
       await rec.prepareToRecordAsync();
       rec.record();
 
@@ -682,20 +679,144 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [lastViewedTakeCount, setLastViewedTakeCount] = useState(0);
 
-  // --- Takes Player: Speed, Sleep Timer, A-B Loop state ---
+  // --- Takes Player: Speed, Sleep Timer, Repeat, A-B Loop state ---
   const [showTakeSpeedModal, setShowTakeSpeedModal] = useState(false);
   const [showTakeSleepTimerModal, setShowTakeSleepTimerModal] = useState(false);
+  const [takePlaybackRate, setTakePlaybackRate] = useState<number>(1.0);
+  const [isTakeRepeat, setIsTakeRepeat] = useState(false);
   const [takeSleepTimerMinutes, setTakeSleepTimerMinutes] = useState<number | null>(null);
   const [takeSleepTimerRemaining, setTakeSleepTimerRemaining] = useState<number | null>(null);
   const [takeAbLoopStep, setTakeAbLoopStep] = useState<'idle' | 'a_set' | 'active'>('idle');
 
+  const takePlaybackRateRef = useRef<number>(1.0);
+  takePlaybackRateRef.current = takePlaybackRate;
+  const isTakeRepeatRef = useRef(false);
+  isTakeRepeatRef.current = isTakeRepeat;
+  const takeSleepTimerMinutesRef = useRef<number | null>(null);
+  takeSleepTimerMinutesRef.current = takeSleepTimerMinutes;
+  const takeAbLoopStepRef = useRef<'idle' | 'a_set' | 'active'>('idle');
+  takeAbLoopStepRef.current = takeAbLoopStep;
+  const abLoopRef = useRef(abLoop);
+  abLoopRef.current = abLoop;
+
+  const pauseReviewTake = async () => {
+    try {
+      await TrackPlayer.pause();
+      setIsReviewPlaying(false);
+    } catch (e) {
+      console.warn('Failed to pause review take:', e);
+    }
+  };
+
+  const resumeReviewTake = async () => {
+    try {
+      (global as any).isReviewPlaying = true;
+      setIsReviewPlaying(true);
+      if (takePlaybackRateRef.current && Math.abs(takePlaybackRateRef.current - 1.0) > 0.01) {
+        await TrackPlayer.setRate(takePlaybackRateRef.current).catch(() => {});
+      }
+      await TrackPlayer.play();
+    } catch (e) {
+      console.warn('Failed to resume review take:', e);
+    }
+  };
+
+  const stopReviewTake = async () => {
+    try {
+      if (reviewTimeoutRef.current) {
+        clearTimeout(reviewTimeoutRef.current);
+        reviewTimeoutRef.current = null;
+      }
+      try {
+        await waitForPlayerSetup();
+        await TrackPlayer.reset();
+      } catch { }
+
+      setIsReviewPlaying(false);
+      setReviewTake(null);
+      setPosition(0);
+      if (isReviewPlayingTimeoutRef.current) {
+        clearTimeout(isReviewPlayingTimeoutRef.current);
+      }
+      isReviewPlayingTimeoutRef.current = setTimeout(() => {
+        (global as any).isReviewPlaying = false;
+        isReviewPlayingTimeoutRef.current = null;
+      }, 500);
+    } catch (e) {
+      (global as any).isReviewPlaying = false;
+    }
+  };
+  const stopReviewTakeRef = useRef(stopReviewTake);
+  stopReviewTakeRef.current = stopReviewTake;
+
+  const playReviewTake = async (take: any, manualSyncOffsetMs: number | null = null) => {
+    try {
+      if (manualSyncOffsetMs === null && isReviewPlaying && reviewTake?.id === take.id) {
+        await pauseReviewTake();
+        return;
+      }
+
+      if (manualSyncOffsetMs === null && !isReviewPlaying && reviewTake?.id === take.id) {
+        await resumeReviewTake();
+        return;
+      }
+
+      await stopReviewTake();
+      if (isReviewPlayingTimeoutRef.current) {
+        clearTimeout(isReviewPlayingTimeoutRef.current);
+        isReviewPlayingTimeoutRef.current = null;
+      }
+      (global as any).isReviewPlaying = true;
+
+      setReviewTake(take);
+      setIsReviewPlaying(true);
+      setPosition(0);
+      setSeekDisplayValue(0);
+
+      if (manualSyncOffsetMs === null) {
+        setVocalSyncMs(take.latencyMs || 0);
+      }
+      await waitForPlayerSetup();
+      await TrackPlayer.reset();
+      await TrackPlayer.add({
+        id: take.id,
+        url: take.uri,
+        title: take.name || 'My Take',
+        artist: 'Karaoke Recording',
+      });
+
+      if (takePlaybackRateRef.current && Math.abs(takePlaybackRateRef.current - 1.0) > 0.01) {
+        await TrackPlayer.setRate(takePlaybackRateRef.current).catch(() => {});
+      }
+
+      if (isTakeRepeatRef.current) {
+        await TrackPlayer.setRepeatMode(RepeatMode.Track).catch(() => {});
+      }
+
+      await TrackPlayer.play();
+
+    } catch (e) {
+      console.error('Review playback failed:', e);
+      setIsReviewPlaying(false);
+      (global as any).isReviewPlaying = false;
+    }
+  };
+
   // Sleep timer countdown
   useEffect(() => {
-    if (takeSleepTimerRemaining === null || takeSleepTimerRemaining <= 0) return;
+    if (takeSleepTimerMinutes === null || takeSleepTimerMinutes <= 0) {
+      setTakeSleepTimerRemaining(null);
+      return;
+    }
+
+    setTakeSleepTimerRemaining(takeSleepTimerMinutes * 60);
+
     const interval = setInterval(() => {
       setTakeSleepTimerRemaining(prev => {
-        if (prev === null || prev <= 1) {
-          stopReviewTake();
+        if (prev === null) return null;
+        if (prev <= 1) {
+          clearInterval(interval);
+          stopReviewTakeRef.current();
           setTakeSleepTimerMinutes(null);
           Alert.alert('Sleep Timer', 'Playback paused by sleep timer 🌙');
           return null;
@@ -703,11 +824,19 @@ export default function KaraokeScreen({ route, navigation }: any) {
         return prev - 1;
       });
     }, 1000);
+
     return () => clearInterval(interval);
-  }, [takeSleepTimerRemaining]);
+  }, [takeSleepTimerMinutes]);
 
   const handleTakeSelectSpeed = async (rate: number) => {
     setShowTakeSpeedModal(false);
+    setTakePlaybackRate(rate);
+    takePlaybackRateRef.current = rate;
+    try {
+      await TrackPlayer.setRate(rate);
+    } catch (e) {
+      console.warn('Failed to set TrackPlayer rate:', e);
+    }
     await setPlaybackRate(rate);
   };
 
@@ -725,6 +854,17 @@ export default function KaraokeScreen({ route, navigation }: any) {
     }
   };
 
+  const toggleTakeRepeat = async () => {
+    const next = !isTakeRepeat;
+    setIsTakeRepeat(next);
+    isTakeRepeatRef.current = next;
+    try {
+      await TrackPlayer.setRepeatMode(next ? RepeatMode.Track : RepeatMode.Off);
+    } catch (e) {
+      console.warn('Failed to set take repeat mode:', e);
+    }
+  };
+
   const handleTakeABLoopPress = async () => {
     if (takeAbLoopStep === 'idle') {
       // Set Point A at current position
@@ -734,7 +874,9 @@ export default function KaraokeScreen({ route, navigation }: any) {
     } else if (takeAbLoopStep === 'a_set') {
       // Set Point B and activate loop
       const posMs = Math.floor(position * 1000);
-      await setLoopPointB(posMs);
+      const startMs = abLoop.start ?? 0;
+      const endMs = posMs > startMs ? posMs : startMs + 2000;
+      await setLoopPointB(endMs);
       setTakeAbLoopStep('active');
     } else {
       // Clear the loop
@@ -784,74 +926,42 @@ export default function KaraokeScreen({ route, navigation }: any) {
     playlistItemName: { color: theme.colors.textPrimary, fontSize: 15, fontWeight: '600' as const },
     playlistItemCount: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
   };
+
   useTrackPlayerEvents([Event.PlaybackQueueEnded, Event.PlaybackState], async (event: any) => {
     if (showTakesModal) {
-      if (event.type === Event.PlaybackQueueEnded || (event.type === Event.PlaybackState && (event.state === State.Stopped || event.state === State.Ended))) {
+      // Ignore transient Stopped states during seeks or pauses
+      if (event.type === Event.PlaybackState && event.state === State.Stopped) {
+        return;
+      }
+
+      if (event.type === Event.PlaybackQueueEnded || (event.type === Event.PlaybackState && event.state === State.Ended)) {
+        // 1. If sleep timer is set to "End of current song/take"
+        if (takeSleepTimerMinutesRef.current === -1) {
+          await stopReviewTake();
+          setTakeSleepTimerMinutes(null);
+          Alert.alert('Sleep Timer', 'Playback ended by sleep timer 🌙');
+          return;
+        }
+
+        // 2. If A-B loop is active, loop back to Point A
+        if (takeAbLoopStepRef.current === 'active' && abLoopRef.current.start !== null) {
+          await TrackPlayer.seekTo(abLoopRef.current.start / 1000).catch(() => {});
+          await TrackPlayer.play().catch(() => {});
+          return;
+        }
+
+        // 3. If take repeat is active, loop back to beginning
+        if (isTakeRepeatRef.current) {
+          await TrackPlayer.seekTo(0).catch(() => {});
+          await TrackPlayer.play().catch(() => {});
+          return;
+        }
+
+        // 4. Otherwise, end of track reached
         await stopReviewTake();
       }
     }
   });
-
-  const playReviewTake = async (take: any, manualSyncOffsetMs: number | null = null) => {
-    try {
-      if (manualSyncOffsetMs === null && isReviewPlaying && reviewTake?.id === take.id) {
-        await stopReviewTake();
-        return;
-      }
-      await stopReviewTake();
-      if (isReviewPlayingTimeoutRef.current) {
-        clearTimeout(isReviewPlayingTimeoutRef.current);
-        isReviewPlayingTimeoutRef.current = null;
-      }
-      (global as any).isReviewPlaying = true;
-
-      setReviewTake(take);
-      setIsReviewPlaying(true);
-
-      if (manualSyncOffsetMs === null) {
-        setVocalSyncMs(take.latencyMs || 0);
-      }
-      await waitForPlayerSetup();
-      await TrackPlayer.reset();
-      await TrackPlayer.add({
-        id: take.id,
-        url: take.uri,
-        title: take.name || 'My Take',
-        artist: 'Karaoke Recording',
-      });
-      await TrackPlayer.play();
-
-    } catch (e) {
-      console.error('Review playback failed:', e);
-      setIsReviewPlaying(false);
-      (global as any).isReviewPlaying = false;
-    }
-  };
-
-  const stopReviewTake = async () => {
-    try {
-      if (reviewTimeoutRef.current) {
-        clearTimeout(reviewTimeoutRef.current);
-        reviewTimeoutRef.current = null;
-      }
-      try {
-        await waitForPlayerSetup();
-        await TrackPlayer.reset();
-      } catch { }
-
-      setIsReviewPlaying(false);
-      setReviewTake(null);
-      if (isReviewPlayingTimeoutRef.current) {
-        clearTimeout(isReviewPlayingTimeoutRef.current);
-      }
-      isReviewPlayingTimeoutRef.current = setTimeout(() => {
-        (global as any).isReviewPlaying = false;
-        isReviewPlayingTimeoutRef.current = null;
-      }, 500);
-    } catch (e) {
-      (global as any).isReviewPlaying = false;
-    }
-  };
 
   const deleteTake = (take: any) => {
     Alert.alert('Delete Take?', `Are you sure you want to delete ${take.name}?`, [
@@ -872,11 +982,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
 
   const togglePlay = async () => {
     if (isReviewPlaying) {
-      await stopReviewTake();
+      await pauseReviewTake();
       return;
     }
     if (reviewTake) {
-      await playReviewTake(reviewTake);
+      await resumeReviewTake();
       return;
     }
 
@@ -942,6 +1052,10 @@ export default function KaraokeScreen({ route, navigation }: any) {
     // Reset takes player controls
     clearABLoop();
     setTakeAbLoopStep('idle');
+    setIsTakeRepeat(false);
+    isTakeRepeatRef.current = false;
+    setTakePlaybackRate(1.0);
+    takePlaybackRateRef.current = 1.0;
     setPlaybackRate(1.0);
     setTakeSleepTimerMinutes(null);
     setTakeSleepTimerRemaining(null);
@@ -1395,7 +1509,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                             onPress={(e) => {
                               e.stopPropagation();
                               if (isReviewing) {
-                                stopReviewTake();
+                                pauseReviewTake();
                               } else {
                                 setExpandedTakeId(take.id);
                                 playReviewTake(take);
@@ -1456,8 +1570,28 @@ export default function KaraokeScreen({ route, navigation }: any) {
                                 </TouchableOpacity>
                              </View>
 
-                             {/* ── Takes Player Toolbar: A-B Loop · Speed · Sleep Timer ── */}
+                             {/* ── Takes Player Toolbar: Repeat · A-B Loop · Speed · Sleep Timer ── */}
                              <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.08)' }}>
+                                {/* Whole-Take Repeat Loop Button */}
+                                <TouchableOpacity
+                                  onPress={toggleTakeRepeat}
+                                  style={{ alignItems: 'center', gap: 4 }}
+                                >
+                                  <View style={[
+                                    { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+                                    isTakeRepeat && { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
+                                  ]}>
+                                    <Ionicons
+                                      name="repeat"
+                                      size={18}
+                                      color={isTakeRepeat ? '#fff' : theme.colors.textMuted}
+                                    />
+                                  </View>
+                                  <Text style={{ color: isTakeRepeat ? theme.colors.accent : theme.colors.textMuted, fontSize: 9, fontWeight: '800' }}>
+                                    {isTakeRepeat ? 'Loop ON' : 'Loop'}
+                                  </Text>
+                                </TouchableOpacity>
+
                                 {/* A-B Loop Button */}
                                 <TouchableOpacity
                                   onPress={handleTakeABLoopPress}
@@ -1475,7 +1609,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                                     />
                                   </View>
                                   <Text style={{ color: takeAbLoopStep !== 'idle' ? theme.colors.accent : theme.colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
-                                    {takeAbLoopStep === 'idle' ? 'A-B' : takeAbLoopStep === 'a_set'
+                                    {takeAbLoopStep === 'idle' ? 'A-B Loop' : takeAbLoopStep === 'a_set'
                                       ? `A: ${abLoop.start !== null ? formatTimeMs(abLoop.start) : '--'}`
                                       : `${abLoop.start !== null ? formatTimeMs(abLoop.start) : '--'} ⇄ ${abLoop.end !== null ? formatTimeMs(abLoop.end) : '--'}`}
                                   </Text>
@@ -1488,16 +1622,16 @@ export default function KaraokeScreen({ route, navigation }: any) {
                                 >
                                   <View style={[
                                     { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-                                    Math.abs(playbackRate - 1.0) > 0.01 && { borderColor: theme.colors.accent, backgroundColor: theme.colors.accent + '20' },
+                                    Math.abs(takePlaybackRate - 1.0) > 0.01 && { borderColor: theme.colors.accent, backgroundColor: theme.colors.accent + '20' },
                                   ]}>
                                     <Ionicons
                                       name="speedometer-outline"
                                       size={18}
-                                      color={Math.abs(playbackRate - 1.0) > 0.01 ? theme.colors.accent : theme.colors.textMuted}
+                                      color={Math.abs(takePlaybackRate - 1.0) > 0.01 ? theme.colors.accent : theme.colors.textMuted}
                                     />
                                   </View>
-                                  <Text style={{ color: Math.abs(playbackRate - 1.0) > 0.01 ? theme.colors.accent : theme.colors.textMuted, fontSize: 9, fontWeight: '800' }}>
-                                    {playbackRate}x
+                                  <Text style={{ color: Math.abs(takePlaybackRate - 1.0) > 0.01 ? theme.colors.accent : theme.colors.textMuted, fontSize: 9, fontWeight: '800' }}>
+                                    {takePlaybackRate}x
                                   </Text>
                                 </TouchableOpacity>
 
@@ -1542,7 +1676,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
       <PlayerSpeedModal
         visible={showTakeSpeedModal}
         onClose={() => setShowTakeSpeedModal(false)}
-        playbackRate={playbackRate}
+        playbackRate={takePlaybackRate}
         onSelectSpeed={handleTakeSelectSpeed}
         theme={theme}
         styles={takeModalStyles}

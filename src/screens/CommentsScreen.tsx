@@ -131,9 +131,15 @@ export default function CommentsScreen({ route, navigation }: any) {
                 .replace(/\*(.*?)\*/g, '<strong>$1</strong>');
             };
 
-            let parsed = activeTrack?.comments || activeTrack?.notes || (activeTrack as any)?.coordinatorComment;
+            let parsed = activeTrack?.comments;
             if (typeof parsed === 'string') {
               try { parsed = JSON.parse(parsed); } catch (e) {}
+            }
+            if (!parsed || (Array.isArray(parsed) && parsed.length === 0) || (typeof parsed === 'string' && !parsed.trim())) {
+              parsed = activeTrack?.notes || (activeTrack as any)?.coordinatorComment;
+              if (typeof parsed === 'string') {
+                try { parsed = JSON.parse(parsed); } catch (e) {}
+              }
             }
             
             if (Array.isArray(parsed) && parsed.length > 0) {

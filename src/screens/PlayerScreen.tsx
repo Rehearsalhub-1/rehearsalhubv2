@@ -65,6 +65,7 @@ import { ExpandableText } from '../components/player/ExpandableText';
 import { ToastHUD, DoubleTapOverlay, PlayerProgressSlider } from '../components/player/PlayerHUDOverlays';
 import { PlayerControlsRow } from '../components/player/PlayerControlsRow';
 import { PlayerAnnotationFAB } from '../components/player/PlayerAnnotationFAB';
+import { LyricsIcon, NotesWithPenIcon, ConductorGuideIcon, ScheduleSIcon } from '../components/player/icons/PlayerCustomIcons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -301,7 +302,7 @@ export default function PlayerScreen({ route, navigation }: any) {
         const lines = res.data.slice(0, 4).map((item: any) => `• **${item.title || item.type}:** ${item.description || item.new_value || ''}`);
         setSongHistorySummary(lines.join('\n\n'));
       }
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { active = false; };
   }, [activeTrack?.id, activePreviewTab]);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
@@ -400,15 +401,15 @@ export default function PlayerScreen({ route, navigation }: any) {
       const nextSolfa = update.notation !== undefined
         ? update.notation
         : update.solfas !== undefined
-        ? update.solfas
-        : update.solfa !== undefined
-        ? update.solfa
-        : prev.solfa;
+          ? update.solfas
+          : update.solfa !== undefined
+            ? update.solfa
+            : prev.solfa;
       const nextConductorGuide = update.conductorGuide !== undefined
         ? update.conductorGuide
         : update.guide !== undefined
-        ? update.guide
-        : prev.conductorGuide;
+          ? update.guide
+          : prev.conductorGuide;
       const nextComments = update.comments !== undefined ? update.comments : prev.comments;
       const nextHistory = update.history !== undefined ? update.history : prev.history;
 
@@ -719,7 +720,7 @@ export default function PlayerScreen({ route, navigation }: any) {
         }));
         setPlaylists(shaped);
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, [user]);
 
   // Load playlists once on mount only
@@ -739,9 +740,9 @@ export default function PlayerScreen({ route, navigation }: any) {
     try {
       setIsFavorite(prev => !prev);
       if (isFavorite) {
-        await api.favorites.remove(activeTrack.id).catch(() => {});
+        await api.favorites.remove(activeTrack.id).catch(() => { });
       } else {
-        await api.favorites.add(activeTrack.id).catch(() => {});
+        await api.favorites.add(activeTrack.id).catch(() => { });
       }
     } catch (err) {
       console.error('Error toggling favorite:', err);
@@ -762,7 +763,12 @@ export default function PlayerScreen({ route, navigation }: any) {
     const isSameTrack = currentId === activeId;
     // Only reload audio if the URL actually changed to a different value
     const audioUrlChanged = Boolean(activeAudioUrl && activeAudioUrl !== lastPlayedAudioUrlRef.current);
-    const needsAudioReload = isSameTrack && !currentTrack?.audioUrl && audioUrlChanged;
+    const isOfflineSwitch = Boolean(
+      isSameTrack &&
+      audioUrlChanged &&
+      (activeAudioUrl.startsWith('file://') || (activeTrack as any)?._offlineUri)
+    );
+    const needsAudioReload = (isSameTrack && !currentTrack?.audioUrl && audioUrlChanged) || isOfflineSwitch;
 
     if (isSameTrack && !needsAudioReload) {
       lastPlayedTrackIdRef.current = activeId;
@@ -785,7 +791,11 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (currentTrack && String(currentTrack.id) !== String(activeTrack.id)) {
       await play(activeTrack);
     } else {
-      togglePlayback();
+      if (isDownloadedOffline && (activeTrack as any)?._offlineUri && currentTrack?.audioUrl !== (activeTrack as any)._offlineUri) {
+        await play(activeTrack, undefined, true);
+      } else {
+        togglePlayback();
+      }
     }
   };
 
@@ -805,7 +815,7 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (!comments) return '';
     let parsed = comments;
     if (typeof comments === 'string') {
-      try { parsed = JSON.parse(comments); } catch (e) {}
+      try { parsed = JSON.parse(comments); } catch (e) { }
     }
     if (Array.isArray(parsed)) {
       return parsed.map((c: any) => parseMarkdown(c.text || c.comment || '')).join('<br><br>');
@@ -822,7 +832,7 @@ export default function PlayerScreen({ route, navigation }: any) {
       const program = activeTrack?.program ? `\nFrom: ${activeTrack.program}` : '';
       const keyTempo = (activeTrack?.key || activeTrack?.tempo) ? `\nKey: ${activeTrack?.key || 'N/A'} • Tempo: ${activeTrack?.tempo || 'N/A'}` : '';
       const songUrl = `https://www.loveworldsingersrehearsalhubportal.org/songs/${activeTrack?.id || ''}`;
-      
+
       const shareMessage = `🎵 "${title}"${singer}${program}${keyTempo}\n\nRehearse this song on Rehearsal Hub:\n${songUrl}`;
 
       await Share.share({
@@ -835,16 +845,43 @@ export default function PlayerScreen({ route, navigation }: any) {
     }
   };
 
-  // Offline Storage: Check if song is downloaded for offline playback
+  // Offline Storage: Check if song is downloaded & patch audioUrl to use local file
   useEffect(() => {
     if (!activeTrack?.id) return;
     const checkOfflineStatus = async () => {
       try {
         const stored = await AsyncStorage.getItem('offline_cached_songs_v2');
         if (stored) {
-          const list = JSON.parse(stored);
-          const exists = list.some((item: any) => String(item.id) === String(activeTrack.id));
-          setIsDownloadedOffline(exists);
+          const list: any[] = JSON.parse(stored);
+          const entry = list.find((item: any) => String(item.id) === String(activeTrack.id));
+          if (entry) {
+            // Verify the local file still exists on disk
+            const cleanName = `offline_song_${activeTrack.id}.mp3`;
+            const localUri = entry.localAudioUri || `${FileSystem.documentDirectory}${cleanName}`;
+            const fileInfo = await FileSystem.getInfoAsync(localUri).catch(() => ({ exists: false }));
+            if (fileInfo.exists && ((fileInfo as any).size === undefined || (fileInfo as any).size > 1000)) {
+              setIsDownloadedOffline(true);
+              const offlineTrack = {
+                ...activeTrack,
+                audioUrl: localUri,
+                _offlineUri: localUri,
+                _remoteAudioUrl: activeTrack._remoteAudioUrl || activeTrack.audioUrl,
+              };
+              setActiveTrack(offlineTrack);
+              if (currentTrack?.id && String(currentTrack.id) === String(activeTrack.id) && currentTrack.audioUrl !== localUri) {
+                lastPlayedAudioUrlRef.current = localUri;
+                play(offlineTrack, undefined, false);
+              }
+              return;
+            } else {
+              // File is missing or corrupted — purge the stale entry
+              const cleaned = list.filter((item: any) => String(item.id) !== String(activeTrack.id));
+              await AsyncStorage.setItem('offline_cached_songs_v2', JSON.stringify(cleaned));
+              setIsDownloadedOffline(false);
+            }
+          } else {
+            setIsDownloadedOffline(false);
+          }
         } else {
           setIsDownloadedOffline(false);
         }
@@ -857,7 +894,9 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   // Download / Remove song for offline playback within the app
   const handleToggleOfflineDownload = async () => {
-    if (!activeTrack?.audioUrl) {
+    // Use the original remote URL even if we've already patched audioUrl to local
+    const remoteUrl = (activeTrack as any)?._remoteAudioUrl || activeTrack?.audioUrl;
+    if (!remoteUrl) {
       showToast('No audio available for offline playback', 'alert-circle');
       return;
     }
@@ -866,14 +905,20 @@ export default function PlayerScreen({ route, navigation }: any) {
       try {
         const stored = await AsyncStorage.getItem('offline_cached_songs_v2');
         let list = stored ? JSON.parse(stored) : [];
+        const entry = list.find((item: any) => String(item.id) === String(activeTrack.id));
         list = list.filter((item: any) => String(item.id) !== String(activeTrack.id));
         await AsyncStorage.setItem('offline_cached_songs_v2', JSON.stringify(list));
 
-        const cleanName = `offline_song_${activeTrack.id}.mp3`;
-        const localUri = `${FileSystem.documentDirectory}${cleanName}`;
+        const localUri = entry?.localAudioUri || `${FileSystem.documentDirectory}offline_song_${activeTrack.id}.mp3`;
         await FileSystem.deleteAsync(localUri, { idempotent: true });
 
         setIsDownloadedOffline(false);
+        // Restore remote URL
+        setActiveTrack((prev: any) => {
+          if (!prev) return prev;
+          const original = prev._remoteAudioUrl || prev.audioUrl;
+          return { ...prev, audioUrl: original, _offlineUri: undefined };
+        });
         showToast('Removed from Offline Storage', 'trash-outline');
       } catch {
         showToast('Failed to remove offline file', 'alert-circle');
@@ -886,20 +931,48 @@ export default function PlayerScreen({ route, navigation }: any) {
         const cleanName = `offline_song_${activeTrack.id}.mp3`;
         const localUri = `${FileSystem.documentDirectory}${cleanName}`;
 
-        const downloadRes = await FileSystem.downloadAsync(activeTrack.audioUrl, localUri);
+        const downloadRes = await FileSystem.downloadAsync(remoteUrl, localUri);
+        if (downloadRes?.status && downloadRes.status !== 200) {
+          throw new Error(`Download HTTP error: ${downloadRes.status}`);
+        }
         if (downloadRes?.uri) {
+          // Verify file is readable and has content
+          const fileInfo = await FileSystem.getInfoAsync(downloadRes.uri).catch(() => ({ exists: false }));
+          if (!fileInfo.exists || ((fileInfo as any).size !== undefined && (fileInfo as any).size < 1000)) {
+            throw new Error('Downloaded file not found on disk');
+          }
+
           const stored = await AsyncStorage.getItem('offline_cached_songs_v2');
           const list = stored ? JSON.parse(stored) : [];
+          // Remove any stale entry for same id before pushing
+          const cleanList = list.filter((item: any) => String(item.id) !== String(activeTrack.id));
           const songToSave = {
-            ...activeTrack,
-            localAudioUri: downloadRes.uri,
-            downloadedAt: new Date().toISOString()
+            id: activeTrack.id,
+            title: activeTrack.title,
+            leadSinger: activeTrack.leadSinger,
+            imageUrl: activeTrack.imageUrl,
+            audioUrl: remoteUrl,          // keep remote URL for reference
+            localAudioUri: downloadRes.uri, // local file path for playback
+            localFileName: cleanName,
+            downloadedAt: new Date().toISOString(),
           };
-          list.push(songToSave);
-          await AsyncStorage.setItem('offline_cached_songs_v2', JSON.stringify(list));
+          cleanList.push(songToSave);
+          await AsyncStorage.setItem('offline_cached_songs_v2', JSON.stringify(cleanList));
 
           setIsDownloadedOffline(true);
-          showToast('Downloaded for Offline Playback 📱', 'checkmark-circle');
+          // Patch activeTrack to use local file for immediate playback
+          const offlineTrack = {
+            ...activeTrack,
+            _remoteAudioUrl: remoteUrl,
+            audioUrl: downloadRes.uri,
+            _offlineUri: downloadRes.uri,
+          };
+          setActiveTrack(offlineTrack);
+          lastPlayedAudioUrlRef.current = downloadRes.uri;
+          await play(offlineTrack, undefined, false);
+          showToast('Downloaded — available for offline playback 📱', 'checkmark-circle');
+        } else {
+          showToast('Download incomplete, please retry', 'alert-circle');
         }
       } catch (err) {
         console.error('[OfflineDownload] Error:', err);
@@ -945,7 +1018,7 @@ export default function PlayerScreen({ route, navigation }: any) {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-down" size={28} color="#ffffff" />
           </TouchableOpacity>
-          <ExpandableText 
+          <ExpandableText
             style={[
               styles.headerText,
               {
@@ -958,7 +1031,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                 textShadowOffset: { width: 0, height: 0 },
                 textShadowRadius: 10,
               }
-            ]} 
+            ]}
           >
             {activeTrack?.title || 'Now Playing'}
           </ExpandableText>
@@ -985,288 +1058,290 @@ export default function PlayerScreen({ route, navigation }: any) {
             </TouchableOpacity>
           )}
 
-          {hasAudioParts && (
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => setShowAudioPartsModal(true)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Ionicons name="layers-outline" size={22} color={theme.colors.accentBright || theme.colors.accent || '#c084fc'} />
-            </TouchableOpacity>
-          )}
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowScheduleSheet(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="calendar-outline" size={22} color="#ffffff" />
+            <ScheduleSIcon size={22} color="#ffffff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowNotesModal(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="document-text" size={22} color="#ffffff" />
+            <NotesWithPenIcon size={22} color="#ffffff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerBtn} onPress={handleMoreOptions} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => navigation.navigate('Home')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="home-outline" size={22} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
         <View style={{ flex: 1 }}>
-        <ScrollView 
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 8 }} 
-          showsVerticalScrollIndicator={false} 
-          scrollEnabled={!isAnnotationMode}
-        >
-          {/* Swipable & Double-Tappable Album Art Container */}
-          <Animated.View
-            style={[
-              styles.artContainer,
-              { transform: [{ translateX: swipeX }] }
-            ]}
-            {...panResponder.panHandlers}
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, paddingBottom: 8 }}
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={!isAnnotationMode}
           >
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={handleArtPress}
+            {/* Swipable & Double-Tappable Album Art Container */}
+            <Animated.View
+              style={[
+                styles.artContainer,
+                { transform: [{ translateX: swipeX }] }
+              ]}
+              {...panResponder.panHandlers}
             >
-              {activeTrack?.imageUrl && typeof activeTrack.imageUrl === 'string' && activeTrack.imageUrl.startsWith('http') && !activeTrack.imageUrl.includes('/banner/') ? (
-                <Image
-                  source={{ uri: activeTrack.imageUrl }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                  cachePolicy="disk"
-                  blurRadius={8}
-                />
-              ) : (
-                <Image
-                  source={TRACK_PLACEHOLDER_IMAGE}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                  cachePolicy="disk"
-                />
-              )}
-              <LinearGradient
-                colors={['rgba(0,0,0,0.50)', 'rgba(0,0,0,0.72)']}
+              <Pressable
                 style={StyleSheet.absoluteFill}
-              />
+                onPress={handleArtPress}
+              >
+                {activeTrack?.imageUrl && typeof activeTrack.imageUrl === 'string' && activeTrack.imageUrl.startsWith('http') && !activeTrack.imageUrl.includes('/banner/') ? (
+                  <Image
+                    source={{ uri: activeTrack.imageUrl }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    blurRadius={8}
+                  />
+                ) : (
+                  <Image
+                    source={TRACK_PLACEHOLDER_IMAGE}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                  />
+                )}
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.50)', 'rgba(0,0,0,0.72)']}
+                  style={StyleSheet.absoluteFill}
+                />
 
-              {/* Double-tap Seek ±10s Ripple Feedback */}
-              <DoubleTapOverlay side={doubleTapSide} anim={doubleTapAnim} theme={theme} />
-              
-              <View style={styles.overlayContent} pointerEvents="box-none">
-                
-                <View style={styles.tableContainer}>
-                  <View style={styles.tableRowFull}>
-                    <Text style={styles.tableLabel}>LEAD SINGER:</Text>
-                    <ExpandableText style={styles.tableValue}>{activeTrack.leadSinger?.split(',')[0]?.trim() || 'Unknown'}</ExpandableText>
+                {/* Double-tap Seek ±10s Ripple Feedback */}
+                <DoubleTapOverlay side={doubleTapSide} anim={doubleTapAnim} theme={theme} />
+
+                <View style={styles.overlayContent} pointerEvents="box-none">
+
+                  <View style={styles.tableContainer}>
+                    <View style={styles.tableRowFull}>
+                      <Text style={styles.tableLabel}>LEAD SINGER:</Text>
+                      <ExpandableText style={styles.tableValue}>{activeTrack.leadSinger?.split(',')[0]?.trim() || 'Unknown'}</ExpandableText>
+                    </View>
+
+                    <View style={styles.tableRowSplit}>
+                      <View style={styles.tableCellLeft}>
+                        <Text style={styles.tableLabel}>WRITER:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.writer?.split(',')[0]?.trim() || 'Unknown'}</ExpandableText>
+                      </View>
+                      <View style={styles.tableCellRight}>
+                        <Text style={styles.tableLabel}>REHEARSALS:</Text>
+                        <ExpandableText style={[styles.tableValue, { color: theme.colors.accent }]}>{`x${activeTrack.rehearsalCount ?? 0}`}</ExpandableText>
+                      </View>
+                    </View>
+
+                    <View style={styles.tableRowSplit}>
+                      <View style={styles.tableCellLeft}>
+                        <Text style={styles.tableLabel}>CONDUCTOR:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.conductor?.split(',')[0]?.trim() || '—'}</ExpandableText>
+                      </View>
+                      <View style={styles.tableCellRight}>
+                        <Text style={styles.tableLabel}>KEY:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.key || '—'}</ExpandableText>
+                      </View>
+                    </View>
+
+                    <View style={styles.tableRowSplit}>
+                      <View style={styles.tableCellLeft}>
+                        <Text style={styles.tableLabel}>LEAD KEYBOARDIST:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.leadKeyboardist?.split(',')[0]?.trim() || '—'}</ExpandableText>
+                      </View>
+                      <View style={styles.tableCellRight}>
+                        <Text style={styles.tableLabel}>TEMPO:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.tempo || '—'}</ExpandableText>
+                      </View>
+                    </View>
+
+                    <View style={styles.tableRowSplit}>
+                      <View style={styles.tableCellLeft}>
+                        <Text style={styles.tableLabel}>DRUMMER:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.drummer?.split(',')[0]?.trim() || '—'}</ExpandableText>
+                      </View>
+                      <View style={[styles.tableCellLeft, { justifyContent: 'flex-end', flex: 1.2 }]}>
+                        <Text style={styles.tableLabel}>BASS GUITARIST:</Text>
+                        <ExpandableText style={styles.tableValue}>{activeTrack.leadGuitarist?.split(',')[0]?.trim() || '—'}</ExpandableText>
+                      </View>
+                    </View>
                   </View>
 
-                  <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCellLeft}>
-                      <Text style={styles.tableLabel}>WRITER:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.writer?.split(',')[0]?.trim() || 'Unknown'}</ExpandableText>
-                    </View>
-                    <View style={styles.tableCellRight}>
-                      <Text style={styles.tableLabel}>REHEARSALS:</Text>
-                      <ExpandableText style={[styles.tableValue, { color: theme.colors.accent }]}>{`x${activeTrack.rehearsalCount ?? 0}`}</ExpandableText>
-                    </View>
-                  </View>
+                  {/* Preview Tabs bar */}
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', marginTop: 8, marginBottom: 0, paddingHorizontal: 0 }}>
+                    {previewTabs.map((tab) => {
+                      const isActive = activePreviewTab === tab;
+                      const iconColor = isActive ? theme.colors.accent : 'rgba(255,255,255,0.7)';
 
-                  <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCellLeft}>
-                      <Text style={styles.tableLabel}>CONDUCTOR:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.conductor?.split(',')[0]?.trim() || '—'}</ExpandableText>
-                    </View>
-                    <View style={styles.tableCellRight}>
-                      <Text style={styles.tableLabel}>KEY:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.key || '—'}</ExpandableText>
-                    </View>
-                  </View>
+                      const renderTabIcon = (t: string) => {
+                        if (t === 'Lyrics') {
+                          return <LyricsIcon size={22} color={iconColor} />;
+                        }
+                        if (t === 'Conductor') {
+                          return <ConductorGuideIcon size={22} color={iconColor} />;
+                        }
+                        switch (t) {
+                          case 'Solfa': return <Ionicons name="musical-note-outline" size={22} color={iconColor} />;
+                          case 'History': return <Ionicons name="time-outline" size={22} color={iconColor} />;
+                          case 'Comments': return <Ionicons name="chatbubbles-outline" size={22} color={iconColor} />;
+                          case 'Details': return <Ionicons name="information-circle-outline" size={22} color={iconColor} />;
+                          default: return <Ionicons name="ellipse-outline" size={22} color={iconColor} />;
+                        }
+                      };
 
-                  <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCellLeft}>
-                      <Text style={styles.tableLabel}>LEAD KEYBOARDIST:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.leadKeyboardist?.split(',')[0]?.trim() || '—'}</ExpandableText>
-                    </View>
-                    <View style={styles.tableCellRight}>
-                      <Text style={styles.tableLabel}>TEMPO:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.tempo || '—'}</ExpandableText>
-                    </View>
-                  </View>
+                      return (
+                        <TouchableOpacity
+                          key={tab}
+                          style={{ alignItems: 'center', opacity: isActive ? 1 : 0.7 }}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            if (tab === 'History') {
+                              navigation.navigate('History', { activeTrack, backgroundColor: '#8b5cf6' });
+                            } else {
+                              setActivePreviewTab(tab);
+                            }
+                          }}
+                        >
+                          {renderTabIcon(tab)}
+                          <Text style={{ color: iconColor, fontSize: 11, marginTop: 4, fontWeight: '700' }}>
+                            {tab}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
 
-                  <View style={styles.tableRowSplit}>
-                    <View style={styles.tableCellLeft}>
-                      <Text style={styles.tableLabel}>DRUMMER:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.drummer?.split(',')[0]?.trim() || '—'}</ExpandableText>
-                    </View>
-                    <View style={[styles.tableCellLeft, { justifyContent: 'flex-end', flex: 1.2 }]}>
-                      <Text style={styles.tableLabel}>BASS GUITARIST:</Text>
-                      <ExpandableText style={styles.tableValue}>{activeTrack.leadGuitarist?.split(',')[0]?.trim() || '—'}</ExpandableText>
-                    </View>
+                    <TouchableOpacity
+                      style={{ alignItems: 'center', opacity: 0.8 }}
+                      activeOpacity={0.8}
+                      onPress={() => setShowMoreAssetsModal(true)}
+                    >
+                      <Ionicons name="ellipsis-vertical" size={22} color="rgba(255,255,255,0.7)" />
+                      <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
+                        More
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 </View>
+              </Pressable>
+            </Animated.View>
 
-                {/* Preview Tabs bar */}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', marginTop: 8, marginBottom: 0, paddingHorizontal: 0 }}>
-                  {previewTabs.map((tab) => {
-                    const getTabIcon = (t: string) => {
-                      switch(t) {
-                        case 'Lyrics': return 'document-text-outline';
-                        case 'Conductor': return 'musical-notes-outline';
-                        case 'Solfa': return 'musical-note-outline';
-                        case 'History': return 'time-outline';
-                        case 'Comments': return 'chatbubbles-outline';
-                        case 'Details': return 'information-circle-outline';
-                        default: return 'ellipse-outline';
-                      }
-                    };
-                    const isActive = activePreviewTab === tab;
-                    return (
-                      <TouchableOpacity
-                        key={tab}
-                        style={{ alignItems: 'center', opacity: isActive ? 1 : 0.7 }}
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          if (tab === 'History') {
-                            navigation.navigate('History', { activeTrack, backgroundColor: '#8b5cf6' });
-                          } else {
-                            setActivePreviewTab(tab);
-                          }
-                        }}
-                      >
-                        <Ionicons name={getTabIcon(tab)} size={22} color={isActive ? theme.colors.accent : 'rgba(255,255,255,0.7)'} />
-                        <Text style={{ color: isActive ? theme.colors.accent : 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
-                          {tab}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-
+            <View style={{ flex: 1, paddingHorizontal: 24 }}>
+              <View style={[styles.infoRow, { justifyContent: 'flex-end', marginTop: 6 }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity style={{ marginRight: 22, padding: 4 }} onPress={toggleFavorite}>
+                    <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={26} color={isFavorite ? theme.colors.accent : theme.colors.textPrimary} />
+                  </TouchableOpacity>
                   <TouchableOpacity
-                    style={{ alignItems: 'center', opacity: 0.8 }}
-                    activeOpacity={0.8}
-                    onPress={() => setShowMoreAssetsModal(true)}
-                  >
-                    <Ionicons name="ellipsis-vertical" size={22} color="rgba(255,255,255,0.7)" />
-                    <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 4, fontWeight: '700' }}>
-                      More
-                    </Text>
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.cardBackgroundLight, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}
+                    onPress={() => {
+                      setShowPlaylistModal(true);
+                    }}>
+                    <Ionicons name="albums-outline" size={18} color={theme.colors.textPrimary} style={{ marginRight: 6 }} />
+                    <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Save to Playlist</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-            </Pressable>
-          </Animated.View>
 
-          <View style={{ flex: 1, paddingHorizontal: 24 }}>
-            <View style={[styles.infoRow, { justifyContent: 'flex-end', marginTop: 6 }]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <TouchableOpacity style={{ marginRight: 16 }} onPress={toggleFavorite}>
-                  <Ionicons name={isFavorite ? "heart" : "heart-outline"} size={26} color={isFavorite ? theme.colors.accent : theme.colors.textPrimary} />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.cardBackgroundLight, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 }}
-                  onPress={() => {
-                    setShowPlaylistModal(true);
-                  }}>
-                  <Ionicons name="albums-outline" size={18} color={theme.colors.textPrimary} style={{ marginRight: 6 }} />
-                  <Text style={{ color: theme.colors.textPrimary, fontSize: 13, fontWeight: '600' }}>Save</Text>
-                </TouchableOpacity>
-              </View>
+              {/* Tab content: Lyrics / Conductor / Solfa / History / Comments / Details */}
+              <PlayerPreviewContent
+                activePreviewTab={activePreviewTab}
+                activeTrack={activeTrack}
+                songHistorySummary={songHistorySummary}
+                fromAllSongs={fromAllSongs}
+                isHQ={isHQ}
+                contentWidth={width - 100}
+                parseMarkdown={parseMarkdown}
+                isConductorGuideText={isConductorGuideText}
+                navigation={navigation}
+                theme={theme}
+                isTablet={(windowWidth >= 600 && windowHeight >= 750) || windowWidth >= 768 || windowHeight >= 950}
+              />
+
+              {/* A-B Section Looper Strip */}
+              <ABLooperStrip
+                visible={showABLooperStrip || abLoop.active || abLoop.start !== null}
+                abLoop={abLoop}
+                onClearLoop={() => {
+                  clearABLoop();
+                  showToast('Loop Reset', 'trash-outline');
+                }}
+                onClose={() => setShowABLooperStrip(false)}
+                onSetPointA={async () => {
+                  const posSec = await TrackPlayer.getPosition().catch(() => 0);
+                  const posMs = Math.floor(posSec * 1000);
+                  await setLoopPointA(posMs);
+                  showToast(`Start (A): ${formatTime(posMs)}`, 'flag');
+                }}
+                onSetPointB={async () => {
+                  const posSec = await TrackPlayer.getPosition().catch(() => 0);
+                  const posMs = Math.floor(posSec * 1000);
+                  if (abLoop.start !== null && posMs <= abLoop.start) {
+                    showToast('End (B) must be after Start (A)', 'alert-circle');
+                    return;
+                  }
+                  await setLoopPointB(posMs);
+                  showToast(`End (B): ${formatTime(posMs)}`, 'flag');
+                }}
+                onToggleLoop={() => {
+                  toggleABLoop();
+                  if (!abLoop.active) {
+                    showToast(`Looping ${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)}`, 'infinite');
+                  } else {
+                    showToast('Section Loop Paused', 'pause-circle-outline');
+                  }
+                }}
+                formatTime={formatTime}
+                theme={theme}
+                styles={styles}
+              />
+
             </View>
+          </ScrollView>
 
-          {/* Tab content: Lyrics / Conductor / Solfa / History / Comments / Details */}
-          <PlayerPreviewContent
-            activePreviewTab={activePreviewTab}
-            activeTrack={activeTrack}
-            songHistorySummary={songHistorySummary}
-            fromAllSongs={fromAllSongs}
-            isHQ={isHQ}
-            contentWidth={width - 100}
-            parseMarkdown={parseMarkdown}
-            isConductorGuideText={isConductorGuideText}
-            navigation={navigation}
-            theme={theme}
-            isTablet={(windowWidth >= 600 && windowHeight >= 750) || windowWidth >= 768 || windowHeight >= 950}
-          />
-
-          {/* A-B Section Looper Strip */}
-          <ABLooperStrip
-            visible={showABLooperStrip || abLoop.active || abLoop.start !== null}
-            abLoop={abLoop}
-            onClearLoop={() => {
-              clearABLoop();
-              showToast('Loop Reset', 'trash-outline');
-            }}
-            onClose={() => setShowABLooperStrip(false)}
-            onSetPointA={async () => {
-              const posSec = await TrackPlayer.getPosition().catch(() => 0);
-              const posMs = Math.floor(posSec * 1000);
-              await setLoopPointA(posMs);
-              showToast(`Start (A): ${formatTime(posMs)}`, 'flag');
-            }}
-            onSetPointB={async () => {
-              const posSec = await TrackPlayer.getPosition().catch(() => 0);
-              const posMs = Math.floor(posSec * 1000);
-              if (abLoop.start !== null && posMs <= abLoop.start) {
-                showToast('End (B) must be after Start (A)', 'alert-circle');
-                return;
-              }
-              await setLoopPointB(posMs);
-              showToast(`End (B): ${formatTime(posMs)}`, 'flag');
-            }}
-            onToggleLoop={() => {
-              toggleABLoop();
-              if (!abLoop.active) {
-                showToast(`Looping ${formatTime(abLoop.start!)} ⇄ ${formatTime(abLoop.end!)}`, 'infinite');
-              } else {
-                showToast('Section Loop Paused', 'pause-circle-outline');
-              }
-            }}
-            formatTime={formatTime}
-            theme={theme}
-            styles={styles}
-          />
-
+          {/* Fixed Player Controls — always visible, never scrolled away */}
+          <View style={{ paddingHorizontal: 24, paddingTop: 6, paddingBottom: 2 }}>
+            <PlayerProgressSlider
+              theme={theme}
+              styles={styles}
+              formatTime={formatTime}
+              seekTo={seekTo}
+              hasAudio={!!activeTrack?.audioUrl}
+              abLoop={abLoop}
+            />
+            <PlayerControlsRow
+              isShuffle={isShuffle}
+              onToggleShuffle={handleToggleShuffle}
+              onSkipPrevious={skipToPrevious}
+              isLoading={isLoading}
+              isPlaying={isPlaying}
+              hasAudio={!!activeTrack?.audioUrl}
+              onPlayPause={handlePlayPause}
+              onSkipNext={skipToNext}
+              repeatMode={repeatMode}
+              onToggleRepeat={handleToggleRepeat}
+              theme={theme}
+              styles={styles}
+            />
           </View>
-        </ScrollView>
 
-        {/* Fixed Player Controls — always visible, never scrolled away */}
-        <View style={{ paddingHorizontal: 24, paddingTop: 6, paddingBottom: 2 }}>
-          <PlayerProgressSlider
-            theme={theme}
-            styles={styles}
-            formatTime={formatTime}
-            seekTo={seekTo}
-            hasAudio={!!activeTrack?.audioUrl}
-            abLoop={abLoop}
-          />
-          <PlayerControlsRow
-            isShuffle={isShuffle}
-            onToggleShuffle={handleToggleShuffle}
-            onSkipPrevious={skipToPrevious}
-            isLoading={isLoading}
-            isPlaying={isPlaying}
-            hasAudio={!!activeTrack?.audioUrl}
-            onPlayPause={handlePlayPause}
-            onSkipNext={skipToNext}
-            repeatMode={repeatMode}
-            onToggleRepeat={handleToggleRepeat}
-            theme={theme}
-            styles={styles}
-          />
-        </View>
-        
-        {AnnotationLayer}
+          {AnnotationLayer}
 
-        {/* Annotation FAB */}
-        <PlayerAnnotationFAB
-          isPrivileged={isPrivileged}
-          isAnnotationMode={isAnnotationMode}
-          onToggleAnnotationMode={() => setIsAnnotationMode(!isAnnotationMode)}
-          showColorPalette={showColorPalette}
-          onToggleColorPalette={() => setShowColorPalette(!showColorPalette)}
-          selectedColor={selectedColor}
-          getMyColor={getMyColor}
-          onSelectColor={setSelectedColor}
-          annotationTool={annotationTool}
-          onSelectTool={setAnnotationTool}
-          onClearMyAnnotations={handleClearMyAnnotations}
-          theme={theme}
-        />
+          {/* Annotation FAB */}
+          <PlayerAnnotationFAB
+            isPrivileged={isPrivileged}
+            isAnnotationMode={isAnnotationMode}
+            onToggleAnnotationMode={() => setIsAnnotationMode(!isAnnotationMode)}
+            showColorPalette={showColorPalette}
+            onToggleColorPalette={() => setShowColorPalette(!showColorPalette)}
+            selectedColor={selectedColor}
+            getMyColor={getMyColor}
+            onSelectColor={setSelectedColor}
+            annotationTool={annotationTool}
+            onSelectTool={setAnnotationTool}
+            onClearMyAnnotations={handleClearMyAnnotations}
+            theme={theme}
+          />
         </View>
 
         {/* Bottom Tab Bar */}
@@ -1351,7 +1426,7 @@ export default function PlayerScreen({ route, navigation }: any) {
         styles={styles}
       />
 
-      {/* Song Resources Modal */}
+      {/* Song Resources & More Options Modal */}
       <PlayerMoreAssetsModal
         visible={showMoreAssetsModal}
         onClose={() => setShowMoreAssetsModal(false)}
@@ -1359,6 +1434,11 @@ export default function PlayerScreen({ route, navigation }: any) {
         onOpenConductor={() => navigation.navigate('Conductor', { activeTrack, backgroundColor: '#8b5cf6' })}
         onOpenHistory={() => navigation.navigate('History', { activeTrack, backgroundColor: '#8b5cf6' })}
         onOpenSolfa={() => navigation.navigate('Solfa', { activeTrack, backgroundColor: '#8b5cf6' })}
+        isDownloadedOffline={isDownloadedOffline}
+        isDownloadingOffline={isDownloadingOffline}
+        onToggleOfflineDownload={handleToggleOfflineDownload}
+        sleepTimerRemaining={sleepTimerRemaining}
+        onOpenSleepTimer={() => setShowSleepTimerModal(true)}
         theme={theme}
         styles={styles}
       />
@@ -1412,479 +1492,479 @@ export default function PlayerScreen({ route, navigation }: any) {
 const getStyles = (theme: any, insets: any, screenWidth: number = SCREEN_WIDTH) => {
   const isTablet = screenWidth >= 768;
   return StyleSheet.create({
-  container: {
-    flex: 1
-  },
-  header: {
-    position: 'absolute',
-    top: 40,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12
-  },
-  headerBtn: {
-    padding: 4
-  },
-  headerText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1,
-    textTransform: 'uppercase'
-  },
-  artContainer: {
-    width: '100%',
-    height: isTablet ? 380 : 310,
-    borderRadius: 0,
-    overflow: 'hidden',
-    marginTop: 0,
-    marginBottom: 0,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.8,
-    shadowRadius: 24,
-    elevation: 20,
-    backgroundColor: theme.colors.backgroundDark
-  },
-  overlayContent: {
-    flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 72,
-    paddingBottom: 12,
-    justifyContent: 'flex-end'
-  },
-  tableContainer: {
-    width: '100%',
-    flex: 1,
-    justifyContent: 'flex-end',
-    gap: 3,
-    overflow: 'hidden'
-  },
-  tableRowFull: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.25)',
-    paddingBottom: 5,
-    paddingHorizontal: 2,
-    marginBottom: 0
-  },
-  tableRowSplit: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.25)',
-    paddingBottom: 5,
-    paddingHorizontal: 2,
-    marginBottom: 0
-  },
-  tableCell: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  tableCellLeft: {
-    flex: 1.15,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-    paddingRight: 6
-  },
-  tableCellRight: {
-    flex: 0.85,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    overflow: 'hidden'
-  },
-  tableLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 10.5,
-    fontWeight: '800',
-    marginRight: 4,
-    letterSpacing: 0.2,
-    flexShrink: 0
-  },
-  tableValue: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '700',
-    flexShrink: 1
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12
-  },
-  title: {
-    color: theme.colors.textPrimary,
-    fontSize: 28,
-    fontWeight: '900',
-    marginBottom: 8,
-    letterSpacing: -0.5
-  },
-  artist: {
-    color: theme.colors.accent,
-    fontSize: 18,
-    fontWeight: '600'
-  },
-  progressContainer: {
-    marginBottom: 14
-  },
-  timeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: -8
-  },
-  timeText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  controlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    marginBottom: 20
-  },
-  playPauseBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: theme.colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: theme.colors.accent,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 12
-  },
-  bottomActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20
-  },
-  playerTabBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    backgroundColor: theme.colors.bottomTabBackground,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.bottomTabBorder,
-    paddingTop: 8,
-    paddingBottom: 4
-  },
-  playerTabButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    gap: 4
-  },
-  playerTabLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  lyricsCard: {
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: 24,
-    padding: 32,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    marginBottom: 24
-  },
-  lyricsCardTitle: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 24,
-    letterSpacing: 1,
-    textTransform: 'uppercase'
-  },
-  lyricsCardText: {
-    ...theme.typography.bodyText,
-    marginBottom: 32
-  },
-  showLyricsBtn: {
-    alignSelf: 'flex-start',
-    backgroundColor: theme.colors.textPrimary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24
-  },
-  showLyricsBtnText: {
-    color: theme.colors.backgroundDark,
-    fontSize: 14,
-    fontWeight: '800'
-  },
-  previewTab: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.03)',
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2
-  },
-  previewTabActive: {
-    backgroundColor: theme.colors.accent,
-    borderColor: theme.colors.accent,
-    shadowColor: theme.colors.accent,
-    shadowOpacity: 0.3,
-    shadowRadius: 8
-  },
-  previewTabText: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5
-  },
-  previewTabTextActive: {
-    color: theme.colors.backgroundDark,
-    fontWeight: '800'
-  },
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end'
-  },
-  modalDismissArea: {
-    flex: 1
-  },
-  bottomSheet: {
-    backgroundColor: theme.colors.bottomSheetBackground,
-    overflow: 'hidden',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: Math.max(Platform.OS === 'android' ? 36 : 24, insets.bottom + (Platform.OS === 'android' ? 32 : 16)),
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 20
-  },
-  bottomSheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20
-  },
-  bottomSheetTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700'
-  },
-  closeModalBtn: {
-    padding: 6,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 16
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  optionIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16
-  },
-  optionItemText: {
-    flex: 1,
-    color: theme.colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '600'
-  },
-  newPlaylistRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 8
-  },
-  playlistInput: {
-    flex: 1,
-    height: 50,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    color: theme.colors.textPrimary,
-    fontSize: 16
-  },
-  createPlaylistBtn: {
-    height: 50,
-    paddingHorizontal: 20,
-    backgroundColor: theme.colors.accent,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  createPlaylistBtnText: {
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '700'
-  },
-  playlistItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.bottomTabBorder
-  },
-  playlistIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: theme.colors.cardBackgroundLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14
-  },
-  playlistItemName: {
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 3
-  },
-  playlistItemCount: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  abLooperStrip: {
-    backgroundColor: theme.colors.cardBackgroundLight,
-    borderColor: theme.colors.bottomTabBorder,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 12,
-    marginBottom: 10,
-    shadowColor: theme.colors.background,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4
-  },
-  abLooperHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8
-  },
-  abLooperTitle: {
-    color: theme.colors.textPrimary,
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  abLooperSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  abResetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    backgroundColor: '#ff453a20',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ff453a40'
-  },
-  abResetText: {
-    color: '#ff453a',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  abPointsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  abPointBox: {
-    backgroundColor: theme.colors.backgroundDark,
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  abPointLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  abPointTime: {
-    color: theme.colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '800',
-    marginTop: 2
-  },
-  nudgeRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 4
-  },
-  nudgeBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    backgroundColor: theme.colors.cardBackground,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: theme.colors.bottomTabBorder
-  },
-  nudgeText: {
-    color: theme.colors.textSecondary,
-    fontSize: 10,
-    fontWeight: '700'
-  },
-  abLoopToggleBtn: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: theme.colors.cardBackground,
-    borderColor: theme.colors.bottomTabBorder,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6
-  },
-  abLoopToggleText: {
-    color: theme.colors.textPrimary,
-    fontSize: 12,
-    fontWeight: '800'
-  }
-});
+    container: {
+      flex: 1
+    },
+    header: {
+      position: 'absolute',
+      top: 40,
+      left: 0,
+      right: 0,
+      zIndex: 100,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingVertical: 12
+    },
+    headerBtn: {
+      padding: 4
+    },
+    headerText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '700',
+      letterSpacing: 1,
+      textTransform: 'uppercase'
+    },
+    artContainer: {
+      width: '100%',
+      height: isTablet ? 380 : 310,
+      borderRadius: 0,
+      overflow: 'hidden',
+      marginTop: 0,
+      marginBottom: 0,
+      shadowColor: theme.colors.background,
+      shadowOffset: { width: 0, height: 16 },
+      shadowOpacity: 0.8,
+      shadowRadius: 24,
+      elevation: 20,
+      backgroundColor: theme.colors.backgroundDark
+    },
+    overlayContent: {
+      flex: 1,
+      paddingHorizontal: 18,
+      paddingTop: 72,
+      paddingBottom: 12,
+      justifyContent: 'flex-end'
+    },
+    tableContainer: {
+      width: '100%',
+      flex: 1,
+      justifyContent: 'flex-end',
+      gap: 3,
+      overflow: 'hidden'
+    },
+    tableRowFull: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255,255,255,0.25)',
+      paddingBottom: 5,
+      paddingHorizontal: 2,
+      marginBottom: 0
+    },
+    tableRowSplit: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255,255,255,0.25)',
+      paddingBottom: 5,
+      paddingHorizontal: 2,
+      marginBottom: 0
+    },
+    tableCell: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center'
+    },
+    tableCellLeft: {
+      flex: 1.15,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      overflow: 'hidden',
+      paddingRight: 6
+    },
+    tableCellRight: {
+      flex: 0.85,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      overflow: 'hidden'
+    },
+    tableLabel: {
+      color: 'rgba(255,255,255,0.65)',
+      fontSize: 10.5,
+      fontWeight: '800',
+      marginRight: 4,
+      letterSpacing: 0.2,
+      flexShrink: 0
+    },
+    tableValue: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '700',
+      flexShrink: 1
+    },
+    infoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12
+    },
+    title: {
+      color: theme.colors.textPrimary,
+      fontSize: 28,
+      fontWeight: '900',
+      marginBottom: 8,
+      letterSpacing: -0.5
+    },
+    artist: {
+      color: theme.colors.accent,
+      fontSize: 18,
+      fontWeight: '600'
+    },
+    progressContainer: {
+      marginBottom: 14
+    },
+    timeRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: -8
+    },
+    timeText: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '600'
+    },
+    controlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 12,
+      marginBottom: 20
+    },
+    playPauseBtn: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: theme.colors.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: theme.colors.accent,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.5,
+      shadowRadius: 16,
+      elevation: 12
+    },
+    bottomActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 20
+    },
+    playerTabBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'center',
+      backgroundColor: theme.colors.bottomTabBackground,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.bottomTabBorder,
+      paddingTop: 8,
+      paddingBottom: 4
+    },
+    playerTabButton: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      flex: 1,
+      gap: 4
+    },
+    playerTabLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      fontWeight: '600'
+    },
+    lyricsCard: {
+      backgroundColor: theme.colors.cardBackground,
+      borderRadius: 24,
+      padding: 32,
+      borderWidth: 1,
+      borderColor: theme.colors.bottomTabBorder,
+      marginBottom: 24
+    },
+    lyricsCardTitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '800',
+      marginBottom: 24,
+      letterSpacing: 1,
+      textTransform: 'uppercase'
+    },
+    lyricsCardText: {
+      ...theme.typography.bodyText,
+      marginBottom: 32
+    },
+    showLyricsBtn: {
+      alignSelf: 'flex-start',
+      backgroundColor: theme.colors.textPrimary,
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 24
+    },
+    showLyricsBtnText: {
+      color: theme.colors.backgroundDark,
+      fontSize: 14,
+      fontWeight: '800'
+    },
+    previewTab: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: theme.colors.cardBackgroundLight,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.03)',
+      shadowColor: theme.colors.background,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 2
+    },
+    previewTabActive: {
+      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.accent,
+      shadowColor: theme.colors.accent,
+      shadowOpacity: 0.3,
+      shadowRadius: 8
+    },
+    previewTabText: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5
+    },
+    previewTabTextActive: {
+      color: theme.colors.backgroundDark,
+      fontWeight: '800'
+    },
+    modalBackdrop: {
+      flex: 1,
+      justifyContent: 'flex-end'
+    },
+    modalDismissArea: {
+      flex: 1
+    },
+    bottomSheet: {
+      backgroundColor: theme.colors.bottomSheetBackground,
+      overflow: 'hidden',
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 24,
+      paddingTop: 24,
+      paddingBottom: Math.max(Platform.OS === 'android' ? 36 : 24, insets.bottom + (Platform.OS === 'android' ? 32 : 16)),
+      borderWidth: 1,
+      borderColor: theme.colors.bottomTabBorder,
+      shadowColor: theme.colors.background,
+      shadowOffset: { width: 0, height: -8 },
+      shadowOpacity: 0.5,
+      shadowRadius: 16,
+      elevation: 20
+    },
+    bottomSheetHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 20
+    },
+    bottomSheetTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: 20,
+      fontWeight: '700'
+    },
+    closeModalBtn: {
+      padding: 6,
+      backgroundColor: theme.colors.cardBackgroundLight,
+      borderRadius: 16
+    },
+    optionItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.bottomTabBorder
+    },
+    optionIconBox: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme.colors.cardBackgroundLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 16
+    },
+    optionItemText: {
+      flex: 1,
+      color: theme.colors.textPrimary,
+      fontSize: 16,
+      fontWeight: '600'
+    },
+    newPlaylistRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 8
+    },
+    playlistInput: {
+      flex: 1,
+      height: 50,
+      backgroundColor: theme.colors.cardBackgroundLight,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      color: theme.colors.textPrimary,
+      fontSize: 16
+    },
+    createPlaylistBtn: {
+      height: 50,
+      paddingHorizontal: 20,
+      backgroundColor: theme.colors.accent,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    createPlaylistBtnText: {
+      color: theme.colors.textPrimary,
+      fontSize: 15,
+      fontWeight: '700'
+    },
+    playlistItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.bottomTabBorder
+    },
+    playlistIconBox: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: theme.colors.cardBackgroundLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 14
+    },
+    playlistItemName: {
+      color: theme.colors.textPrimary,
+      fontSize: 15,
+      fontWeight: '600',
+      marginBottom: 3
+    },
+    playlistItemCount: {
+      color: theme.colors.textMuted,
+      fontSize: 12,
+      fontWeight: '500'
+    },
+    abLooperStrip: {
+      backgroundColor: theme.colors.cardBackgroundLight,
+      borderColor: theme.colors.bottomTabBorder,
+      borderWidth: 1,
+      borderRadius: 20,
+      padding: 12,
+      marginBottom: 10,
+      shadowColor: theme.colors.background,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 4
+    },
+    abLooperHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8
+    },
+    abLooperTitle: {
+      color: theme.colors.textPrimary,
+      fontSize: 13,
+      fontWeight: '800'
+    },
+    abLooperSubtitle: {
+      color: theme.colors.textMuted,
+      fontSize: 11,
+      fontWeight: '600'
+    },
+    abResetBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingVertical: 3,
+      paddingHorizontal: 8,
+      backgroundColor: '#ff453a20',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#ff453a40'
+    },
+    abResetText: {
+      color: '#ff453a',
+      fontSize: 11,
+      fontWeight: '800'
+    },
+    abPointsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8
+    },
+    abPointBox: {
+      backgroundColor: theme.colors.backgroundDark,
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.bottomTabBorder,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    abPointLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5
+    },
+    abPointTime: {
+      color: theme.colors.textPrimary,
+      fontSize: 15,
+      fontWeight: '800',
+      marginTop: 2
+    },
+    nudgeRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 4
+    },
+    nudgeBtn: {
+      paddingVertical: 2,
+      paddingHorizontal: 6,
+      backgroundColor: theme.colors.cardBackground,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: theme.colors.bottomTabBorder
+    },
+    nudgeText: {
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+      fontWeight: '700'
+    },
+    abLoopToggleBtn: {
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      backgroundColor: theme.colors.cardBackground,
+      borderColor: theme.colors.bottomTabBorder,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 6
+    },
+    abLoopToggleText: {
+      color: theme.colors.textPrimary,
+      fontSize: 12,
+      fontWeight: '800'
+    }
+  });
 };
