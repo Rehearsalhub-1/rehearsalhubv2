@@ -52,16 +52,22 @@ function localDateStr(d: Date): string {
 }
 
 function groupRecords(records: any[]): { key: string; label: string; date: Date | null; items: any[] }[] {
+  // Group by event name ONLY — same title = one group, dates shown inside
   const map = new Map<string, { label: string; date: Date | null; items: any[] }>();
   for (const r of records) {
     const rawTs = r.checkInTime || r.scannedAt || r.check_in_time || r.timestamp || r.createdAt || r.created_at || r.dateString || r.date_string;
     const parsedDate = parseDateValue(rawTs);
-    // Use LOCAL date for grouping key to avoid UTC midnight edge issues
-    const dateKey = isValidDate(parsedDate) ? localDateStr(parsedDate) : 'unknown';
     const eventLabel = r.eventName || r.event_name || 'Rehearsal';
-    const key = `${eventLabel}__${dateKey}`;
+    // Key is just the event name — all records with the same title merge into one group
+    const key = eventLabel;
     if (!map.has(key)) {
       map.set(key, { label: eventLabel, date: parsedDate, items: [] });
+    } else {
+      // Keep the most recent date on the group header
+      const existing = map.get(key)!;
+      if (isValidDate(parsedDate) && (!isValidDate(existing.date) || parsedDate > existing.date!)) {
+        existing.date = parsedDate;
+      }
     }
     map.get(key)!.items.push({ ...r, parsedDate, parsedCheckIn: parsedDate });
   }

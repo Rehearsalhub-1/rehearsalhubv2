@@ -95,7 +95,8 @@ const isConductorGuideText = (text: string | null | undefined): boolean => {
 // ToastHUD, DoubleTapOverlay, and PlayerProgressSlider live in PlayerHUDOverlays.tsx
 
 export default function PlayerScreen({ route, navigation }: any) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isLight = themeName === 'light';
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const styles = useMemo(() => getStyles(theme, insets, windowWidth), [theme, insets, windowWidth]);
@@ -1016,7 +1017,7 @@ export default function PlayerScreen({ route, navigation }: any) {
             onPress={handleClose}
             style={styles.headerBtn}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="chevron-down" size={28} color="#ffffff" />
+            <Ionicons name="chevron-down" size={28} color={isLight ? theme.colors.textPrimary : "#ffffff"} />
           </TouchableOpacity>
           <ExpandableText
             style={[
@@ -1025,11 +1026,15 @@ export default function PlayerScreen({ route, navigation }: any) {
                 flex: 1,
                 textAlign: 'center',
                 marginHorizontal: 16,
-                color: isLive ? (theme.colors.accentBright || theme.colors.accent || '#c084fc') : '#FFFFFF',
+                color: isLight ? '#000000' : '#FFFFFF',
                 fontWeight: '800',
-                textShadowColor: theme.colors.accent || '#8B5CF6',
-                textShadowOffset: { width: 0, height: 0 },
-                textShadowRadius: 10,
+                ...(isLight
+                  ? {}
+                  : {
+                      textShadowColor: theme.colors.accent || '#8B5CF6',
+                      textShadowOffset: { width: 0, height: 0 },
+                      textShadowRadius: 10,
+                    }),
               }
             ]}
           >
@@ -1059,17 +1064,17 @@ export default function PlayerScreen({ route, navigation }: any) {
           )}
 
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowScheduleSheet(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <ScheduleSIcon size={22} color="#ffffff" />
+            <ScheduleSIcon size={22} color={isLight ? theme.colors.textPrimary : "#ffffff"} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowNotesModal(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <NotesWithPenIcon size={22} color="#ffffff" />
+            <NotesWithPenIcon size={22} color={isLight ? theme.colors.textPrimary : "#ffffff"} />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={() => navigation.navigate('Home')}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="home-outline" size={22} color="#ffffff" />
+            <Ionicons name="home-outline" size={22} color={isLight ? theme.colors.textPrimary : "#ffffff"} />
           </TouchableOpacity>
         </View>
 

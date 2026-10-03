@@ -30,7 +30,8 @@ import { api } from '../services/api';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function LyricsScreen({ route, navigation }: any) {
-  const { theme } = useTheme();
+  const { theme, themeName } = useTheme();
+  const isLight = themeName === 'light';
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
 
@@ -244,11 +245,15 @@ export default function LyricsScreen({ route, navigation }: any) {
                 styles.headerText, 
                 { 
                   textAlign: 'center', 
-                  color: '#FFFFFF',
+                  color: isLight ? '#000000' : '#FFFFFF',
                   fontWeight: '700',
-                  textShadowColor: theme.colors.accent,
-                  textShadowRadius: 6,
-                  textShadowOffset: { width: 0, height: 0 },
+                  ...(isLight
+                    ? {}
+                    : {
+                        textShadowColor: theme.colors.accent,
+                        textShadowRadius: 6,
+                        textShadowOffset: { width: 0, height: 0 },
+                      }),
                 }
               ]} 
               numberOfLines={isTitleExpanded ? undefined : 1} 
@@ -332,11 +337,15 @@ export default function LyricsScreen({ route, navigation }: any) {
         <View style={[styles.dockedControlsContainer, { paddingBottom: Math.max(insets.bottom + 6, 20) }]}>
           <BlurView
             intensity={Platform.OS === 'ios' ? 45 : 100}
-            tint="dark"
+            tint={themeName === 'light' ? 'light' : 'dark'}
             style={StyleSheet.absoluteFill}
           />
           <LinearGradient
-            colors={['rgba(24, 16, 44, 0.72)', 'rgba(10, 6, 20, 0.94)']}
+            colors={
+              themeName === 'light'
+                ? ['rgba(248, 247, 250, 0.88)', 'rgba(243, 241, 246, 0.97)']
+                : ['rgba(24, 16, 44, 0.72)', 'rgba(10, 6, 20, 0.94)']
+            }
             style={StyleSheet.absoluteFill}
           />
 

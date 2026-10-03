@@ -116,6 +116,15 @@ const INITIAL_CARDS = [
 },
 {
   id: '2',
+  title: 'All Ministered Songs',
+  subtitle: 'Browse Songs & Multi-Parts',
+  mainValue: 'SONGS',
+  route: 'AllSongs',
+  durationMs: 15800,
+  contentPosition: { x: 0.5, y: 0.5 },
+},
+{
+  id: '3',
   title: 'Chat Rooms',
   subtitle: 'Subgroups & Bands Chat',
   mainValue: 'CHAT',
@@ -124,7 +133,7 @@ const INITIAL_CARDS = [
   contentPosition: { x: 0.5, y: 0.3 },
 },
 {
-  id: '3',
+  id: '4',
   title: 'Calendar',
   subtitle: 'Ministry Programs',
   mainValue: 'LWS',
@@ -132,15 +141,7 @@ const INITIAL_CARDS = [
   durationMs: 15800,
   contentPosition: { x: 0.5, y: 0.5 },
 },
-{
-  id: '4',
-  title: 'All Ministered Songs',
-  subtitle: 'Browse Songs & Multi-Parts',
-  mainValue: 'SONGS',
-  route: 'AllSongs',
-  durationMs: 15800,
-  contentPosition: { x: 0.5, y: 0.5 },
-},
+
 ];
 
 export default function HomeScreen({ navigation }: any) {
