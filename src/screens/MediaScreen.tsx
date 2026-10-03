@@ -206,7 +206,8 @@ const HERO_H = Math.max(H * 0.56, 360);
 export default function MediaScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const user = useUserStore((s) => s.user);
-  const userName = user?.displayName?.split(' ')[0] || 'You';
+  const profile = useUserStore((s) => s.profile);
+  const userName = profile?.firstName?.trim() || 'You';
 
   const [selectedCat, setSelectedCat] = useState('All');
   const [inMyList, setInMyList] = useState(false);
@@ -239,7 +240,7 @@ export default function MediaScreen({ navigation }: any) {
         {/* Right: cast + profile */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
           <TouchableOpacity activeOpacity={0.7}>
-            <Ionicons name="cast-outline" size={24} color="#FFFFFF" />
+            <Ionicons name="tv-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <SyncAvatar
             userId={user?.uid}
