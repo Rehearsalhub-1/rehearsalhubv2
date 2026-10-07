@@ -85,9 +85,9 @@ const MENU_SECTIONS = [
 ];
 
 const CLOUD_ASSETS = [
-  { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud3_min.webp' }, // cloud 3 for first card
-  { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud2_min.webp' }, // cloud 2 for second card
-  { uri: 'https://rehearsalhub-api-production-6a17.up.railway.app/upload/file/app-assets/cloud4_min.webp' }, // cloud 4 for third card (last card)
+  { uri: 'https://pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/app-assets/cloud3_min.webp' }, // cloud 3 for first card
+  { uri: 'https://pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/app-assets/cloud2_min.webp' }, // cloud 2 for second card
+  { uri: 'https://pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/app-assets/cloud4_min.webp' }, // cloud 4 for third card (last card)
 ];
 
 function LoopingOnceImage({ source, style, contentPosition }: { source: any; durationMs?: number; style: any; contentPosition?: any }) {

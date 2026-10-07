@@ -131,6 +131,7 @@ export default function PlayerScreen({ route, navigation }: any) {
   const paramTrack = route.params?.activeTrack;
   const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack || fallbackTrack);
   const lastPlayedTrackIdRef = useRef<string | null>(null);
+  const lastPlayedAudioUrlRef = useRef<string>('');
 
   // Sync activeTrack when navigating with new route params
   useEffect(() => {
@@ -754,7 +755,6 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   // Track the last audioUrl we actually loaded so WS patches that preserve the
   // same URL string don't retrigger play() and interrupt playback.
-  const lastPlayedAudioUrlRef = useRef<string>('');
 
   useEffect(() => {
     if (!activeTrack?.id) return;
@@ -869,7 +869,7 @@ export default function PlayerScreen({ route, navigation }: any) {
                 _remoteAudioUrl: activeTrack._remoteAudioUrl || activeTrack.audioUrl,
               };
               setActiveTrack(offlineTrack);
-              if (currentTrack?.id && String(currentTrack.id) === String(activeTrack.id) && currentTrack.audioUrl !== localUri) {
+              if (currentTrack?.id && String(currentTrack.id) === String(activeTrack.id) && currentTrack.audioUrl !== localUri && !isPlaying) {
                 lastPlayedAudioUrlRef.current = localUri;
                 play(offlineTrack, undefined, false);
               }
@@ -961,16 +961,14 @@ export default function PlayerScreen({ route, navigation }: any) {
           await AsyncStorage.setItem('offline_cached_songs_v2', JSON.stringify(cleanList));
 
           setIsDownloadedOffline(true);
-          // Patch activeTrack to use local file for immediate playback
-          const offlineTrack = {
-            ...activeTrack,
-            _remoteAudioUrl: remoteUrl,
-            audioUrl: downloadRes.uri,
+          // Silently mark offlineUri on track so future playback uses the local file,
+          // without restarting active playback or causing screen/text glitches.
+          setActiveTrack((prev: any) => ({
+            ...prev,
             _offlineUri: downloadRes.uri,
-          };
-          setActiveTrack(offlineTrack);
+            _remoteAudioUrl: remoteUrl,
+          }));
           lastPlayedAudioUrlRef.current = downloadRes.uri;
-          await play(offlineTrack, undefined, false);
           showToast('Downloaded — available for offline playback 📱', 'checkmark-circle');
         } else {
           showToast('Download incomplete, please retry', 'alert-circle');

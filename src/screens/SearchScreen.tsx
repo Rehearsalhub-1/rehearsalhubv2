@@ -284,7 +284,7 @@ export default function SearchScreen({ navigation }: any) {
     if (!isSameTrack) {
       play(track, filteredSongs, true);
     } else {
-      navigateToPlayer({ activeTrack: track, fromAllSongs: true, zoneId: track.zoneId, queue: filteredSongs });
+      navigateToPlayer({ activeTrack: track, fromAllSongs: false, zoneId: track.zoneId, queue: filteredSongs });
     }
   }, [currentTrack, filteredSongs, play]);
 
@@ -523,7 +523,7 @@ export default function SearchScreen({ navigation }: any) {
             activeOpacity={0.9}
             onPress={() => navigateToPlayer({
               activeTrack: currentTrack,
-              fromAllSongs: true,
+              fromAllSongs: false,
               zoneId: currentTrack.zoneId,
               queue: filteredSongs.length > 0 ? filteredSongs : [currentTrack]
             })}

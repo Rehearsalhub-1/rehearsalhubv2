@@ -18,16 +18,12 @@ const BACKEND_BASE = effectiveBackend.replace(/\/+$/, '').replace(/\/api$/, '');
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url || typeof url !== 'string') return '';
   const trimmed = url.trim();
+  // Relative upload paths → proxy through Railway API
   if (trimmed.startsWith('/upload/file') || trimmed.startsWith('upload/file')) {
     const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
     return `${BACKEND_BASE}${cleanPath}`;
   }
-  if (trimmed.includes('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev')) {
-    const key = trimmed.split('pub-cb7697578fcc48d3b3aeb70a47eb2f65.r2.dev/')[1];
-    if (key) {
-      return `${BACKEND_BASE}/upload/file/${key}`;
-    }
-  }
+  // R2 public URLs and all other absolute URLs → serve directly (do NOT reroute through Railway)
   return trimmed;
 }
 
