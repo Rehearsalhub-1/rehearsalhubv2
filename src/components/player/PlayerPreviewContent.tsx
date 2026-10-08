@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
@@ -61,6 +61,28 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
         }`
       : '');
 
+  const tagsStyles = useMemo(() => ({
+    p: { margin: 0, padding: 0 },
+    strong: { color: theme.colors.accent, fontWeight: '800' as const },
+    b: { color: theme.colors.accent, fontWeight: '800' as const },
+  }), [theme.colors.accent]);
+
+  const lyricsHtmlSource = useMemo(() => (
+    activeTrack?.lyrics ? { html: parseMarkdown(activeTrack.lyrics) } : null
+  ), [activeTrack?.lyrics, parseMarkdown]);
+
+  const conductorHtmlSource = useMemo(() => (
+    resolvedConductorGuide ? { html: parseMarkdown(resolvedConductorGuide) } : null
+  ), [resolvedConductorGuide, parseMarkdown]);
+
+  const solfaHtmlSource = useMemo(() => (
+    resolvedSolfa ? { html: parseMarkdown(resolvedSolfa) } : null
+  ), [resolvedSolfa, parseMarkdown]);
+
+  const historyHtmlSource = useMemo(() => (
+    resolvedHistory ? { html: parseMarkdown(resolvedHistory) } : null
+  ), [resolvedHistory, parseMarkdown]);
+
   return (
     <>
       {activePreviewTab === 'Lyrics' && (
@@ -86,7 +108,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             >
               Lyrics preview
             </Text>
-            {activeTrack.lyrics ? (
+            {lyricsHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
                 style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
@@ -94,13 +116,9 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
               >
                 <RenderHtml
                   contentWidth={contentWidth}
-                  source={{ html: parseMarkdown(activeTrack.lyrics) }}
+                  source={lyricsHtmlSource}
                   baseStyle={{ ...theme.typography.htmlBase }}
-                  tagsStyles={{
-                    p: { margin: 0, padding: 0 },
-                    strong: { color: theme.colors.accent, fontWeight: '800' },
-                    b: { color: theme.colors.accent, fontWeight: '800' },
-                  }}
+                  tagsStyles={tagsStyles}
                 />
               </ScrollView>
             ) : (
@@ -151,7 +169,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             >
               Conductor preview
             </Text>
-            {resolvedConductorGuide ? (
+            {conductorHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
                 style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
@@ -159,13 +177,9 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
               >
                 <RenderHtml
                   contentWidth={contentWidth}
-                  source={{ html: parseMarkdown(resolvedConductorGuide) }}
+                  source={conductorHtmlSource}
                   baseStyle={{ ...theme.typography.htmlBase }}
-                  tagsStyles={{
-                    p: { margin: 0, padding: 0 },
-                    strong: { color: theme.colors.accent, fontWeight: '800' },
-                    b: { color: theme.colors.accent, fontWeight: '800' },
-                  }}
+                  tagsStyles={tagsStyles}
                 />
               </ScrollView>
             ) : (
@@ -216,7 +230,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             >
               Solfa preview
             </Text>
-            {resolvedSolfa ? (
+            {solfaHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
                 style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
@@ -224,13 +238,9 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
               >
                 <RenderHtml
                   contentWidth={contentWidth}
-                  source={{ html: parseMarkdown(resolvedSolfa) }}
+                  source={solfaHtmlSource}
                   baseStyle={{ ...theme.typography.htmlBase }}
-                  tagsStyles={{
-                    p: { margin: 0, padding: 0 },
-                    strong: { color: theme.colors.accent, fontWeight: '800' },
-                    b: { color: theme.colors.accent, fontWeight: '800' },
-                  }}
+                  tagsStyles={tagsStyles}
                 />
               </ScrollView>
             ) : (
@@ -281,7 +291,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
             >
               History preview
             </Text>
-            {resolvedHistory ? (
+            {historyHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
                 style={{ maxHeight: previewMaxHeight, minHeight: previewMinHeight }}
@@ -289,13 +299,9 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
               >
                 <RenderHtml
                   contentWidth={contentWidth}
-                  source={{ html: parseMarkdown(resolvedHistory) }}
+                  source={historyHtmlSource}
                   baseStyle={{ ...theme.typography.htmlBase }}
-                  tagsStyles={{
-                    p: { margin: 0, padding: 0 },
-                    strong: { color: theme.colors.accent, fontWeight: '800' },
-                    b: { color: theme.colors.accent, fontWeight: '800' },
-                  }}
+                  tagsStyles={tagsStyles}
                 />
               </ScrollView>
             ) : (
@@ -409,11 +415,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                     contentWidth={contentWidth}
                     source={{ html: htmlContent }}
                     baseStyle={{ ...theme.typography.htmlBase }}
-                    tagsStyles={{
-                      p: { margin: 0, padding: 0 },
-                      strong: { color: theme.colors.accent, fontWeight: '800' },
-                      b: { color: theme.colors.accent, fontWeight: '800' },
-                    }}
+                    tagsStyles={tagsStyles}
                   />
                 </ScrollView>
               );
