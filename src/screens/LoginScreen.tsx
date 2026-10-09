@@ -269,12 +269,22 @@ export default function LoginScreen({ route, navigation }: any) {
 
       setLoading(true);
       try {
+        // Preserve the ZNL prefix if the user typed it, so the backend assigns
+        // the coordinator role correctly (ZNLxxx → coordinator, else → member).
+        const rawInput = invitationCodeInput.trim().toUpperCase();
+        const finalZoneCode = zoneCode.trim().toUpperCase();
+        // If user entered a ZNL-prefixed code, send it so backend detects coordinator role
+        const zoneCodeForApi =
+          rawInput.startsWith('ZNL') && !finalZoneCode.startsWith('ZNL')
+            ? `ZNL${finalZoneCode}`
+            : finalZoneCode;
+
         const res = await api.auth.register({
           email: email.trim().toLowerCase(),
           password: password,
           first_name: firstName.trim(),
           last_name: lastName.trim(),
-          zone_code: zoneCode.trim().toUpperCase(),
+          zone_code: zoneCodeForApi,
           designation: designation,
           kingschat_id: kingschatId || undefined,
         });
@@ -331,21 +341,28 @@ export default function LoginScreen({ route, navigation }: any) {
   const matchedInvitationZone = useMemo(() => {
     const code = invitationCodeInput.trim().toUpperCase();
     if (!code || code.length < 2) return null;
+    // Also try stripping or adding the ZNL prefix so ZNLZONE052 matches a zone stored as ZONE052
+    const bareCode = code.startsWith('ZNL') ? code.slice(3) : code;
+    const znlCode = code.startsWith('ZNL') ? code : `ZNL${code}`;
+    const matches = (val: string) => val === code || val === bareCode || val === znlCode;
     return allZonesList.find((z: any) =>
-      (z.invitationCode && z.invitationCode.toUpperCase() === code) ||
-      (z.code && z.code.toUpperCase() === code) ||
-      (z.id && z.id.toUpperCase() === code)
-    ) || getZoneByInvitationCode(code);
+      (z.invitationCode && matches(z.invitationCode.toUpperCase())) ||
+      (z.code && matches(z.code.toUpperCase())) ||
+      (z.id && matches(z.id.toUpperCase()))
+    ) || getZoneByInvitationCode(code) || getZoneByInvitationCode(bareCode);
   }, [allZonesList, invitationCodeInput]);
 
   const selectedZoneObj = useMemo(() => {
     if (!zoneCode) return null;
     const clean = zoneCode.trim().toUpperCase();
+    const bareCode = clean.startsWith('ZNL') ? clean.slice(3) : clean;
+    const znlCode = clean.startsWith('ZNL') ? clean : `ZNL${clean}`;
+    const matches = (val: string) => val === clean || val === bareCode || val === znlCode;
     return allZonesList.find((z: any) =>
-      (z.invitationCode && z.invitationCode.toUpperCase() === clean) ||
-      (z.code && z.code.toUpperCase() === clean) ||
-      (z.id && z.id.toUpperCase() === clean)
-    ) || getZoneByInvitationCode(zoneCode);
+      (z.invitationCode && matches(z.invitationCode.toUpperCase())) ||
+      (z.code && matches(z.code.toUpperCase())) ||
+      (z.id && matches(z.id.toUpperCase()))
+    ) || getZoneByInvitationCode(zoneCode) || getZoneByInvitationCode(bareCode);
   }, [allZonesList, zoneCode]);
 
   // Forgot Password Actions
