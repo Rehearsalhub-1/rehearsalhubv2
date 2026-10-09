@@ -133,25 +133,58 @@ export const DoodleLayer = React.memo(({
 
   const shouldRejectDrawingTouch = (x: number, y: number) => {
     const { width: W, height: H } = Dimensions.get('window');
-    if (y < 90 + insets.top) return true;
+    // Only reject touches directly over the floating FAB / tools button on the right edge
     if (isAnnotationMode) {
       if (x > W - 90 && y > H - 520 && y < H - 80) return true;
     } else {
       if (x > W - 90 && y > H - 180 && y < H - 90) return true;
     }
-    if (isPlayer) {
-      if (y > H - 240) return true;
-    } else {
-      if (y > H - 100) return true;
-    }
+    // Only reject touches on the bottom player bar controls
+    if (isPlayer && y > H - 180) return true;
     
     return false;
+  };
+
+  const getCoordinates = (evt: any) => {
+    const { pageX, pageY, locationX, locationY } = evt.nativeEvent;
+    if (typeof locationX === 'number' && !isNaN(locationX) && typeof locationY === 'number' && !isNaN(locationY)) {
+      return { x: locationX, y: locationY };
+    }
+    const topInset = (insets?.top || 0) + 50;
+    return { x: pageX, y: Math.max(0, pageY - topInset) };
   };
 
   const getMyColorRef = useRef(getMyColor);
   useEffect(() => {
     getMyColorRef.current = getMyColor;
   }, [getMyColor]);
+
+  const commitCurrentStroke = () => {
+    const tool = annotationToolRef.current;
+    if (tool === 'eraser') {
+      scheduleSave(latestStrokesRef.current);
+      broadcastStrokes(latestStrokesRef.current);
+      isDrawingRef.current = false;
+      return;
+    }
+
+    const strokeToSave = activeStrokeRef.current;
+    activeStrokeRef.current = null;
+    if (activePathRef.current) {
+      activePathRef.current.setNativeProps({ d: '' });
+    }
+
+    if (!strokeToSave || (strokeToSave.type === 'pen' && strokeToSave.points.length <= 1)) {
+      isDrawingRef.current = false;
+      return;
+    }
+    const updatedStrokes = [...latestStrokesRef.current, strokeToSave];
+    storeSetStrokes(updatedStrokes);
+    if (setStrokes) setStrokes(updatedStrokes);
+    scheduleSave(updatedStrokes);
+    broadcastStrokes(updatedStrokes);
+    isDrawingRef.current = false;
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -163,11 +196,10 @@ export const DoodleLayer = React.memo(({
         const { pageX, pageY } = evt.nativeEvent;
         return !shouldRejectDrawingTouch(pageX, pageY);
       },
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (evt) => {
         isDrawingRef.current = true; // pause polling while user draws
-        const { pageX, pageY } = evt.nativeEvent;
-        const x = pageX;
-        const y = pageY;
+        const { x, y } = getCoordinates(evt);
         const tool = annotationToolRef.current;
 
         if (tool === 'eraser') {
@@ -208,9 +240,7 @@ export const DoodleLayer = React.memo(({
         }
       },
       onPanResponderMove: (evt) => {
-        const { pageX, pageY } = evt.nativeEvent;
-        const x = pageX;
-        const y = pageY;
+        const { x, y } = getCoordinates(evt);
         const tool = annotationToolRef.current;
 
         if (tool === 'eraser') {
@@ -226,15 +256,6 @@ export const DoodleLayer = React.memo(({
             storeSetStrokes(otherStrokes); // instant update across all screens
             if (setStrokes) setStrokes(otherStrokes);
             broadcastStrokes(otherStrokes); // live sync to other users
-          }
-          return;
-        }
-        if (shouldRejectDrawingTouch(x, y)) {
-          if (activeStrokeRef.current) {
-            activeStrokeRef.current = null;
-            if (activePathRef.current) {
-              activePathRef.current.setNativeProps({ d: '' });
-            }
           }
           return;
         }
@@ -263,31 +284,10 @@ export const DoodleLayer = React.memo(({
         }
       },
       onPanResponderRelease: async () => {
-        const tool = annotationToolRef.current;
-        if (tool === 'eraser') {
-          scheduleSave(latestStrokesRef.current);
-          broadcastStrokes(latestStrokesRef.current); // broadcast erasure to others
-          isDrawingRef.current = false; // resume polling
-          return;
-        }
-
-        const strokeToSave = activeStrokeRef.current;
-        activeStrokeRef.current = null;
-        if (activePathRef.current) {
-          activePathRef.current.setNativeProps({ d: '' });
-        }
-
-        if (!strokeToSave || (strokeToSave.type === 'pen' && strokeToSave.points.length <= 1)) {
-          return;
-        }
-        const updatedStrokes = [...latestStrokesRef.current, strokeToSave];
-        storeSetStrokes(updatedStrokes);
-        if (setStrokes) setStrokes(updatedStrokes);
-        scheduleSave(updatedStrokes);
-        broadcastStrokes(updatedStrokes); // live sync to other users
-        isDrawingRef.current = false; // resume polling now that stroke is committed
-
-        if (!activeTrackId) return;
+        commitCurrentStroke();
+      },
+      onPanResponderTerminate: async () => {
+        commitCurrentStroke();
       }
     })
   );
