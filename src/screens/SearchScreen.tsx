@@ -442,11 +442,11 @@ export default function SearchScreen({ navigation }: any) {
         {/* Filter chips — shown once user starts typing */}
         {searchQuery.trim().length > 0 && (
           <Animated.View style={[styles.filterRow, { opacity: fadeAnim }]}>
-            {(['all', 'comments'] as const).map((f) => (
+            {(['all', ...(isHQOrPresident ? ['comments'] : [])] as const).map((f) => (
               <TouchableOpacity
                 key={f}
                 style={[styles.filterChip, searchFilter === f && styles.filterChipActive]}
-                onPress={() => setSearchFilter(f)}
+                onPress={() => setSearchFilter(f as 'all' | 'comments')}
                 activeOpacity={0.75}
               >
                 {f === 'comments' && (
