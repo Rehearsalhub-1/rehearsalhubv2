@@ -31,9 +31,10 @@ interface TrackOptionsModalProps {
   onOpenAudioParts?: (track: any) => void;
   currentPlaylistId?: string;
   isFavoritesView?: boolean;
+  onSongRemoved?: (songId: string) => void;
 }
 
-export default function TrackOptionsModal({ visible, onClose, track, tracks, onForwardToChat, onOpenAudioParts, currentPlaylistId, isFavoritesView }: TrackOptionsModalProps) {
+export default function TrackOptionsModal({ visible, onClose, track, tracks, onForwardToChat, onOpenAudioParts, currentPlaylistId, isFavoritesView, onSongRemoved }: TrackOptionsModalProps) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme, insets);
@@ -111,24 +112,27 @@ export default function TrackOptionsModal({ visible, onClose, track, tracks, onF
     if (!currentPlaylistId || !track) return;
     setIsRemoving(true);
     try {
+      await apiClient.delete(`/playlists/${currentPlaylistId}/songs/${track.id}`);
+      onSongRemoved?.(track.id);
       handleFullClose();
     } catch (err) {
       console.error(err);
+      Alert.alert('Error', 'Failed to remove song from playlist. Please try again.');
     } finally {
       setIsRemoving(false);
     }
   };
 
   const handleRemoveFromFavorites = async () => {
-    const user = useUserStore.getState().user;
-    if (!user || !track) return;
+    if (!track) return;
     setIsRemoving(true);
     try {
-      // favRef
-      // fav update
+      await apiClient.delete(`/favorites/${track.id}`);
+      onSongRemoved?.(track.id);
       handleFullClose();
     } catch (err) {
       console.error('Error removing from favorites:', err);
+      Alert.alert('Error', 'Failed to remove from Liked Songs. Please try again.');
     } finally {
       setIsRemoving(false);
     }

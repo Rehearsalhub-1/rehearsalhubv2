@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 
 import { isHQGroup } from '../config/zones';
-import { isHQAdmin } from '../config/roles';
+import { isHQAdmin, canAccessArchive } from '../config/roles';
 import { useZone } from '../hooks/useZone';
 import { useUserStore } from '../hooks/useUser';
 import { optimizeAudio, resolveSongAudioUrl, resolveSongAudioUrls } from '../lib/mediaUtils';
@@ -71,6 +71,7 @@ export default function SearchScreen({ navigation }: any) {
   const styles = getStyles(theme, insets);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchFilter, setSearchFilter] = useState<'all' | 'comments'>('all');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
@@ -219,9 +220,27 @@ export default function SearchScreen({ navigation }: any) {
     if (remoteSearchResults.length > 0) {
       return remoteSearchResults
         .filter(remoteSong => {
+          // Regular members only see ministered songs
           if (!isHQOrPresident) {
-            if (remoteSong.status === 'archive' || remoteSong.status === 'archived' || remoteSong.category === 'archive') return false;
+            const canArchive = canAccessArchive(profile);
+            // Only allow ministered songs for regular members
+            if (!remoteSong.isMinistered) return false;
+            // Also block archive/hq_only unless they have explicit archive access
+            if (!canArchive && (remoteSong.status === 'archive' || remoteSong.status === 'archived' || remoteSong.category === 'archive')) return false;
             if (remoteSong.status === 'hq_only' || remoteSong.isHQOnly) return false;
+          }
+          // Comments filter — only show songs where match is in comments/notes
+          if (searchFilter === 'comments') {
+            const lowerQ = debouncedQuery.toLowerCase();
+            // comments is an array of {text, author} objects; coordinatorComment is a string
+            const commentText = (() => {
+              const c = remoteSong.comments;
+              if (Array.isArray(c)) return c.map((x: any) => x?.text || '').join(' ').toLowerCase();
+              if (typeof c === 'string') return c.toLowerCase();
+              return '';
+            })();
+            const noteText = (remoteSong.notes || remoteSong.coordinatorComment || '').toLowerCase();
+            if (!commentText.includes(lowerQ) && !noteText.includes(lowerQ)) return false;
           }
           return true;
         })
@@ -277,7 +296,7 @@ export default function SearchScreen({ navigation }: any) {
     }
 
     return [];
-  }, [debouncedQuery, remoteSearchResults, songs, isHQOrPresident]);
+  }, [debouncedQuery, remoteSearchResults, songs, isHQOrPresident, profile, searchFilter]);
 
   const openTrack = useCallback((track: any) => {
     const isSameTrack = currentTrack && String(currentTrack.id) === String(track.id);
@@ -419,6 +438,32 @@ export default function SearchScreen({ navigation }: any) {
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </Animated.View>
+
+        {/* Filter chips — shown once user starts typing */}
+        {searchQuery.trim().length > 0 && (
+          <Animated.View style={[styles.filterRow, { opacity: fadeAnim }]}>
+            {(['all', 'comments'] as const).map((f) => (
+              <TouchableOpacity
+                key={f}
+                style={[styles.filterChip, searchFilter === f && styles.filterChipActive]}
+                onPress={() => setSearchFilter(f)}
+                activeOpacity={0.75}
+              >
+                {f === 'comments' && (
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={12}
+                    color={searchFilter === f ? '#fff' : theme.colors.textMuted}
+                    style={{ marginRight: 4 }}
+                  />
+                )}
+                <Text style={[styles.filterChipText, searchFilter === f && styles.filterChipTextActive]}>
+                  {f === 'all' ? 'All' : 'Comments'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </Animated.View>
+        )}
 
         <View style={styles.resultsArea}>
           {searchQuery.trim().length === 0 ? (
@@ -597,6 +642,24 @@ const getStyles = (theme: any, insets?: any) => {
 
     resultsHeaderRow: { marginBottom: 8, paddingHorizontal: 2 },
     resultsCountText: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+
+    filterRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+    filterChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.inputBorder || 'rgba(255,255,255,0.15)',
+      backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    filterChipActive: {
+      backgroundColor: theme.colors.accent || '#9333ea',
+      borderColor: theme.colors.accent || '#9333ea',
+    },
+    filterChipText: { color: theme.colors.textMuted, fontSize: 13, fontWeight: '600' },
+    filterChipTextActive: { color: '#fff' },
 
     trackList: { paddingHorizontal: 16, paddingBottom: 40, paddingTop: 6 },
     trackRow: {

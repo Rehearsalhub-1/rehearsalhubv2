@@ -551,6 +551,16 @@ export default function PlaylistsScreen({ navigation, route }: any) {
           track={selectedOptionsTrack} 
           currentPlaylistId={activeCollection !== 'favorites' && activeCollection !== 'library' ? activeCollection : undefined}
           isFavoritesView={activeCollection === 'favorites'}
+          onSongRemoved={(songId) => {
+            // Remove song from local playlist state immediately
+            if (activePlaylistData) {
+              const updatedSongs = (activePlaylistData.songs || []).filter((s: any) => {
+                const id = typeof s === 'string' ? s : s?.id;
+                return id !== songId;
+              });
+              setActivePlaylistData({ ...activePlaylistData, songs: updatedSongs });
+            }
+          }}
           onForwardToChat={() => {
             setShareTrack(selectedOptionsTrack);
             setShowShareSheet(true);

@@ -527,10 +527,13 @@ export default function KaraokeScreen({ route, navigation }: any) {
           break;
         }
       }
-    } else if (duration > 0) {
-      // Plain text: distribute lines across song duration so it auto-scrolls like a teleprompter
+    } else if (duration > 0 && position > 0) {
+      // Plain text: distribute lines evenly across song duration — only start scrolling once audio is actually playing
       const progressRatio = Math.min(1, Math.max(0, position / duration));
       activeIdx = Math.min(lyrics.length - 1, Math.floor(progressRatio * lyrics.length));
+    } else {
+      // Audio hasn't started yet — stay at line 0
+      activeIdx = 0;
     }
 
     if (activeIdx !== currentLineIndex) {
@@ -728,7 +731,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
         reviewTimeoutRef.current = null;
       }
       try {
-        await waitForPlayerSetup();
+        // Use a timeout to prevent waitForPlayerSetup hanging forever (e.g. in Expo Go)
+        await Promise.race([
+          waitForPlayerSetup(),
+          new Promise(resolve => setTimeout(resolve, 2000)),
+        ]);
         await TrackPlayer.reset();
       } catch { }
 
@@ -1228,18 +1235,18 @@ export default function KaraokeScreen({ route, navigation }: any) {
                           TrackPlayer.seekTo(targetSec).catch(() => {});
                         }
                       }}
-                      style={[
-                        {
-                          textAlign: 'center',
-                          marginBottom: 18,
-                          lineHeight: isActive ? 46 : 30,
-                        },
-                        isActive
-                          ? { fontSize: 28, fontWeight: '900', color: '#ffffff', textShadowColor: T.accent, textShadowRadius: 16, textShadowOffset: { width: 0, height: 0 } }
+                      style={{
+                        textAlign: 'center',
+                        marginBottom: 18,
+                        lineHeight: 34,
+                        fontSize: 20,
+                        fontWeight: '600',
+                        color: isActive
+                          ? '#ffffff'
                           : isPast
-                          ? { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.45)' }
-                          : { fontSize: 17, fontWeight: '600', color: 'rgba(255,255,255,0.75)' },
-                      ]}
+                          ? 'rgba(255,255,255,0.35)'
+                          : 'rgba(255,255,255,0.75)',
+                      }}
                     >
                       {line.text}
                     </Text>
