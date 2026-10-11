@@ -976,8 +976,11 @@ export default function KaraokeScreen({ route, navigation }: any) {
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
           try {
-            if (reviewTake?.id === take.id) await stopReviewTake();
-            await FileSystem.deleteAsync(take.uri);
+            // Stop playback first but don't await — fire and forget to avoid UI freeze
+            if (reviewTake?.id === take.id) {
+              stopReviewTake().catch(() => {});
+            }
+            await FileSystem.deleteAsync(take.uri, { idempotent: true });
             loadTakes();
           } catch (e) {
             console.error('Delete failed:', e);
@@ -1055,8 +1058,9 @@ export default function KaraokeScreen({ route, navigation }: any) {
   };
 
   const closeTakesModal = async () => {
-    await stopReviewTake();
-    // Reset takes player controls
+    // Fire and forget — don't await stopReviewTake to avoid UI freeze
+    stopReviewTake().catch(() => {});
+    // Reset takes player controls immediately
     clearABLoop();
     setTakeAbLoopStep('idle');
     setIsTakeRepeat(false);
@@ -1070,7 +1074,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
     if (activeSong && isPlayerReady) {
       setTimeout(() => {
         loadAudioTrack();
-      }, 100);
+      }, 300);
     }
   };
 
