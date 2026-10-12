@@ -35,10 +35,21 @@ interface CacheEntry {
   timestamp: number;
 }
 const apiGetCache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 15_000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — safe because WebSocket handles real-time updates
 
 function shouldCachePath(path: string): boolean {
-  if (path.includes('/songs/active') || path.includes('/schedules') || path.includes('/chats') || path.includes('/messages') || path.includes('/notes') || path.includes('/annotations')) {
+  if (
+    path.includes('/songs/active') ||
+    path.includes('/schedules') ||
+    path.includes('/chats') ||
+    path.includes('/messages') ||
+    path.includes('/notes') ||
+    path.includes('/annotations') ||
+    path.includes('/attendance') ||
+    path.includes('/live_song') ||
+    path.includes('/statuses') ||
+    path.includes('/notifications')
+  ) {
     return false;
   }
   return true;
