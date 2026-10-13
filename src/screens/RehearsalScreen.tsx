@@ -118,6 +118,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const hasCachedDataRef = useRef(false);
   const notifiedActiveSongsRef = useRef<Set<string>>(new Set());
   const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const previousZoneIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (activeTrack) {
@@ -329,6 +330,16 @@ export default function RehearsalScreen({ navigation, route }: any) {
     if (isZoneLoading || isProfileLoading || !user) return;
     let active = true;
     hasCachedDataRef.current = false; // Reset so switching zones/programs reads the correct cache
+
+    // Only clear songs when the zone actually changes (not on every navigation back).
+    // This prevents stale songs from a previous zone flashing before the new zone loads,
+    // while still allowing cached data to show instantly when navigating back.
+    const currentZoneId = contextZone?.id || 'none';
+    if (previousZoneIdRef.current !== null && previousZoneIdRef.current !== currentZoneId) {
+      setProgramSongs([]);
+      setCategories([]);
+    }
+    previousZoneIdRef.current = currentZoneId;
 
     // DO NOT call clearCache() here — it wipes the API GET cache on every navigation
     // back to this screen, causing a flash of "No Ongoing Rehearsal" while data reloads.
