@@ -438,6 +438,15 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (update?.id && (update._seq || update.sequence)) {
       lastWsUpdateIdRef.current = String(update.id) + (update._seq || update.sequence);
     }
+    // Lightweight change event (new format) — no lyrics/solfa in payload.
+    // Fetch the full song so lyrics, audio URL, conductor guide stay live as per spec.
+    const isLightweightEvent = update && !update.lyrics && !update.solfas && !update.audioFile && update.updatedAt;
+    if (isLightweightEvent && activeTrack?.id) {
+      api.songs.getById(String(activeTrack.id)).then(res => {
+        if (res?.success && res.data) applySongUpdate(res.data);
+      }).catch(() => {});
+      return;
+    }
     applySongUpdate(eventData);
   }, [applySongUpdate, activeTrack?.id]), Boolean(activeTrack?.id));
 

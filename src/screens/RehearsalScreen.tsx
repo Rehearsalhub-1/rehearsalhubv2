@@ -989,6 +989,47 @@ export default function RehearsalScreen({ navigation, route }: any) {
   useWebSocket('live_song', 'all', handleLiveSongUpdate, true);
   useWebSocket('song', 'all', handleLiveSongUpdate, true);
 
+  // songs_changed: lightweight signal that the song list changed in our zone.
+  // No full song payload — just triggers a fresh fetch from the server/cache.
+  // This replaces the old full-payload 'songs'/'song' broadcasts.
+  //
+  // Thundering herd prevention:
+  // - Random delay 1-5s before refetch so 300 phones don't all hit the server at once
+  // - Event coalescing: multiple events within the delay window collapse into one refetch
+  // - Only triggers when this component is mounted (triggerReload won't fire if unmounted)
+  // - Server sends ETag/304 so if nothing changed the response is 0 bytes
+  //
+  // Cache invalidation (from brief requirement):
+  // - On-device AsyncStorage cache is cleared before refetch so stale disk cache
+  //   is not served after a confirmed change event arrives
+  const pendingSongsChangedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useWebSocket(
+    'songs_changed',
+    'all',
+    (_data: unknown) => {
+      // Cancel any pending refetch — coalesce rapid events into one
+      if (pendingSongsChangedRef.current) {
+        clearTimeout(pendingSongsChangedRef.current);
+      }
+      // Random delay 1000-5000ms to spread 300 clients over a 4s window
+      const delay = 1000 + Math.random() * 4000;
+      pendingSongsChangedRef.current = setTimeout(() => {
+        pendingSongsChangedRef.current = null;
+        // Invalidate the on-device (AsyncStorage) cache for this screen so the
+        // refetch pulls fresh data instead of the stale disk copy
+        const overrideId = selectedProgramOverride?.id || null;
+        const cacheKey = `rehearsal_songs_${overrideId || program?.id || 'default'}_${contextZone?.id || 'none'}`;
+        delete _memCache[cacheKey];
+        // Clear the screenCache (AsyncStorage) entry so refetch hits the server
+        import('../lib/screenCache').then(({ clearCache: clearScreenCache }) => {
+          clearScreenCache(cacheKey).catch(() => {});
+        });
+        triggerReload();
+      }, delay);
+    },
+    true
+  );
+
   useWebSocket(
     'programs',
     'all',

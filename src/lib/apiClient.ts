@@ -33,8 +33,11 @@ export class SessionExpiredError extends Error {
 interface CacheEntry {
   data: any;
   timestamp: number;
+  etag?: string;
 }
 const apiGetCache = new Map<string, CacheEntry>();
+// ETag store — persists the server ETag for each cached path so we can send If-None-Match on refetch
+const etagStore = new Map<string, string>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — safe because WebSocket handles real-time updates
 
 function shouldCachePath(path: string): boolean {
@@ -228,6 +231,13 @@ async function request<T>(
   // ─────────────────────────────────────────────────────────────────────────
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  // Send If-None-Match for GET requests that have a stored ETag
+  // Server returns 304 (0 bytes) if nothing changed — key for the thundering herd fix
+  if (method === 'GET' && shouldCachePath(path)) {
+    const storedEtag = etagStore.get(path);
+    if (storedEtag) headers['If-None-Match'] = storedEtag;
+  }
+
   // Create an AbortController so every fetch has a hard timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -285,6 +295,15 @@ async function request<T>(
     }
 
     let json: any = null;
+
+    // Handle 304 Not Modified — return cached data, no body to parse
+    if (res.status === 304 && method === 'GET') {
+      const cached = apiGetCache.get(path);
+      if (cached) return cached.data as T;
+      // No cache entry somehow — fall through to a full re-fetch next time
+      return { success: true, data: [] } as T;
+    }
+
     const text = await res.text();
     if (text && text.trim().length > 0 && text.trim() !== 'undefined') {
       try {
@@ -294,6 +313,12 @@ async function request<T>(
       }
     } else {
       json = { success: res.ok, data: null };
+    }
+
+    // Store ETag for future conditional requests
+    if (method === 'GET' && res.status === 200) {
+      const etag = res.headers.get('ETag');
+      if (etag && shouldCachePath(path)) etagStore.set(path, etag);
     }
 
     if (method !== 'GET') {

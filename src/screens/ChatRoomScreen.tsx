@@ -736,7 +736,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       if (!cancelled && isMountedRef.current) {
         fetchMessages();
       }
-    }, 3500);
+    }, 30000); // WebSocket handles real-time — this is just a fallback every 30s
 
     return () => {
       cancelled = true;
