@@ -330,7 +330,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
     let active = true;
     hasCachedDataRef.current = false; // Reset so switching zones/programs reads the correct cache
 
-    clearCache();
+    // DO NOT call clearCache() here — it wipes the API GET cache on every navigation
+    // back to this screen, causing a flash of "No Ongoing Rehearsal" while data reloads.
+    // Cache is invalidated correctly by: songs_changed WS event and manual pull-to-refresh.
 
     async function loadData() {
       // Include selectedProgramOverride ID in cache key so switching programs
