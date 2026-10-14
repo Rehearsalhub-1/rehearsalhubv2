@@ -183,6 +183,8 @@ export default function PlayerScreen({ route, navigation }: any) {
   // fields (lyrics, solfa, audioUrl). If the rehearsal screen already passed
   // complete data, skip the fetch entirely to avoid a redundant API call on
   // every song tap.
+  // Per-song offline cache: on successful fetch, saves full data to AsyncStorage
+  // so lyrics/solfas are available next time the user opens this song offline.
   useEffect(() => {
     if (!activeTrack?.id) return;
 
@@ -191,26 +193,66 @@ export default function PlayerScreen({ route, navigation }: any) {
       (activeTrack.solfa || activeTrack.conductorGuide) &&
       activeTrack.audioUrl
     );
-    if (alreadyComplete) return;
+    if (alreadyComplete) {
+      // Still write to per-song cache so offline access works later
+      AsyncStorage.setItem(
+        `song_cache_${activeTrack.id}`,
+        JSON.stringify({ ...activeTrack, _cachedAt: Date.now() })
+      ).catch(() => {});
+      return;
+    }
 
     let active = true;
+
+    // Try per-song offline cache first — works with no network
+    AsyncStorage.getItem(`song_cache_${activeTrack.id}`).then(raw => {
+      if (!active) return;
+      if (raw) {
+        try {
+          const cached = JSON.parse(raw);
+          // Use cache if under 24 hours old
+          if (cached && Date.now() - (cached._cachedAt || 0) < 24 * 60 * 60 * 1000) {
+            const rawAudioUrl = cached.audioFile || cached.audioUrls?.full || cached.audioUrl;
+            const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl;
+            setActiveTrack((prev: any) => ({
+              ...prev,
+              ...cached,
+              audioUrl: songAudioUrl || prev?.audioUrl,
+              lyrics: cached.lyrics !== undefined ? cached.lyrics : prev?.lyrics,
+              solfa: (cached.notation || cached.solfas || cached.solfa) ?? prev?.solfa,
+              conductorGuide: (cached.conductorGuide || cached.guide) ?? prev?.conductorGuide,
+            }));
+          }
+        } catch {}
+      }
+    }).catch(() => {});
+
+    // Always try to fetch fresh from API (updates cache if online)
     api.songs.getById(String(activeTrack.id)).then(res => {
       if (!active) return;
       if (res?.success && res.data) {
         const song = res.data;
         const rawAudioUrl = song.audioFile || song.audioUrls?.full || song.audioUrl;
         const songAudioUrl = rawAudioUrl && rawAudioUrl.includes('cloudinary.com') ? optimizeAudio(rawAudioUrl) : rawAudioUrl;
+        const updatedTrack = {
+          ...song,
+          audioUrl: songAudioUrl || song.audioFile,
+        };
         setActiveTrack((prev: any) => ({
           ...prev,
-          ...song,
-          audioUrl: songAudioUrl || song.audioFile || prev?.audioUrl,
+          ...updatedTrack,
           lyrics: song.lyrics !== undefined ? song.lyrics : prev?.lyrics,
           solfa: (song.notation || song.solfas || song.solfa) !== undefined ? (song.notation || song.solfas || song.solfa) : prev?.solfa,
           conductorGuide: (song.conductorGuide || song.guide) !== undefined ? (song.conductorGuide || song.guide) : prev?.conductorGuide,
         }));
+        // Save fresh data to per-song cache for offline use
+        AsyncStorage.setItem(
+          `song_cache_${activeTrack.id}`,
+          JSON.stringify({ ...song, audioUrl: songAudioUrl, _cachedAt: Date.now() })
+        ).catch(() => {});
       }
     }).catch(err => {
-      console.warn('[PlayerScreen] Failed to hydrate song:', err);
+      console.warn('[PlayerScreen] Failed to hydrate song (offline?):', err);
     });
 
     return () => {
