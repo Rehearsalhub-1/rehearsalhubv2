@@ -2,6 +2,7 @@ import { theme } from '../constants/Colors';
 import { DoodleBackground } from '../components/DoodleBackground';
 import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   StyleSheet,
   View,
@@ -414,7 +415,26 @@ export default function RehearsalScreen({ navigation, route }: any) {
           setProgramSongs([]);
           setIsLoading(true);
 
-          const cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(cacheKey);
+          // Primary: try the exact cache key for this program/zone
+          let cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(cacheKey);
+
+          // Fallback for cold open (no internet, no program param):
+          // Look up the last successfully loaded program key for this zone
+          // and use that cache entry instead of showing nothing.
+          if (!cached?.songs?.length && !program?.id && !selectedProgramOverride?.id) {
+            try {
+              const lastProgramRaw = await AsyncStorage.getItem(
+                `rehearsal_last_program_${contextZone?.id || 'none'}`
+              );
+              if (lastProgramRaw) {
+                const { cacheKey: lastCacheKey } = JSON.parse(lastProgramRaw);
+                if (lastCacheKey && lastCacheKey !== cacheKey) {
+                  cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(lastCacheKey);
+                }
+              }
+            } catch {}
+          }
+
           if (active) {
             if (cached?.songs && cached.songs.length > 0) {
               hasCachedDataRef.current = true;
@@ -813,6 +833,13 @@ export default function RehearsalScreen({ navigation, route }: any) {
         };
 
         writeCache(cacheKey, cachePayload); // slim songs to disk
+
+        // Store the last successfully loaded program ID + zone so cold opens
+        // (no internet, no program param) can find the exact right cache entry.
+        AsyncStorage.setItem(
+          `rehearsal_last_program_${contextZone?.id || 'none'}`,
+          JSON.stringify({ programId: selectedRehearsal.id, cacheKey })
+        ).catch(() => {});
 
         setSelectedCategory((prevSelected) => {
           if (prevSelected && uniqueCategories.includes(prevSelected)) {
