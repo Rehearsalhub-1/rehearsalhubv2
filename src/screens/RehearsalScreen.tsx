@@ -330,13 +330,16 @@ export default function RehearsalScreen({ navigation, route }: any) {
   useEffect(() => {
     if (isZoneLoading || isProfileLoading || !user) return;
     let active = true;
-    hasCachedDataRef.current = false; // Reset so switching zones/programs reads the correct cache
 
-    // Only clear songs when the zone actually changes (not on every navigation back).
-    // This prevents stale songs from a previous zone flashing before the new zone loads,
-    // while still allowing cached data to show instantly when navigating back.
+    // Only reset the cache ref when zone or program actually changes.
+    // Resetting on every effect run (navigation back) breaks the guard that
+    // prevents "No Ongoing Rehearsal" from showing when the API is slow.
     const currentZoneId = contextZone?.id || 'none';
-    if (previousZoneIdRef.current !== null && previousZoneIdRef.current !== currentZoneId) {
+    const currentProgramId = selectedProgramOverride?.id || program?.id || 'default';
+    const zoneChanged = previousZoneIdRef.current !== null && previousZoneIdRef.current !== currentZoneId;
+
+    if (zoneChanged) {
+      hasCachedDataRef.current = false;
       setProgramSongs([]);
       setCategories([]);
     }
@@ -560,6 +563,12 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
         if (!selectedRehearsal) {
           if (!active) return;
+          // If we already have cached songs showing, don't wipe them with "No Ongoing".
+          // This happens when the programs API is slow or returns empty on navigation back.
+          if (hasCachedDataRef.current) {
+            setIsLoading(false);
+            return;
+          }
           const targetCategory = (route?.params?.categoryFilter || 'ongoing').toLowerCase().trim();
           const emptyTitle = isSubgroupMode
             ? 'No Church Rehearsals'
