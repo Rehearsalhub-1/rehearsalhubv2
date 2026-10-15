@@ -151,6 +151,18 @@ export async function connect() {
           }
         });
       });
+
+      // On reconnect, fetch the current live song state once.
+      // This recovers the "live now" display if WS was down for several minutes
+      // (e.g. venue congestion) and the live_song event was missed.
+      // Cost: one tiny request per phone per reconnect — not continuous.
+      if (reconnectDelay > 1000) {
+        // Only do recovery fetch if this is a REconnect (not the first connect)
+        try {
+          const { useLiveSongStore } = require('../stores/liveSongStore');
+          useLiveSongStore.getState().fetchActiveSongs();
+        } catch {}
+      }
     };
 
     ws.onmessage = (e) => {
