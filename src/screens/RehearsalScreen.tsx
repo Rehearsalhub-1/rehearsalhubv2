@@ -120,6 +120,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
   const notifiedActiveSongsRef = useRef<Set<string>>(new Set());
   const shimmerAnim = useRef(new Animated.Value(0)).current;
   const previousZoneIdRef = useRef<string | null>(null);
+  const previousModeKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (activeTrack) {
@@ -331,18 +332,28 @@ export default function RehearsalScreen({ navigation, route }: any) {
     if (isZoneLoading || isProfileLoading || !user) return;
     let active = true;
 
-    // Only reset the cache ref when zone or program actually changes.
-    // Resetting on every effect run (navigation back) breaks the guard that
-    // prevents "No Ongoing Rehearsal" from showing when the API is slow.
+    const isSubgroupMode = route?.params?.mode === 'subgroup' || route?.params?.scope === 'subgroup' || Boolean(route?.params?.subgroupId);
+    const targetSubgroupId = route?.params?.subgroupId || currentChurch?.id || null;
     const currentZoneId = contextZone?.id || 'none';
     const currentProgramId = selectedProgramOverride?.id || program?.id || 'default';
+    const currentModeKey = isSubgroupMode
+      ? `subgroup_${targetSubgroupId || 'default'}`
+      : `zone_${currentZoneId}_${currentProgramId}`;
+
+    const modeChanged = previousModeKeyRef.current !== null && previousModeKeyRef.current !== currentModeKey;
     const zoneChanged = previousZoneIdRef.current !== null && previousZoneIdRef.current !== currentZoneId;
 
-    if (zoneChanged) {
+    if (modeChanged || zoneChanged || route?.params?.resetState) {
       hasCachedDataRef.current = false;
       setProgramSongs([]);
       setCategories([]);
+      setSelectedCategory(null);
+      setIsLoading(true);
+      if (modeChanged) {
+        setSelectedProgramOverride(null);
+      }
     }
+    previousModeKeyRef.current = currentModeKey;
     previousZoneIdRef.current = currentZoneId;
 
     // DO NOT call clearCache() here — it wipes the API GET cache on every navigation
@@ -350,10 +361,12 @@ export default function RehearsalScreen({ navigation, route }: any) {
     // Cache is invalidated correctly by: songs_changed WS event and manual pull-to-refresh.
 
     async function loadData() {
-      // Include selectedProgramOverride ID in cache key so switching programs
-      // never accidentally loads a different program's stale songs.
+      // Include selectedProgramOverride ID and subgroup in cache key so switching modes
+      // never accidentally loads a different mode/program's stale songs.
       const overrideId = selectedProgramOverride?.id || null;
-      const cacheKey = `rehearsal_songs_${overrideId || program?.id || 'default'}_${contextZone?.id || 'none'}`;
+      const cacheKey = isSubgroupMode
+        ? `rehearsal_songs_subgroup_${targetSubgroupId || 'default'}_${currentZoneId}`
+        : `rehearsal_songs_${overrideId || program?.id || 'default'}_${currentZoneId}`;
 
       const setupCategoriesFromSongs = (songs: any[], categoryOrder: string[] = []) => {
         const allCategoriesList: string[] = [];
@@ -481,8 +494,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
           selectedRehearsal = program;
         } else if (isSubgroupMode) {
           try {
+            const targetSgId = route?.params?.subgroupId || currentChurch?.id;
             const [subgroupRehearsalsRes, userSubgroupsRes] = await Promise.all([
-              api.programs.getMemberRehearsals().catch(() => null),
+              api.programs.getMemberRehearsals(targetSgId || undefined).catch(() => null),
               api.subgroups.mine().catch(() => null),
             ]);
 
@@ -492,25 +506,38 @@ export default function RehearsalScreen({ navigation, route }: any) {
             const subgroupPages = (subgroupRehearsalsRes?.data || []).map((p: any) => ({
               ...p,
               scope: 'subgroup',
-              subGroupId: p.subGroupId || p.sub_group_id,
+              subGroupId: p.subGroupId || p.sub_group_id || p.groupId,
               name: p.name || p.title || 'Church Rehearsal',
-              location: (p.subGroupId && subgroupMap.get(p.subGroupId)) || p.location || 'Your Church Choir',
+              location: (p.subGroupId && subgroupMap.get(p.subGroupId)) || p.location || currentChurch?.name || 'Your Church Choir',
             }));
 
             if (active && subgroupPages.length > 0) {
               setAvailablePrograms(subgroupPages);
             }
 
-            const targetSgId = route?.params?.subgroupId || currentChurch?.id;
             if (targetSgId) {
-              selectedRehearsal = subgroupPages.find((p: any) => (p.subGroupId === targetSgId || p.sub_group_id === targetSgId) && p.category === 'ongoing')
-                || subgroupPages.find((p: any) => p.subGroupId === targetSgId || p.sub_group_id === targetSgId)
+              selectedRehearsal = subgroupPages.find((p: any) => (p.subGroupId === targetSgId || p.sub_group_id === targetSgId || p.groupId === targetSgId) && p.category === 'ongoing')
+                || subgroupPages.find((p: any) => p.subGroupId === targetSgId || p.sub_group_id === targetSgId || p.groupId === targetSgId)
                 || subgroupPages.find((p: any) => p.category === 'ongoing')
                 || subgroupPages[0]
                 || null;
             } else {
               const ongoing = subgroupPages.find((p: any) => p.category === 'ongoing');
               selectedRehearsal = ongoing || subgroupPages[0] || null;
+            }
+
+            // Fallback: if church has no program entry yet, create a container for targetSgId so church songs load directly
+            if (!selectedRehearsal && targetSgId) {
+              const churchName = subgroupMap.get(targetSgId) || currentChurch?.name || 'Church Rehearsal';
+              selectedRehearsal = {
+                id: `church-${targetSgId}`,
+                scope: 'subgroup',
+                subGroupId: targetSgId,
+                name: churchName,
+                title: churchName,
+                location: churchName,
+                category: 'ongoing',
+              };
             }
           } catch (subgroupErr) {
             console.error('[RehearsalScreen] Subgroup rehearsals fetch error:', subgroupErr);
@@ -875,7 +902,22 @@ export default function RehearsalScreen({ navigation, route }: any) {
     return () => {
       active = false;
     };
-  }, [program, selectedProgramOverride, reloadKey, contextZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
+  }, [
+    program,
+    selectedProgramOverride,
+    reloadKey,
+    contextZone?.id,
+    zoneVersion,
+    isZoneLoading,
+    isProfileLoading,
+    user?.uid,
+    route?.params?.mode,
+    route?.params?.scope,
+    route?.params?.subgroupId,
+    route?.params?.categoryFilter,
+    route?.params?.resetState,
+    currentChurch?.id,
+  ]);
 
   const lastHandledEventRef = useRef<string | null>(null);
 
@@ -1055,25 +1097,89 @@ export default function RehearsalScreen({ navigation, route }: any) {
   useWebSocket(
     'songs_changed',
     'all',
-    (_data: unknown) => {
-      // Cancel any pending refetch — coalesce rapid events into one
+    (data: unknown) => {
+      const update = (data as any)?.data || data;
+      const updateId = String(update?.id || update?._id || '');
+
+      // 1. If this event is for a specific song, update it in-place quietly (ZERO screen reload/flicker)
+      if (updateId) {
+        handleLiveSongUpdate(update);
+        return;
+      }
+
+      // 2. If it is an untargeted change event, quietly sync in the background
+      // WITHOUT clearing caches, WITHOUT setting isLoading, WITHOUT resetting scroll or categories
       if (pendingSongsChangedRef.current) {
         clearTimeout(pendingSongsChangedRef.current);
       }
-      // Random delay 1000-5000ms to spread 300 clients over a 4s window
-      const delay = 1000 + Math.random() * 4000;
-      pendingSongsChangedRef.current = setTimeout(() => {
+      const delay = 1500 + Math.random() * 2500;
+      pendingSongsChangedRef.current = setTimeout(async () => {
         pendingSongsChangedRef.current = null;
-        // Invalidate the on-device (AsyncStorage) cache for this screen so the
-        // refetch pulls fresh data instead of the stale disk copy
-        const overrideId = selectedProgramOverride?.id || null;
-        const cacheKey = `rehearsal_songs_${overrideId || program?.id || 'default'}_${contextZone?.id || 'none'}`;
-        delete _memCache[cacheKey];
-        // Clear the screenCache (AsyncStorage) entry so refetch hits the server
-        import('../lib/screenCache').then(({ clearCache: clearScreenCache }) => {
-          clearScreenCache(cacheKey).catch(() => {});
-        });
-        triggerReload();
+        try {
+          const effectiveProgramId = selectedProgramOverride?.id || activeProgramId || program?.id;
+          if (!effectiveProgramId) return;
+          const resolvedZoneId = activeZone?.id || contextZone?.id || 'zone-001';
+          const effectiveZone = resolvedZoneId ? `&zoneId=${encodeURIComponent(resolvedZoneId)}` : '';
+          const res = await api.songs.getEndpoint(`/songs/praise-night?programId=${encodeURIComponent(effectiveProgramId)}${effectiveZone}`).catch(() => null);
+          if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+            setProgramSongs(prev => {
+              const prevMap = new Map(prev.map((s: any) => [String(s.id), s]));
+              const updated = res.data.map((freshSong: any, idx: number) => {
+                const existing = prevMap.get(String(freshSong.id));
+                if (existing) {
+                  return { ...existing, ...freshSong };
+                }
+                const songAudioUrl = resolveSongAudioUrl(freshSong);
+                const resolvedAudioUrls = resolveSongAudioUrls(freshSong);
+                const isLiveNow = isLiveSong(freshSong);
+                return {
+                  id: freshSong.id || `song-${idx}`,
+                  title: freshSong.title || 'Untitled Song',
+                  subtitle: freshSong.leadSinger || freshSong.writer || 'Loveworld Singers',
+                  program: programTitle || 'Ongoing Rehearsal',
+                  leadSinger: freshSong.leadSinger || 'Unknown',
+                  writer: freshSong.writer || 'Unknown',
+                  conductor: freshSong.conductor || '',
+                  key: freshSong.key || '',
+                  tempo: freshSong.tempo || '',
+                  category: freshSong.category || '',
+                  categories: Array.isArray(freshSong.categories) ? freshSong.categories : (freshSong.category ? [freshSong.category] : []),
+                  audioUrl: songAudioUrl,
+                  lyrics: freshSong.lyrics || '',
+                  solfa: freshSong.notation || freshSong.solfas || freshSong.solfa || '',
+                  audioUrls: resolvedAudioUrls,
+                  status: isLiveNow ? 'live' : (isSongHeard(freshSong) ? 'heard' : 'unheard'),
+                  isHeard: isSongHeard(freshSong),
+                  heard: isSongHeard(freshSong),
+                  isLive: isLiveNow,
+                  isActive: isLiveNow,
+                  rehearsalCount: getRehearsalCount(freshSong),
+                  conductorGuide: freshSong.solfas || freshSong.conductorGuide || freshSong.guide || '',
+                  comments: freshSong.comments || freshSong.notes || '',
+                  notes: freshSong.notes || '',
+                  coordinatorComment: freshSong.coordinatorComment || '',
+                  leadKeyboardist: freshSong.leadKeyboardist || '',
+                  drummer: freshSong.drummer || '',
+                  leadGuitarist: freshSong.leadGuitarist || '',
+                  createdAt: freshSong.createdAt || new Date().toISOString(),
+                  imageUrl: (freshSong.imageUrl && !freshSong.imageUrl.includes('/banner/')) ? freshSong.imageUrl : '',
+                  image: getTrackImage(freshSong),
+                  zoneId: resolvedZoneId,
+                  collectionName: 'praise_night_songs'
+                };
+              });
+
+              const cacheKey = `rehearsal_songs_${effectiveProgramId}_${resolvedZoneId}`;
+              if (_memCache[cacheKey]) {
+                _memCache[cacheKey] = { ..._memCache[cacheKey], songs: updated };
+                writeCache(cacheKey, _memCache[cacheKey]);
+              }
+              return updated;
+            });
+          }
+        } catch (err) {
+          console.warn('[RehearsalScreen] Quiet sync error:', err);
+        }
       }, delay);
     },
     true

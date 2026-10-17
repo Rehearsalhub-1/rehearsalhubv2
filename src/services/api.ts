@@ -105,8 +105,8 @@ export const api = {
       apiClient.get<any>(`/programs?${includeChurch ? 'includeChurch=true&' : ''}${zoneId ? `zoneId=${encodeURIComponent(zoneId)}` : ''}`),
     getMasterPrograms: () =>
       apiClient.get<any>('/programs?category=ministered'),
-    getMemberRehearsals: () =>
-      apiClient.get<{ success: boolean; data: any[] }>('/subgroups/member-rehearsals'),
+    getMemberRehearsals: (subgroupId?: string) =>
+      apiClient.get<{ success: boolean; data: any[] }>(subgroupId ? `/subgroups/praise-nights?subGroupId=${encodeURIComponent(subgroupId)}` : '/subgroups/praise-nights'),
   },
 
   // ── Categories ───────────────────────────────────────────────────────────

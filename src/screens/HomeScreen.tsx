@@ -450,7 +450,7 @@ export default function HomeScreen({ navigation }: any) {
               style={styles.smallVideoWrapper}
               onPress={() => {
                 if (card.route === 'Rehearsal') {
-                  navigation.navigate('Rehearsal', { resetState: true, program: undefined });
+                  navigation.navigate('Rehearsal', { resetState: true, program: undefined, mode: 'zone', scope: 'zone', subgroupId: undefined });
                 } else {
                   navigation.navigate(card.route, { card });
                 }
@@ -586,11 +586,11 @@ export default function HomeScreen({ navigation }: any) {
                 onPress={() => {
                   closeSidebar();
                   if (item.id === 'ongoing') {
-                    navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'ongoing' });
+                    navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'ongoing', mode: 'zone', scope: 'zone', subgroupId: undefined });
                   } else if (item.id === 'schedule') {
                     navigation.navigate('SongsSchedule');
                   } else if (item.id === 'pre-rehearsal') {
-                    navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'pre-rehearsal' });
+                    navigation.navigate('Rehearsal', { resetState: true, program: undefined, categoryFilter: 'pre-rehearsal', mode: 'zone', scope: 'zone', subgroupId: undefined });
                   } else if (item.id === 'archives') {
                     navigation.navigate('Archive');
                   } else if (item.id === 'studio') {

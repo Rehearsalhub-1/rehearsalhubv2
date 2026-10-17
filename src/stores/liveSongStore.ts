@@ -116,37 +116,38 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   handleSongUpdate: (rawUpdate: any) => {
     const update = (rawUpdate as any)?.data || rawUpdate;
     if (!update || typeof update !== 'object') return;
-    const songId = update.id;
+    const songId = String(update.id || update._id || '');
     if (!songId) return;
 
-    // Check if song is deleted or removed
+    // 1. Check if song is explicitly deleted or removed
     if (update.deleted || update.isDeleted || update._action === 'removed') {
       get().removeSong(songId);
       return;
     }
 
-    const statusStr = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
-    const isExplicitTurnOff =
-      statusStr === 'inactive' ||
-      statusStr === 'ended' ||
-      statusStr === 'off' ||
-      statusStr === 'stopped' ||
-      update._action === 'deactivate';
+    const currentLiveSongs = get().activeSongs;
+    const existingIndex = currentLiveSongs.findIndex(s => String(s.id) === songId);
 
-    // If explicitly inactive / off / ended
-    if (isExplicitTurnOff) {
-      get().removeSong(songId);
+    // 2. Check if this update explicitly turns off live status or sets status to non-live
+    const statusStr = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
+    const hasLiveDisabledFlag =
+      update.isActive === false ||
+      update.is_active === false ||
+      update.isLive === false ||
+      update.live === false;
+    const isNonLiveStatus = statusStr !== '' && statusStr !== 'live';
+
+    if (isSongExplicitlyOff(update) || hasLiveDisabledFlag || isNonLiveStatus) {
+      if (existingIndex >= 0) {
+        get().removeSong(songId);
+      }
       return;
     }
 
-    const existingIndex = get().activeSongs.findIndex(s => String(s.id) === String(songId));
-
-    // If song is currently live OR already in activeSongs (e.g. lyrics/details edited while live)
-    if (isLiveSong(update) || existingIndex >= 0) {
+    // 3. If update is live (status === 'live' or isLive / isActive true)
+    if (isLiveSong(update)) {
       set((state) => {
-        const idx = state.activeSongs.findIndex(
-          (s) => String(s.id) === String(songId)
-        );
+        const idx = state.activeSongs.findIndex((s) => String(s.id) === songId);
         const resolvedAudioUrl = resolveSongAudioUrl(update);
         const resolvedAudioUrls = resolveSongAudioUrls(update);
 
@@ -167,7 +168,7 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
           return { activeSongs: next, hasInitialFetched: true };
         } else {
           const newSong: LiveSong = {
-            id: String(update.id),
+            id: songId,
             title: update.title || 'Live Rehearsal Song',
             subtitle: update.leadSinger || update.writer || 'Loveworld Singers',
             leadSinger: update.leadSinger || 'Loveworld Singers',
@@ -182,34 +183,20 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
             ...update,
           };
 
-          const cleaned = state.activeSongs.filter((s) => {
-            if (String(s.id) === String(songId)) return false;
-            if (isSongExplicitlyOff(s)) return false;
-            return true;
-          });
-
+          const cleaned = state.activeSongs.filter((s) => String(s.id) !== songId);
           return { activeSongs: [newSong, ...cleaned], hasInitialFetched: true };
         }
       });
-    } else {
-      // Song is NOT live (e.g. isActive: false or explicit off status)
-      const status = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
-      if (['inactive', 'off', 'ended', 'stopped'].includes(status) || update.isActive === false || update.isLive === false) {
-        get().removeSong(songId);
-        return;
-      }
+      return;
+    }
 
-      // Otherwise if it is a harmless metadata patch (e.g. audioUrl, solfa) without status change, update in-place
+    // 4. If song is already in activeSongs and this is a harmless metadata update (e.g. lyrics/solfa) without status change
+    if (existingIndex >= 0) {
       set((state) => {
-        const existingIndex = state.activeSongs.findIndex(
-          (s) => String(s.id) === String(songId)
-        );
-        if (existingIndex >= 0) {
-          const next = [...state.activeSongs];
-          next[existingIndex] = {
-            ...next[existingIndex],
-            ...update,
-          };
+        const next = [...state.activeSongs];
+        const idx = next.findIndex((s) => String(s.id) === songId);
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], ...update };
           return { activeSongs: next };
         }
         return state;
