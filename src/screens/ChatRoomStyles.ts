@@ -1,8 +1,7 @@
 import { StyleSheet, Dimensions, Platform } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-export const getStyles = (theme: any, insets?: any) => {
+export const getStyles = (theme: any, insets?: any, screenWidth: number = Dimensions.get('window').width) => {
+  const SCREEN_WIDTH = screenWidth;
   const T = theme.colors;
   return StyleSheet.create({
     container: { flex:1 },
@@ -29,7 +28,7 @@ export const getStyles = (theme: any, insets?: any) => {
     msgRow: { flexDirection:'row', marginBottom:3, paddingHorizontal:2 },
     msgRowMe: { justifyContent:'flex-end' },
     msgRowThem: { justifyContent:'flex-start' },
-    bubble: { maxWidth:SCREEN_WIDTH*0.82, borderRadius:16, paddingHorizontal:10, paddingVertical:7, overflow:'hidden' },
+    bubble: { maxWidth:Math.min(SCREEN_WIDTH*0.82, 540), borderRadius:16, paddingHorizontal:10, paddingVertical:7, overflow:'hidden' },
     senderName: { fontSize:12, fontWeight:'700', marginBottom:3 },
     quoteBox: { borderLeftWidth:3, borderLeftColor:'rgba(192,132,252,0.7)', paddingLeft:8, paddingVertical:4, marginBottom:6, borderRadius:4, backgroundColor:T.cardBackgroundLight },
     quoteName: { fontSize:12, fontWeight:'700', marginBottom:2 },
@@ -38,10 +37,10 @@ export const getStyles = (theme: any, insets?: any) => {
     tsAbsolute: { position:'absolute', bottom:-4, right:-6, flexDirection:'row', alignItems:'center' },
     tsOverlay: { position:'absolute', bottom:6, right:6, flexDirection:'row', alignItems:'center', backgroundColor:T.cardBackground, paddingHorizontal:5, paddingVertical:2, borderRadius:8 },
     tsText: { fontSize:11 },  deletedRow: { flexDirection:'row', alignItems:'center', opacity:0.75 },
-    viewOnceBadge: { width:SCREEN_WIDTH*0.55, height:80, borderRadius:12, backgroundColor:'rgba(192,132,252,0.2)', borderWidth:1, borderColor:'rgba(192,132,252,0.4)', justifyContent:'center', alignItems:'center', gap:6 },
+    viewOnceBadge: { width:Math.min(SCREEN_WIDTH*0.55, 300), height:80, borderRadius:12, backgroundColor:'rgba(192,132,252,0.2)', borderWidth:1, borderColor:'rgba(192,132,252,0.4)', justifyContent:'center', alignItems:'center', gap:6 },
     viewOnceLabel: { color:theme.colors.textPrimary, fontSize:13, fontWeight:'600' },
-    viewOnceViewed: { flexDirection:'row', alignItems:'center', paddingHorizontal:8, paddingVertical:10, opacity:0.6 },
-    voiceContainer: { flexDirection:'row', alignItems:'center', paddingVertical:6, paddingHorizontal:2, width: SCREEN_WIDTH * 0.68, gap:8 },
+    viewOnceViewed: { flexDirection:'row', alignItems:'center', paddingHorizontal:8, paddingVertical:10, opacity:0.6 },
+    voiceContainer: { flexDirection:'row', alignItems:'center', paddingVertical:6, paddingHorizontal:2, width: Math.min(SCREEN_WIDTH * 0.68, 380), gap:8 },
     voicePlayBtn: { width:34, height:34, borderRadius:17, backgroundColor:T.cardBackgroundLight, justifyContent:'center', alignItems:'center' },
     voiceWaveArea: { flex:1 },
     voiceWaveTouch: { height:32, justifyContent:'center' },
@@ -94,12 +93,11 @@ export const getStyles = (theme: any, insets?: any) => {
     reactionRow: {
       flexDirection: 'row', justifyContent: 'space-between',
       paddingHorizontal: 0, paddingVertical: 4, marginBottom: 4,
-    },
-    reactionBtn: {
-      alignItems: 'center', justifyContent: 'center',
-      width: Math.floor((SCREEN_WIDTH - 40) / 8) - 2,
-      height: Math.floor((SCREEN_WIDTH - 40) / 8) - 2,
-      borderRadius: Math.floor((SCREEN_WIDTH - 40) / 16),
+    },    reactionBtn: {
+      alignItems: 'center', justifyContent: 'center',
+      width: Math.floor((Math.min(SCREEN_WIDTH, 480) - 40) / 8) - 2,
+      height: Math.floor((Math.min(SCREEN_WIDTH, 480) - 40) / 8) - 2,
+      borderRadius: Math.floor((Math.min(SCREEN_WIDTH, 480) - 40) / 16),
       backgroundColor: theme.colors.cardBackground,
     },
     reactionBtnActive: {
@@ -107,7 +105,7 @@ export const getStyles = (theme: any, insets?: any) => {
       borderWidth: 2,
       borderColor: theme.colors.accent,
     },
-    reactionEmoji: { fontSize: Math.min(26, Math.floor((SCREEN_WIDTH - 40) / 8) * 0.52) },
+    reactionEmoji: { fontSize: Math.min(26, Math.floor((Math.min(SCREEN_WIDTH, 480) - 40) / 8) * 0.52) },
     reactionDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: theme.colors.accent, marginTop: 2 },
     actionItem: {
       flexDirection: 'row', alignItems: 'center',
@@ -120,12 +118,12 @@ export const getStyles = (theme: any, insets?: any) => {
     },
     actionText: { fontSize: 16, fontWeight: '500', color: theme.colors.textPrimary },
     imgViewerBtn: { padding:8, backgroundColor:'rgba(0,0,0,0.5)', borderRadius:20 },
-    attachMenu: { width:SCREEN_WIDTH*0.9, borderRadius:18, padding:24, marginBottom:90, marginTop:'auto', alignSelf:'center' },
+    attachMenu: { width:Math.min(SCREEN_WIDTH*0.9, 440), borderRadius:18, padding:24, marginBottom:90, marginTop:'auto', alignSelf:'center' },
     attachRow: { flexDirection:'row', justifyContent:'space-around', flexWrap:'wrap', gap:16 },
     attachBtn: { alignItems:'center', width:68 },
     attachIcon: { width:58, height:58, borderRadius:29, justifyContent:'center', alignItems:'center', marginBottom:7 },
-    attachLabel: { color: theme.colors.textPrimary, fontSize:12 },
-    songShareCard: { width: SCREEN_WIDTH * 0.72, borderRadius: 12, overflow: 'hidden', backgroundColor: T.cardBackgroundLight, borderWidth: 1, borderColor: T.bottomTabBorder },
+    attachLabel: { color: theme.colors.textPrimary, fontSize:12 },
+    songShareCard: { width: Math.min(SCREEN_WIDTH * 0.72, 360), borderRadius: 12, overflow: 'hidden', backgroundColor: T.cardBackgroundLight, borderWidth: 1, borderColor: T.bottomTabBorder },
     songShareHeader: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingTop: 8, paddingBottom: 4 },
     songShareLabel: { fontSize: 10, fontWeight: '700', color: T.accent, textTransform: 'uppercase', letterSpacing: 0.8 },
     songShareBody: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 10, paddingBottom: 8, gap: 10 },
@@ -138,8 +136,8 @@ export const getStyles = (theme: any, insets?: any) => {
     songSharePlayRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.bottomTabBorder },
     songSharePlayText: { fontSize: 12, color: T.textSecondary, flex: 1 },
     songShareNote: { paddingHorizontal: 10, paddingBottom: 8, paddingTop: 2 },
-    songShareNoteText: { fontSize: 13, color: T.textSecondary, fontStyle: 'italic', lineHeight: 18 },
-    docCard: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, width: SCREEN_WIDTH * 0.65 },
+    songShareNoteText: { fontSize: 13, color: T.textSecondary, fontStyle: 'italic', lineHeight: 18 },
+    docCard: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, width: Math.min(SCREEN_WIDTH * 0.65, 340) },
     docIconWrap: { width: 40, height: 40, borderRadius: 8, backgroundColor: 'rgba(192,132,252,0.15)', justifyContent: 'center', alignItems: 'center' },
     forwardedLabel: {
       flexDirection: 'row',

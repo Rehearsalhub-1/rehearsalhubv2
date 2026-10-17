@@ -7,7 +7,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
   ScrollView,
   FlatList,
 } from 'react-native';
@@ -19,8 +19,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useUserStore } from '@/hooks/useUser';
 import { SyncAvatar } from '@/components/SyncAvatar';
 import { useTheme } from '../context/ThemeContext';
-
-const { width: W, height: H } = Dimensions.get('window');
 
 const ACCENT = '#a855f7';
 const BG     = '#0B0B10';
@@ -106,12 +104,9 @@ const CATEGORIES = ['All', 'Praise Night', 'Rehearsal', 'Specials'];
 
 // ─── Continue Watching card (portrait 2:3) ────────────────────────────────────
 
-const CW_W = W * 0.30;
-const CW_H = CW_W * 1.48;
-
-const ContinueCard = ({ item }: { item: MediaItem }) => (
-  <TouchableOpacity activeOpacity={0.85} style={{ width: CW_W, marginRight: 8 }}>
-    <View style={{ width: CW_W, height: CW_H, borderRadius: 6, overflow: 'hidden', backgroundColor: BG2 }}>
+const ContinueCard = ({ item, cardWidth = 120, cardHeight = 178 }: { item: MediaItem; cardWidth?: number; cardHeight?: number }) => (
+  <TouchableOpacity activeOpacity={0.85} style={{ width: cardWidth, marginRight: 8 }}>
+    <View style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', backgroundColor: BG2 }}>
       <Image source={item.thumbnail} style={StyleSheet.absoluteFill} contentFit="cover" />
       {/* Play circle */}
       <View style={StyleSheet.absoluteFill as any} >
@@ -152,12 +147,9 @@ const ContinueCard = ({ item }: { item: MediaItem }) => (
 
 // ─── Section row card (16:9 widescreen) ──────────────────────────────────────
 
-const SC_W = W * 0.40;
-const SC_H = SC_W * (9 / 16);
-
-const SectionCard = ({ item }: { item: MediaItem }) => (
-  <TouchableOpacity activeOpacity={0.85} style={{ width: SC_W, marginRight: 8 }}>
-    <View style={{ width: SC_W, height: SC_H, borderRadius: 6, overflow: 'hidden', backgroundColor: BG2 }}>
+const SectionCard = ({ item, cardWidth = 160, cardHeight = 90 }: { item: MediaItem; cardWidth?: number; cardHeight?: number }) => (
+  <TouchableOpacity activeOpacity={0.85} style={{ width: cardWidth, marginRight: 8 }}>
+    <View style={{ width: cardWidth, height: cardHeight, borderRadius: 6, overflow: 'hidden', backgroundColor: BG2 }}>
       <Image source={item.thumbnail} style={StyleSheet.absoluteFill} contentFit="cover" />
       {item.isNew && (
         <View style={{ position: 'absolute', top: 4, left: 4, backgroundColor: ACCENT, borderRadius: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
@@ -180,7 +172,7 @@ const SectionCard = ({ item }: { item: MediaItem }) => (
   </TouchableOpacity>
 );
 
-const SectionRow = ({ title, data }: { title: string; data: MediaItem[] }) => {
+const SectionRow = ({ title, data, cardWidth, cardHeight }: { title: string; data: MediaItem[]; cardWidth?: number; cardHeight?: number }) => {
   if (!data.length) return null;
   return (
     <View style={{ marginBottom: 24 }}>
@@ -190,7 +182,7 @@ const SectionRow = ({ title, data }: { title: string; data: MediaItem[] }) => {
       <FlatList
         data={data}
         keyExtractor={(i) => i.id}
-        renderItem={({ item }) => <SectionCard item={item} />}
+        renderItem={({ item }) => <SectionCard item={item} cardWidth={cardWidth} cardHeight={cardHeight} />}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: 16 }}
@@ -201,10 +193,14 @@ const SectionRow = ({ title, data }: { title: string; data: MediaItem[] }) => {
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
-const HERO_H = Math.max(H * 0.56, 360);
-
 export default function MediaScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const cwW = Math.max(110, Math.min(windowWidth * 0.30, 160));
+  const cwH = Math.round(cwW * 1.48);
+  const scW = Math.max(150, Math.min(windowWidth * 0.40, 240));
+  const scH = Math.round(scW * (9 / 16));
+  const heroH = Math.min(Math.max(windowHeight * 0.52, 340), 520);
   const user = useUserStore((s) => s.user);
   const profile = useUserStore((s) => s.profile);
   const userName = profile?.firstName?.trim() || 'You';
@@ -257,7 +253,7 @@ export default function MediaScreen({ navigation }: any) {
         contentContainerStyle={{ paddingBottom: 40 }}
       >
         {/* ── HERO ─────────────────────────────────────────────────────── */}
-        <View style={{ width: '100%', height: HERO_H }}>
+        <View style={{ width: '100%', height: heroH }}>
           <Image
             source={HERO.thumbnail}
             style={StyleSheet.absoluteFill}
@@ -346,7 +342,7 @@ export default function MediaScreen({ navigation }: any) {
             <FlatList
               data={CONTINUE_WATCHING}
               keyExtractor={(i) => i.id}
-              renderItem={({ item }) => <ContinueCard item={item} />}
+              renderItem={({ item }) => <ContinueCard item={item} cardWidth={cwW} cardHeight={cwH} />}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingHorizontal: 16 }}
@@ -355,9 +351,9 @@ export default function MediaScreen({ navigation }: any) {
         )}
 
         {/* ── Section rows ─────────────────────────────────────────────── */}
-        <SectionRow title="Praise Night Highlights" data={praiseData} />
-        <SectionRow title="Choir Rehearsals & Training" data={rehearsalData} />
-        <SectionRow title="Specials & Deep Worship" data={specialsData} />
+        <SectionRow title="Praise Night Highlights" data={praiseData} cardWidth={scW} cardHeight={scH} />
+        <SectionRow title="Choir Rehearsals & Training" data={rehearsalData} cardWidth={scW} cardHeight={scH} />
+        <SectionRow title="Specials & Deep Worship" data={specialsData} cardWidth={scW} cardHeight={scH} />
       </ScrollView>
     </View>
   );

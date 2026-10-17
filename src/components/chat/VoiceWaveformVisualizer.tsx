@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, Dimensions } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { SafeTrackPlayer as TrackPlayer } from '../../lib/safeNativeModules';
@@ -66,6 +66,7 @@ export const VoiceWaveformVisualizer = React.memo(({
 }: VoiceWaveformVisualizerProps) => {
   const isActive = playingId === msgId && isAudioPlaying;
   const [progressData, setProgressData] = useState({ position: 0, duration: 0 });
+  const layoutWidthRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isActive) {
@@ -104,8 +105,12 @@ export const VoiceWaveformVisualizer = React.memo(({
       <TouchableOpacity
         activeOpacity={1}
         style={styles.voiceWaveTouch}
+        onLayout={(e) => {
+          layoutWidthRef.current = e.nativeEvent.layout.width;
+        }}
         onPress={(e) => {
-          const ratio = e.nativeEvent.locationX / (Dimensions.get('window').width * 0.38);
+          const w = layoutWidthRef.current || (Dimensions.get('window').width * 0.38);
+          const ratio = e.nativeEvent.locationX / w;
           onSeek(Math.max(0, Math.min(1, ratio)));
         }}
       >

@@ -7,7 +7,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   LayoutAnimation,
   Platform,
   UIManager } from
@@ -27,10 +27,9 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 export default function HistoryScreen({ route, navigation }: any) {
   const { theme } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e', initialTab = 'audio' } = route.params || {};
@@ -261,7 +260,7 @@ export default function HistoryScreen({ route, navigation }: any) {
 
     return (
       <RenderHtml
-        contentWidth={SCREEN_WIDTH - 88}
+        contentWidth={windowWidth - 88}
         source={{ html: formattedHtml || '<p>No content available</p>' }}
         baseStyle={htmlBaseStyle}
         tagsStyles={{

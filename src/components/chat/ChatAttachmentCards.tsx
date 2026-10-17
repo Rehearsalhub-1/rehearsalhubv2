@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ChatMessage, cleanSenderName } from './ChatTypes';
 import { LocalAudioSlider, VoiceWaveformVisualizer } from './VoiceWaveformVisualizer';
@@ -7,8 +7,6 @@ import { SyncAvatar } from '../SyncAvatar';
 import { useUserStore } from '../../hooks/useUser';
 import { api } from '../../services/api';
 import { navigateToPlayer } from '../../navigation/navigationService';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface CardBaseProps {
   msg: ChatMessage;
@@ -526,7 +524,8 @@ export const ContactShareCard = ProfileShareCard;
 
 const waCardStyles = StyleSheet.create({
   cardContainer: {
-    width: Math.min(SCREEN_WIDTH * 0.76, 290),
+    width: '100%',
+    maxWidth: 290,
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,

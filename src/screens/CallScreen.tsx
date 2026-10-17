@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Dimensions, Animated, BackHandler, ScrollView,
+  Animated, BackHandler, ScrollView,
   Platform, PermissionsAndroid, Alert, Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,7 +80,6 @@ const requestCameraPermission = async (): Promise<boolean> => {
 };
 
 const LIVEKIT_URL = process.env.EXPO_PUBLIC_LIVEKIT_URL || 'wss://rehearsal-hub-livekit.cloud';
-const { width: W, height: H } = Dimensions.get('window');
 
 type CallStatus = 'ringing' | 'connecting' | 'connected' | 'ended' | 'declined';
 

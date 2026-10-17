@@ -12,7 +12,7 @@ import {
 } from '../lib/safeNativeModules';
 import { useTrackPlayer, waitForPlayerSetup, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import {
-  StyleSheet, View, Text, TouchableOpacity, Dimensions, Animated,
+  StyleSheet, View, Text, TouchableOpacity, Animated,
   ActivityIndicator, ImageBackground, Modal, FlatList, TextInput, KeyboardAvoidingView, Platform, ScrollView, Alert
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,7 +33,6 @@ import { PlayerSpeedModal, SPEED_OPTIONS } from '../components/player/modals/Pla
 import { PlayerSleepTimerModal, SLEEP_TIMER_OPTIONS } from '../components/player/modals/PlayerSleepTimerModal';
 import { resolveSongAudioUrls } from '../lib/mediaUtils';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PAGE_SIZE = 20; // songs per page
 let cachedLibrary: any[] = [];
 let cachedLastDoc: any = null;

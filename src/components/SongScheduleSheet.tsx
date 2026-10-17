@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
+  useWindowDimensions,
   Modal,
   Animated,
   ActivityIndicator,
@@ -22,7 +22,7 @@ import { useChurch } from '../hooks/useUser';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../services/api';
 
-const { height: H } = Dimensions.get('window');
+
 const StatusPill = ({ status, theme }: { status: string, theme: any }) => {
   const map: Record<string, { bg: string, color: string, label: string }> = {
     rehearsed: { bg: 'rgba(16, 185, 129, 0.15)', color: "#10b981", label: "Rehearsed" },
@@ -387,14 +387,15 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
   const [activeProgramId, setActiveProgramId] = useState<string | null>(null);
   const [programs, setPrograms] = useState<any[]>([]);
   const [viewHistory, setViewHistory] = useState(false);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [isMaximized, setIsMaximized] = useState(false);
 
   const [selectedWeekId, setSelectedWeekId] = useState<string>('default_week_1');
   const [selectedDayId, setSelectedDayId] = useState<string>('default_day_1');
   
-  const slideAnim = useRef(new Animated.Value(H)).current;
-  const minimizedTranslateY = H * 0.42;
+  const slideAnim = useRef(new Animated.Value(windowHeight || 800)).current;
+  const minimizedTranslateY = (windowHeight || 800) * 0.42;
 
   const zoneId = currentZone?.id || '';
   const churchId = currentChurch?.id || '';
@@ -438,7 +439,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: H, duration: 260, useNativeDriver: true,
+        toValue: windowHeight, duration: 260, useNativeDriver: true,
       }).start();
       setTimeout(() => {
         setActiveTab("schedule");
@@ -559,7 +560,7 @@ export function SongScheduleSheet({ visible, onClose }: Props) {
       </TouchableOpacity>
 
       <Animated.View style={[
-        { position: 'absolute', bottom: 0, left: 0, right: 0, height: H * 0.92, backgroundColor: theme.colors.accent, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 2 },
+        { position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 720, alignSelf: 'center', height: windowHeight * 0.92, backgroundColor: theme.colors.accent, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 2 },
         { transform: [{ translateY: slideAnim }] }
       ]}>
         <View style={{ flex: 1, backgroundColor: theme.colors.background, borderTopLeftRadius: 23, borderTopRightRadius: 23, overflow: 'hidden' }}>

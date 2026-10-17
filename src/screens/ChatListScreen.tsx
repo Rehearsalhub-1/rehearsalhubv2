@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ScrollView,
   TextInput,
-  Dimensions,
   Animated,
   Alert,
   AppState,
@@ -27,8 +26,6 @@ import { cleanSenderName } from '../components/chat';
 import { useIsFocused, useFocusEffect } from '@react-navigation/native';
 import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ChatRoom {
   id: string;

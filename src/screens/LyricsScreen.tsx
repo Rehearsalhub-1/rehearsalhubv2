@@ -7,7 +7,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,10 +27,9 @@ import { PlayerControlsRow } from '../components/player/PlayerControlsRow';
 import { PlayerAnnotationFAB } from '../components/player/PlayerAnnotationFAB';
 import { api } from '../services/api';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 export default function LyricsScreen({ route, navigation }: any) {
   const { theme, themeName } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const isLight = themeName === 'light';
   const insets = useSafeAreaInsets();
   const styles = getStyles(theme);
@@ -290,7 +289,7 @@ export default function LyricsScreen({ route, navigation }: any) {
 
             return activeTrack?.lyrics ? (
               <RenderHtml
-                contentWidth={SCREEN_WIDTH - 48}
+                contentWidth={windowWidth - 48}
                 source={{ html: formatLyricsHtml(activeTrack.lyrics) }}
                 baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                 tagsStyles={{

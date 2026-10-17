@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  FlatList, Modal, Animated, Dimensions, ActivityIndicator,
+  FlatList, Modal, Animated, useWindowDimensions, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +17,7 @@ import { useUserStore } from '../hooks/useUser';
 import { cleanSenderName } from './chat';
 import { uploadImageToCloudinary } from '../lib/cloudinary';
 
-const { height: H, width: W } = Dimensions.get('window');
+
 
 interface SongShare {
   id: string;
@@ -67,13 +67,14 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
 
   const [note, setNote] = useState('');
   const [commentMode, setCommentMode] = useState<'at_once' | 'each'>('at_once');
+  const { height: windowHeight } = useWindowDimensions();
   const [eachNotes, setEachNotes] = useState<Record<string, string>>({});
   const [chats, setChats] = useState<ChatRoom[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-  const slideAnim = useRef(new Animated.Value(H)).current;
+  const slideAnim = useRef(new Animated.Value(windowHeight || 800)).current;
 
   const songsToComment = playlist
     ? playlist.songs
@@ -95,7 +96,7 @@ export function ShareToChatSheet({ visible, song, songs, playlist, take, profile
       }).start();
     } else {
       Animated.timing(slideAnim, {
-        toValue: H,
+        toValue: windowHeight,
         duration: 260,
         useNativeDriver: true,
       }).start();
@@ -517,6 +518,7 @@ const getStyles = (theme: any, insets: any) => {
     backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
     sheet: {
       position: 'absolute', bottom: 0, left: 0, right: 0,
+      maxWidth: 640, alignSelf: 'center',
       backgroundColor: theme.colors.bottomSheetBackground,
       overflow: 'hidden',
       borderTopLeftRadius: 22, borderTopRightRadius: 22,

@@ -6,7 +6,7 @@ import {
   KeyboardAvoidingView, Platform, Dimensions, Modal,
   ActivityIndicator, Animated, ScrollView,
   AppState, Alert, RefreshControl, Linking, FlatList,
-  StatusBar as RNStatusBar,
+  StatusBar as RNStatusBar, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -50,7 +50,7 @@ import { debugSessionLog } from '../lib/debugSessionLog';
 import { api } from '../services/api';
 import { useWebSocket } from '../hooks/useWebSocket';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 
 import {
   ChatMessage,
@@ -134,10 +134,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
 
   const { theme, themeName } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isMountedRef = useIsMounted();
   
   const swipeRefs = useRef<Record<string, Swipeable | null>>({});
-  const styles = getStyles(theme, insets);
+  const styles = useMemo(() => getStyles(theme, insets, windowWidth), [theme, insets, windowWidth]);
 
   const APP_THEME = {
     headerBg: 'transparent',
@@ -2153,7 +2154,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
                         <View key={m.id} style={[styles.msgRow, styles.msgRowMe]}>
                           <View style={[styles.bubble, { backgroundColor: APP_THEME.outgoingBubble, alignSelf: 'flex-end', padding: 4, borderRadius: 12 }]}>
                             <View>
-                              <Image source={{ uri: m.uri }} style={{ width: SCREEN_WIDTH*0.65, height: SCREEN_WIDTH*0.65, borderRadius:8, opacity: 0.7 }} contentFit="cover" />
+                              <Image source={{ uri: m.uri }} style={{ width: Math.min(windowWidth*0.65, 340), height: Math.min(windowWidth*0.65, 340), borderRadius:8, opacity: 0.7 }} contentFit="cover" />
                               <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}>
                                 <ActivityIndicator size="large" color="#ffffff" />
                               </View>
@@ -2312,7 +2313,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           onChangeCaption={setPreviewCaption}
           onToggleViewOnce={() => setPreviewViewOnce(p => !p)}
           onSend={sendPreviewMedia}
-          screenWidth={SCREEN_WIDTH}
+          screenWidth={windowWidth}
         />
 
 

@@ -3,7 +3,7 @@ import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet, View, Text, TextInput, TouchableOpacity,
-  Animated, Dimensions, Platform, ScrollView, ActivityIndicator,
+  Animated, Platform, ScrollView, ActivityIndicator,
   RefreshControl
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -43,8 +43,6 @@ const MiniPlayerProgressBar = ({ theme }: any) => {
     </View>
   );
 };
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
 

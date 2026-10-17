@@ -7,8 +7,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
-  Dimensions } from
+  ScrollView } from
 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,8 +15,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function CategoryProgramsScreen({ navigation, route }: any) {
   const { theme } = useTheme();
@@ -214,7 +211,9 @@ const getStyles = (theme: any) => {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.cardBackgroundLight,
-    marginHorizontal: 20,
+    width: '92%',
+    maxWidth: 640,
+    alignSelf: 'center',
     marginBottom: 12,
     paddingHorizontal: 14,
     height: 44,
@@ -255,6 +254,8 @@ const getStyles = (theme: any) => {
   },
   cardContainer: {
     width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
     height: 240,
     borderRadius: 24,
     overflow: 'hidden',

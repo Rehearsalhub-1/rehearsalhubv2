@@ -4,13 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sentry from '@sentry/react-native';
 import { debugSessionLog } from '../lib/debugSessionLog';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;

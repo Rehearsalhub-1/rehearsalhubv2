@@ -65,9 +65,7 @@ export function isSongExplicitlyOff(s: any): boolean {
     status === 'inactive' ||
     status === 'ended' ||
     status === 'off' ||
-    status === 'stopped' ||
-    status === 'heard' ||
-    status === 'unheard'
+    status === 'stopped'
   ) {
     return true;
   }

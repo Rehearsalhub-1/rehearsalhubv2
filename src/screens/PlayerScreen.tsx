@@ -36,8 +36,7 @@ const TRACK_PLACEHOLDER_IMAGE = require('../../assets/TRACK_PLACEHOLDER.png');
 import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import Slider from '@react-native-community/slider';
-import RenderHtml from 'react-native-render-html';
+
 import { formatLyricsHtml } from '../utils/lyricsFormatter';
 import { useTrackPlayer, useTrackPlayerProgress } from '../hooks/useTrackPlayer';
 import { SafeTrackPlayer as TrackPlayer } from '../lib/safeNativeModules';
@@ -66,8 +65,6 @@ import { ToastHUD, DoubleTapOverlay, PlayerProgressSlider } from '../components/
 import { PlayerControlsRow } from '../components/player/PlayerControlsRow';
 import { PlayerAnnotationFAB } from '../components/player/PlayerAnnotationFAB';
 import { LyricsIcon, NotesWithPenIcon, ConductorGuideIcon, ScheduleSIcon } from '../components/player/icons/PlayerCustomIcons';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // SPEED_OPTIONS and SLEEP_TIMER_OPTIONS live in their respective modal components.
 
@@ -688,7 +685,7 @@ export default function PlayerScreen({ route, navigation }: any) {
     if (isAnnotationMode) return;
     const now = Date.now();
     const locationX = evt.nativeEvent.locationX;
-    const artWidth = SCREEN_WIDTH;
+    const artWidth = windowWidth;
 
     if (now - lastTapTimeRef.current < 320) {
       // Double tap detected
@@ -1543,7 +1540,7 @@ export default function PlayerScreen({ route, navigation }: any) {
     </View>);
 }
 
-const getStyles = (theme: any, insets: any, screenWidth: number = SCREEN_WIDTH) => {
+const getStyles = (theme: any, insets: any, screenWidth: number = Dimensions.get('window').width) => {
   const isTablet = screenWidth >= 768;
   return StyleSheet.create({
     container: {

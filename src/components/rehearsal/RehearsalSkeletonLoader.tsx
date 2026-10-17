@@ -1,7 +1,5 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, ScrollView, Animated, ActivityIndicator } from 'react-native';
-import { Dimensions } from 'react-native';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Props {
   shimmerOpacity: Animated.AnimatedInterpolation<string | number>;
@@ -10,7 +8,7 @@ interface Props {
 
 export const RehearsalSkeletonLoader: React.FC<Props> = ({ shimmerOpacity, theme }) => (
   <ScrollView style={{ flex: 1 }} scrollEnabled={false} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16 }}>
-    <Animated.View style={[{ width: '100%', height: SCREEN_WIDTH * 0.52, borderRadius: 12, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 20 }, { opacity: shimmerOpacity }]} />
+    <Animated.View style={[{ width: '100%', aspectRatio: 1.77, maxHeight: 380, borderRadius: 12, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 20 }, { opacity: shimmerOpacity }]} />
     <Animated.View style={[{ height: 22, width: '60%', borderRadius: 8, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 10 }, { opacity: shimmerOpacity }]} />
     <Animated.View style={[{ height: 14, width: '40%', borderRadius: 12, backgroundColor: theme.colors.cardBackgroundLight, marginBottom: 24 }, { opacity: shimmerOpacity }]} />
     {[1, 2, 3, 4, 5, 6].map(i => (

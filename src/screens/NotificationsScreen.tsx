@@ -7,7 +7,6 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
-  Dimensions,
   ActivityIndicator,
   Modal,
   Platform,
@@ -23,8 +22,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { useUserStore } from '../hooks/useUser';
 import { useFocusEffect } from '@react-navigation/native';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface NotificationItem {
   id: string;

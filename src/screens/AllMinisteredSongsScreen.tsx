@@ -2,7 +2,7 @@ import { useTheme } from '../context/ThemeContext';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, ScrollView,
-  Dimensions, TextInput, Modal, Pressable, ActivityIndicator,
+  TextInput, Modal, Pressable, ActivityIndicator,
   FlatList, Platform, RefreshControl, Alert, KeyboardAvoidingView,
   Image
 } from 'react-native';
@@ -26,7 +26,7 @@ import { searchSongMatch, HighlightedText, sanitizeProgramName } from '../lib/se
 import { navigateToPlayer } from '../navigation/navigationService';
 import { PlayerAudioPartsModal } from '../components/player/modals/PlayerAudioPartsModal';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 const APP_LOGO = require('../../assets/logo/logo.png');
 const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
 
@@ -1138,7 +1138,8 @@ const getStyles = (theme: any, insets?: any) => {
 
     heroBanner: {
       width: '100%',
-      height: Math.round(Math.min(SCREEN_WIDTH * 0.62, 260)),
+      aspectRatio: 1.77,
+      maxHeight: 260,
       position: 'relative',
       overflow: 'hidden',
       borderBottomLeftRadius: 20,

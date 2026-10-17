@@ -7,7 +7,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions } from
+  useWindowDimensions } from
 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,10 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 export default function SolfaScreen({ route, navigation }: any) {
   const { theme } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
@@ -132,7 +131,7 @@ export default function SolfaScreen({ route, navigation }: any) {
 
             return activeTrack?.solfa ? (
               <RenderHtml
-                contentWidth={SCREEN_WIDTH - 48}
+                contentWidth={windowWidth - 48}
                 source={{ html: formatLyricsHtml(activeTrack.solfa) }}
                 baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                 tagsStyles={{

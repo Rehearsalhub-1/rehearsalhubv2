@@ -1,6 +1,6 @@
 import { theme } from '../constants/Colors';
 import { useTheme } from '../context/ThemeContext';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -15,7 +15,7 @@ import {
   Keyboard,
   Animated,
   ScrollView,
-  Dimensions
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -32,7 +32,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 }
 
 const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL ?? '').replace(/\/+$/, '').replace(/\/api$/, '');
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ChatMessage {
   id: string;
@@ -62,7 +61,9 @@ const WELCOME_MESSAGE: ChatMessage = {
 
 export default function LexiconScreen({ navigation }: any) {
   const { theme } = useTheme();
-  const styles = getStyles(theme);
+  const { width: windowWidth } = useWindowDimensions();
+  const sidebarWidth = Math.min(windowWidth * 0.82, 360);
+  const styles = useMemo(() => getStyles(theme, sidebarWidth), [theme, sidebarWidth]);
   const s = styles;
   const user = useUserStore(s => s.user);
 
@@ -73,7 +74,7 @@ export default function LexiconScreen({ navigation }: any) {
   const [isTyping, setIsTyping] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const slideAnim = useRef(new Animated.Value(-SCREEN_WIDTH * 0.85)).current;
+  const slideAnim = useRef(new Animated.Value(-sidebarWidth)).current;
 
   const flatListRef = useRef<FlatList>(null);
   const dotAnim1 = useRef(new Animated.Value(0)).current;
@@ -81,12 +82,18 @@ export default function LexiconScreen({ navigation }: any) {
   const dotAnim3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!isSidebarOpen) {
+      slideAnim.setValue(-sidebarWidth);
+    }
+  }, [sidebarWidth]);
+
+  useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: isSidebarOpen ? 0 : -SCREEN_WIDTH * 0.85,
+      toValue: isSidebarOpen ? 0 : -sidebarWidth,
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen, sidebarWidth]);
 
   useEffect(() => {
     const loadSessions = async () => {
@@ -483,7 +490,7 @@ export default function LexiconScreen({ navigation }: any) {
   );
 }
 
-const getStyles = (theme: any) => {
+const getStyles = (theme: any, sidebarWidth: number = 320) => {
   const T = theme.colors;
   return StyleSheet.create({
   container: {
@@ -557,7 +564,7 @@ const getStyles = (theme: any) => {
     top: 0,
     left: 0,
     bottom: 0,
-    width: SCREEN_WIDTH * 0.85,
+    width: sidebarWidth,
     backgroundColor: T.backgroundDark,
     borderRightWidth: 1,
     borderRightColor: theme.colors.cardBackgroundLight,
@@ -691,7 +698,7 @@ const getStyles = (theme: any) => {
   messageBubble: {
     borderRadius: 18,
     padding: 14,
-    maxWidth: SCREEN_WIDTH * 0.72,
+    maxWidth: '82%',
   },
   aiBubble: {
     backgroundColor: theme.colors.cardBackgroundLight,

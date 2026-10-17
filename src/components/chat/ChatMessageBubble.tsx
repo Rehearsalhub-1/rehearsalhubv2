@@ -9,6 +9,7 @@ import {
   Linking,
   Animated,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,7 +29,6 @@ import {
 import type { ChatMessage } from './ChatTypes';
 import { navigateToPlayer } from '../../navigation/navigationService';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLLAPSE_THRESHOLD = 320;
 
 export interface ChatMessageBubbleProps {
@@ -130,6 +130,7 @@ function ChatMessageBubble({
   playAudio,
   seekAudio,
 }: ChatMessageBubbleProps) {
+  const { width: windowWidth } = useWindowDimensions();
   if (!msg || msg.isSystem) return null;
 
   const TickIcon = ({ status }: { status: ChatMessage['status'] }) => {
@@ -543,7 +544,7 @@ function ChatMessageBubble({
                   >
                     <Image
                       source={{ uri: msg.imageUrl }}
-                      style={{ width: SCREEN_WIDTH * 0.65, height: SCREEN_WIDTH * 0.65, borderRadius: 8 }}
+                      style={{ width: Math.min(windowWidth * 0.65, 340), height: Math.min(windowWidth * 0.65, 340), borderRadius: 8 }}
                       contentFit="cover"
                     />
                     {msg.text ? (
@@ -651,7 +652,7 @@ function ChatMessageBubble({
                   styles={styles}
                 />
               ) : msg.type === 'poll' ? (
-                <View style={{ padding: 4, minWidth: 240, maxWidth: SCREEN_WIDTH * 0.75 }}>
+                <View style={{ padding: 4, minWidth: Math.min(240, windowWidth * 0.65), maxWidth: Math.min(windowWidth * 0.75, 480) }}>
                   <Text style={{ color: APP_THEME.primaryText, fontSize: 16, fontWeight: '700', marginBottom: 12, lineHeight: 22 }}>
                     📊 {msg.text}
                   </Text>
@@ -765,8 +766,8 @@ function ChatMessageBubble({
                 >
                   <View
                     style={{
-                      width: SCREEN_WIDTH * 0.65,
-                      height: SCREEN_WIDTH * 0.4,
+                      width: Math.min(windowWidth * 0.65, 340),
+                      height: Math.min(windowWidth * 0.65, 340) * 0.62,
                       borderRadius: 10,
                       backgroundColor: '#000',
                       overflow: 'hidden',

@@ -3,7 +3,7 @@ import { api } from '../services/api';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Switch, Alert, TextInput, ActivityIndicator, Animated, Dimensions, LayoutAnimation, Platform, UIManager, Modal, RefreshControl, Linking, KeyboardAvoidingView
+  Switch, Alert, TextInput, ActivityIndicator, Animated, LayoutAnimation, Platform, UIManager, Modal, RefreshControl, Linking, KeyboardAvoidingView
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useFocusEffect } from '@react-navigation/native';
@@ -27,7 +27,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width: W } = Dimensions.get('window');
+
 
 interface Profile {
   username?: string;
@@ -1270,7 +1270,7 @@ export default function SettingsScreen({ navigation }: any) {
 }
 const getStyles = (T: any, theme: any) => StyleSheet.create({
   root: { flex: 1, backgroundColor: 'transparent' },
-  hero: { width: W, paddingBottom: 24, alignItems: 'center' },
+  hero: { width: '100%', paddingBottom: 24, alignItems: 'center' },
   heroNav: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16 },
   heroBackBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: T.cardBackgroundLight, justifyContent: 'center', alignItems: 'center' },
   heroNavTitle: { fontSize: 16, fontWeight: '700', color: T.textPrimary },
@@ -1286,7 +1286,7 @@ const getStyles = (T: any, theme: any) => StyleSheet.create({
   heroDesignation: { fontSize: 14, color: T.textSecondary, fontWeight: '500' },
   heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(192,132,252,0.15)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginTop: 4 },
   heroBadgeText: { color: T.accent, fontSize: 12, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, backgroundColor: T.cardBackground, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, width: W - 40 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16, backgroundColor: T.cardBackground, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 12, width: '92%', maxWidth: 500 },
   statItem: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 20, fontWeight: '800', color: T.textPrimary },
   statLbl: { fontSize: 12, color: T.textSecondary, fontWeight: '500', marginTop: 4 },

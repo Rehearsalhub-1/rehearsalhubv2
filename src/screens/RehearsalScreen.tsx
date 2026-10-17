@@ -8,7 +8,7 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
   TextInput,
   ActivityIndicator,
   Animated,
@@ -51,8 +51,6 @@ import { navigateToPlayer } from '../navigation/navigationService';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 const COVER_IMAGE = require('../../assets/TRACK_PLACEHOLDER.png');
 
 
@@ -70,7 +68,8 @@ const _memCache: Record<string, {
 export default function RehearsalScreen({ navigation, route }: any) {
   const { theme, themeName } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => getStyles(theme, insets), [theme, insets]);
+  const { width: windowWidth } = useWindowDimensions();
+  const styles = useMemo(() => getStyles(theme, insets, windowWidth), [theme, insets, windowWidth]);
 
   const program = route?.params?.program;
 

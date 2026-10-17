@@ -1,8 +1,6 @@
-﻿import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import React from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Track {
   id: string; name: string; type: 'voice' | 'backing' | 'sampler';
@@ -55,7 +53,9 @@ export const AudiolabWaveformTab: React.FC<Props> = ({
   onAddTrack, onOpenMixer, onOpenStudioKit, onOpenExport,
   onTimelineGrant, onTimelineMove, onTimelineRelease,
   generateWavePeaks, theme, styles,
-}) => (
+}: Props) => {
+  const { width: windowWidth } = useWindowDimensions();
+  return (
   <View style={styles.tabContainer}>
     {tracks.length === 0 ? (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 24, paddingVertical: 48 }}>
@@ -131,7 +131,7 @@ export const AudiolabWaveformTab: React.FC<Props> = ({
           <ScrollView horizontal style={styles.timelineGridScroll} showsHorizontalScrollIndicator={false}>
             {(() => {
               const maxDuration = tracks.reduce((max, track) => Math.max(max, (track.startTime || 0) + (track.duration || 25000)), 60000);
-              const timelineWidth = Math.max(SCREEN_WIDTH * 3, 40 + (maxDuration / 1000) * 45);
+              const timelineWidth = Math.max(windowWidth * 3, 40 + (maxDuration / 1000) * 45);
               const totalBeats = Math.ceil(timelineWidth / 118) + 2;
               return (
                 <View style={[styles.timelineGridInner, { width: timelineWidth }]}>
@@ -168,7 +168,7 @@ export const AudiolabWaveformTab: React.FC<Props> = ({
                             </View>
                           </View>
                         ) : (
-                          <View style={{ position: 'absolute', left: 20, width: SCREEN_WIDTH * 3 - 40, height: 60, borderStyle: 'dashed', borderWidth: 1, borderColor: theme.colors.textMuted + '66', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}>
+                          <View style={{ position: 'absolute', left: 20, width: windowWidth * 3 - 40, height: 60, borderStyle: 'dashed', borderWidth: 1, borderColor: theme.colors.textMuted + '66', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}>
                             <Text style={{ color: theme.colors.textMuted, fontSize: 12, fontWeight: '600' }}>
                               {track.type === 'voice' ? '🎙️ Tap Record to capture vocals' : '📁 Import audio file'}
                             </Text>
@@ -211,4 +211,5 @@ export const AudiolabWaveformTab: React.FC<Props> = ({
       </View>
     )}
   </View>
-);
+  );
+};

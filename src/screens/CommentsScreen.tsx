@@ -7,7 +7,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions } from
+  useWindowDimensions } from
 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,10 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 export default function CommentsScreen({ route, navigation }: any) {
   const { theme } = useTheme();
+  const { width: windowWidth } = useWindowDimensions();
   const styles = getStyles(theme);
 
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
@@ -147,7 +146,7 @@ export default function CommentsScreen({ route, navigation }: any) {
                 <View key={index} style={{ marginBottom: 24 }}>
                   <Text style={[styles.fullTextLine, { color: theme.colors.textMuted, marginBottom: 8 }]}>{comment.author || 'comment'}:</Text>
                   <RenderHtml
-                    contentWidth={SCREEN_WIDTH - 48}
+                    contentWidth={windowWidth - 48}
                     source={{ html: parseMarkdown(comment.text || comment.comment || '') }}
                     baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                     tagsStyles={{ p: { marginBottom: 20 }, strong: { color: theme.colors.accent, fontWeight: '800' }, b: { color: theme.colors.accent, fontWeight: '800' } }}
@@ -159,7 +158,7 @@ export default function CommentsScreen({ route, navigation }: any) {
                 <View style={{ marginBottom: 24 }}>
                   <Text style={[styles.fullTextLine, { color: theme.colors.textMuted, marginBottom: 8 }]}>{parsed.author || 'Director Comment'}:</Text>
                   <RenderHtml
-                    contentWidth={SCREEN_WIDTH - 48}
+                    contentWidth={windowWidth - 48}
                     source={{ html: parseMarkdown(parsed.text) }}
                     baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                     tagsStyles={{ p: { marginBottom: 20 }, strong: { color: theme.colors.accent, fontWeight: '800' }, b: { color: theme.colors.accent, fontWeight: '800' } }}
@@ -169,7 +168,7 @@ export default function CommentsScreen({ route, navigation }: any) {
             } else if (typeof parsed === 'string' && parsed.trim().length > 0) {
               return (
                 <RenderHtml
-                  contentWidth={SCREEN_WIDTH - 48}
+                  contentWidth={windowWidth - 48}
                   source={{ html: parseMarkdown(parsed) }}
                   baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
                   tagsStyles={{ p: { marginBottom: 20 }, strong: { color: theme.colors.accent, fontWeight: '800' }, b: { color: theme.colors.accent, fontWeight: '800' } }}

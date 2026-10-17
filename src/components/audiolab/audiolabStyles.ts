@@ -1,8 +1,7 @@
 import { StyleSheet, Dimensions } from 'react-native';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-export const getStyles = (theme: any) => {
+export const getStyles = (theme: any, screenWidth: number = Dimensions.get('window').width) => {
+  const SCREEN_WIDTH = screenWidth;
   const T = theme.colors;
   return StyleSheet.create({
   container: {
@@ -466,7 +465,7 @@ export const getStyles = (theme: any) => {
     backgroundColor: theme.colors.bottomSheetBackground,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: SCREEN_HEIGHT * 0.75,
+    maxHeight: '75%',
     borderTopWidth: 1,
     borderTopColor: theme.colors.bottomTabBorder,
     shadowColor: theme.colors.background,
@@ -571,7 +570,8 @@ export const getStyles = (theme: any) => {
     gap: 16
   },
   gridCard: {
-    width: (SCREEN_WIDTH - 64) / 2,
+    width: Math.min((SCREEN_WIDTH - 64) / 2, 240),
+    flexGrow: 1,
     backgroundColor: theme.colors.cardBackgroundLight,
     padding: 20,
     borderRadius: 20,

@@ -1,13 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Vibration } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { api } from '../services/api';
 import { SafeNotifee as notifee } from '../lib/safeNativeModules';
 import { useWebSocket } from '../hooks/useWebSocket';
-
-const { width, height } = Dimensions.get('window');
 
 export default function IncomingCallScreen() {
   const route = useRoute<any>();

@@ -6,7 +6,7 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
   Switch,
   TextInput,
   Modal,
@@ -45,9 +45,8 @@ import { AudiolabSettingsTab } from '../components/audiolab/AudiolabSettingsTab'
 import { AudiolabModalContent } from '../components/audiolab/AudiolabModalContent';
 import { getStyles } from '../components/audiolab/audiolabStyles';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
 export default function AudiolabScreen({ navigation }: any) {
+  const { width: windowWidth } = useWindowDimensions();
   const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const profile = useUserStore(s => s.profile);
@@ -890,7 +889,7 @@ export default function AudiolabScreen({ navigation }: any) {
       const secs = Math.floor((offsetMs % 60000) / 1000);
       const ms = Math.floor((offsetMs % 1000) / 100);
       setTimecode(`${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms}`);
-      setScrubberPosition(Math.min(20 + (offsetMs / 1000) * 45, SCREEN_WIDTH * 3 - 10));
+      setScrubberPosition(Math.min(20 + (offsetMs / 1000) * 45, windowWidth * 3 - 10));
 
       const activeTrackId = activeRecordingTrackIdRef.current;
       activeRecordingTrackIdRef.current = null;

@@ -6,16 +6,13 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,
-  Dimensions } from
-'react-native';
+  ScrollView
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function DetailsScreen({ route, navigation }: any) {
   const { theme } = useTheme();

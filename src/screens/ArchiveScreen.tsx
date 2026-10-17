@@ -8,7 +8,6 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
   ActivityIndicator,
   RefreshControl } from
 'react-native';
@@ -26,8 +25,6 @@ import { api, clearCache } from '../services/api';
 import { useZone } from '../hooks/useZone';
 import { useUserStore } from '../hooks/useUser';
 import { isHQAdmin, canAccessArchive, getHiddenFeatures } from '../config/roles';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function ArchiveScreen({ navigation }: any) {
   const { theme } = useTheme();
@@ -356,6 +353,8 @@ const getStyles = (theme: any) => {
   },
   cardContainer: {
     width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
     height: 240,
     borderRadius: 24,
     overflow: 'hidden',

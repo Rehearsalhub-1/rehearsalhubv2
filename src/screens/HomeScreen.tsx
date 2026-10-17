@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
   Text,
-  Dimensions,
+  useWindowDimensions,
   Pressable,
   Animated,
   ScrollView,
@@ -29,8 +29,9 @@ import { isHQAdmin, canAccessArchive, getHiddenFeatures, isZoneCoordinator } fro
 import { isHQGroup } from '../config/zones';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SIDEBAR_WIDTH = SCREEN_WIDTH * 0.75;
+// Sidebar width follows the LIVE window size (tablet split-screen / floating windows),
+// capped so it doesn't take over a full-screen tablet.
+const getSidebarWidth = (windowWidth: number) => Math.min(windowWidth * 0.75, 380);
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const SLIDE_IMAGES = [
@@ -147,7 +148,9 @@ const INITIAL_CARDS = [
 export default function HomeScreen({ navigation }: any) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => getStyles(theme, insets), [theme, insets]);
+  const { width: windowWidth } = useWindowDimensions();
+  const sidebarWidth = getSidebarWidth(windowWidth);
+  const styles = useMemo(() => getStyles(theme, insets, sidebarWidth), [theme, insets, sidebarWidth]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [cards, setCards] = useState([
@@ -177,7 +180,7 @@ export default function HomeScreen({ navigation }: any) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
-  const sidebarAnim = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
+  const sidebarAnim = useRef(new Animated.Value(-sidebarWidth)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const searchPressAnim = useRef(new Animated.Value(1)).current;
 
@@ -283,10 +286,15 @@ export default function HomeScreen({ navigation }: any) {
     ]).start();
   };
 
+  // Keep the hidden sidebar fully off-screen when the window is resized
+  useEffect(() => {
+    if (!isSidebarOpen) sidebarAnim.setValue(-sidebarWidth);
+  }, [sidebarWidth]);
+
   const closeSidebar = () => {
     Animated.parallel([
       Animated.timing(sidebarAnim, {
-        toValue: -SIDEBAR_WIDTH,
+        toValue: -sidebarWidth,
         duration: 260,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
         useNativeDriver: true,
@@ -310,7 +318,7 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const mainScale = sidebarAnim.interpolate({
-    inputRange: [-SIDEBAR_WIDTH, 0],
+    inputRange: [-sidebarWidth, 0],
     outputRange: [1, 0.94]
   });
 
@@ -703,7 +711,7 @@ export default function HomeScreen({ navigation }: any) {
 
 }
 
-const getStyles = (theme: any, insets?: any) => {
+const getStyles = (theme: any, insets?: any, sidebarWidth: number = 300) => {
   const T = theme.colors;
   const topInset = Math.max(54, (insets?.top || 0) + 14);
   return StyleSheet.create({
@@ -752,7 +760,7 @@ const getStyles = (theme: any, insets?: any) => {
     top: 0,
     bottom: 0,
     height: '100%',
-    width: SIDEBAR_WIDTH,
+    width: sidebarWidth,
     zIndex: 1000,
     elevation: 1000,
     backgroundColor: theme.colors.background,
@@ -939,6 +947,7 @@ const getStyles = (theme: any, insets?: any) => {
   },
   floatingVideoWrapper: {
     width: '94%',
+    maxWidth: 640,
     height: 240,
     borderRadius: 24,
     overflow: 'hidden',
@@ -951,6 +960,7 @@ const getStyles = (theme: any, insets?: any) => {
   },
   smallVideoWrapper: {
     width: '94%',
+    maxWidth: 640,
     height: 70,
     borderRadius: 18,
     overflow: 'hidden',
@@ -993,6 +1003,7 @@ const getStyles = (theme: any, insets?: any) => {
 
   searchBarWrapper: {
     width: '94%',
+    maxWidth: 640,
     alignSelf: 'center',
     height: 38,
     borderRadius: 24,

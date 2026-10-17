@@ -11,7 +11,6 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator,
-  Dimensions,
   AppState,
   Alert,
   Modal,
@@ -32,7 +31,6 @@ import { isHQGroup } from '../config/zones';
 import { ShareToChatSheet } from '../components/ShareToChatSheet';
 import { navigateToPlayer } from '../navigation/navigationService';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TRACK_PLACEHOLDER = require('../../assets/TRACK_PLACEHOLDER.png');
 
 const getTrackImage = (track: any, _index?: number) => {

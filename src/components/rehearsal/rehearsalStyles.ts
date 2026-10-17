@@ -1,8 +1,7 @@
 import { StyleSheet, Dimensions } from 'react-native';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-export const getStyles = (theme: any, insets: any) => {
+export const getStyles = (theme: any, insets: any, screenWidth: number = Dimensions.get('window').width) => {
+  const SCREEN_WIDTH = screenWidth;
   const T = theme.colors;
   return StyleSheet.create({
   container: {
@@ -76,8 +75,8 @@ export const getStyles = (theme: any, insets: any) => {
     elevation: 20
   },
   heroImage: {
-    width: SCREEN_WIDTH * 0.92,
-    height: SCREEN_WIDTH * 0.52,
+    width: Math.min(SCREEN_WIDTH * 0.92, 640),
+    height: Math.min(SCREEN_WIDTH * 0.52, 380),
     borderRadius: 12
   },
   countdownBadge: {
@@ -346,6 +345,8 @@ export const getStyles = (theme: any, insets: any) => {
   },
   categoryCard: {
     width: (SCREEN_WIDTH - 36) / 2,
+    maxWidth: 320,
+    flexGrow: 1,
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
@@ -377,8 +378,8 @@ export const getStyles = (theme: any, insets: any) => {
   nowPlayingBar: {
     position: 'absolute',
     bottom: 66,
-    left: 12,
-    right: 12,
+    left: SCREEN_WIDTH > 720 ? (SCREEN_WIDTH - 680) / 2 : 12,
+    right: SCREEN_WIDTH > 720 ? (SCREEN_WIDTH - 680) / 2 : 12,
     shadowColor: theme.colors.background,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.4,
