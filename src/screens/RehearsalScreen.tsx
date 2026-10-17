@@ -365,8 +365,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
       // never accidentally loads a different mode/program's stale songs.
       const overrideId = selectedProgramOverride?.id || null;
       const cacheKey = isSubgroupMode
-        ? `rehearsal_songs_subgroup_${targetSubgroupId || 'default'}_${currentZoneId}`
-        : `rehearsal_songs_${overrideId || program?.id || 'default'}_${currentZoneId}`;
+        ? `rehearsal_songs_church_${targetSubgroupId || 'default'}`
+        : `rehearsal_songs_zone_${overrideId || program?.id || 'default'}_${currentZoneId}`;
 
       const setupCategoriesFromSongs = (songs: any[], categoryOrder: string[] = []) => {
         const allCategoriesList: string[] = [];
@@ -421,9 +421,9 @@ export default function RehearsalScreen({ navigation, route }: any) {
         if (_memCache[cacheKey] && _memCache[cacheKey].songs.length > 0) {
           hasCachedDataRef.current = true;
           setProgramSongs(_memCache[cacheKey].songs);
-          setProgramTitle(_memCache[cacheKey].title || 'Loveworld Singers Mix');
+          setProgramTitle(_memCache[cacheKey].title || (isSubgroupMode ? (currentChurch?.name || 'Church Rehearsal') : 'Loveworld Singers Mix'));
           setProgramDate(_memCache[cacheKey].date || '');
-          setProgramLocation(_memCache[cacheKey].location || 'Centralized Zonal Rehearsal Platform');
+          setProgramLocation(_memCache[cacheKey].location || (isSubgroupMode ? (currentChurch?.name || 'Your Church Choir') : 'Centralized Zonal Rehearsal Platform'));
           if (_memCache[cacheKey].coverImage) setCoverImage(_memCache[cacheKey].coverImage);
           setupCategoriesFromSongs(_memCache[cacheKey].songs, _memCache[cacheKey].categoryOrder || []);
           setIsLoading(false);
@@ -431,20 +431,19 @@ export default function RehearsalScreen({ navigation, route }: any) {
           setProgramSongs([]);
           setIsLoading(true);
 
-          // Primary: try the exact cache key for this program/zone
+          // Primary: try the exact cache key for this program/zone/church
           let cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(cacheKey);
 
           // Fallback for cold open (no internet, no program param):
-          // Look up the last successfully loaded program key for this zone
-          // and use that cache entry instead of showing nothing.
-          if (!cached?.songs?.length && !program?.id && !selectedProgramOverride?.id) {
+          // ONLY FOR ZONE REHEARSALS. NEVER FOR SUBGROUPS/CHURCH.
+          if (!isSubgroupMode && !cached?.songs?.length && !program?.id && !selectedProgramOverride?.id) {
             try {
               const lastProgramRaw = await AsyncStorage.getItem(
                 `rehearsal_last_program_${contextZone?.id || 'none'}`
               );
               if (lastProgramRaw) {
                 const { cacheKey: lastCacheKey } = JSON.parse(lastProgramRaw);
-                if (lastCacheKey && lastCacheKey !== cacheKey) {
+                if (lastCacheKey && !lastCacheKey.includes('church') && lastCacheKey !== cacheKey) {
                   cached = await readCache<{ songs: any[]; title: string; date: string; location: string; coverImage?: any; categoryOrder?: string[] }>(lastCacheKey);
                 }
               }
@@ -494,20 +493,29 @@ export default function RehearsalScreen({ navigation, route }: any) {
           selectedRehearsal = program;
         } else if (isSubgroupMode) {
           try {
-            const targetSgId = route?.params?.subgroupId || currentChurch?.id;
-            const [subgroupRehearsalsRes, userSubgroupsRes] = await Promise.all([
-              api.programs.getMemberRehearsals(targetSgId || undefined).catch(() => null),
-              api.subgroups.mine().catch(() => null),
-            ]);
-
-            const userSubgroups = userSubgroupsRes?.data || [];
+            let targetSgId = route?.params?.subgroupId || currentChurch?.id;
+            let userSubgroups: any[] = [];
+            const userSubgroupsRes = await api.subgroups.mine().catch(() => null);
+            userSubgroups = userSubgroupsRes?.data || [];
             const subgroupMap = new Map(userSubgroups.map((sg: any) => [sg.id, sg.name || 'Church']));
 
-            const subgroupPages = (subgroupRehearsalsRes?.data || []).map((p: any) => ({
+            if (!targetSgId && userSubgroups.length > 0) {
+              targetSgId = userSubgroups[0].id;
+            }
+
+            const subgroupRehearsalsRes = targetSgId
+              ? await api.programs.getMemberRehearsals(targetSgId).catch(() => null)
+              : null;
+
+            const rawPages = (subgroupRehearsalsRes?.data && Array.isArray(subgroupRehearsalsRes.data))
+              ? subgroupRehearsalsRes.data
+              : (targetSgId ? (await api.programs.getMemberRehearsals(targetSgId).catch(() => null))?.data || [] : []);
+
+            const subgroupPages = (rawPages || []).map((p: any) => ({
               ...p,
               scope: 'subgroup',
-              subGroupId: p.subGroupId || p.sub_group_id || p.groupId,
-              name: p.name || p.title || 'Church Rehearsal',
+              subGroupId: p.subGroupId || p.sub_group_id || p.groupId || targetSgId,
+              name: p.name || p.title || (targetSgId && subgroupMap.get(targetSgId)) || currentChurch?.name || 'Church Rehearsal',
               location: (p.subGroupId && subgroupMap.get(p.subGroupId)) || p.location || currentChurch?.name || 'Your Church Choir',
             }));
 
@@ -526,7 +534,7 @@ export default function RehearsalScreen({ navigation, route }: any) {
               selectedRehearsal = ongoing || subgroupPages[0] || null;
             }
 
-            // Fallback: if church has no program entry yet, create a container for targetSgId so church songs load directly
+            // Fallback: if church has no formal program entry yet, create a container for targetSgId so church songs load directly
             if (!selectedRehearsal && targetSgId) {
               const churchName = subgroupMap.get(targetSgId) || currentChurch?.name || 'Church Rehearsal';
               selectedRehearsal = {
@@ -590,25 +598,24 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
         if (!selectedRehearsal) {
           if (!active) return;
-          // If we already have cached songs showing, don't wipe them with "No Ongoing".
-          // This happens when the programs API is slow or returns empty on navigation back.
-          if (hasCachedDataRef.current) {
+          // If we already have cached songs showing for this specific zone program, don't wipe them.
+          if (hasCachedDataRef.current && !isSubgroupMode) {
             setIsLoading(false);
             return;
           }
           const targetCategory = (route?.params?.categoryFilter || 'ongoing').toLowerCase().trim();
           const emptyTitle = isSubgroupMode
-            ? 'No Church Rehearsals'
+            ? (currentChurch?.name || 'No Church Rehearsals')
             : (targetCategory === 'pre-rehearsal' ? 'No Pre-Rehearsal Programs' : 'No Ongoing Rehearsal');
           const emptyDate = isSubgroupMode
             ? 'Join or create a Church subgroup to access setlists'
             : (targetCategory === 'pre-rehearsal' ? 'Pre-rehearsal programs will appear here when scheduled' : 'Select a program from the switcher');
           setActiveProgramId(null);
-          setActiveProgramScope(null);
-          setActiveProgramSubGroupId(null);
+          setActiveProgramScope(isSubgroupMode ? 'subgroup' : null);
+          setActiveProgramSubGroupId(isSubgroupMode ? (targetSubgroupId || route?.params?.subgroupId || currentChurch?.id) : null);
           setProgramTitle(emptyTitle);
           setProgramDate(emptyDate);
-          setProgramLocation(resolvedZoneName);
+          setProgramLocation(isSubgroupMode ? (currentChurch?.name || 'Your Church Choir') : resolvedZoneName);
           setProgramCountdownObj(null);
           setProgramUpdatedAt(null);
           setCoverImage(COVER_IMAGE);
@@ -654,22 +661,22 @@ export default function RehearsalScreen({ navigation, route }: any) {
               isSongsFetchSuccessful = true;
             }
           } else if (selectedRehearsal.scope === 'subgroup' || selectedRehearsal.subGroupId || isSubgroupMode) {
-            const targetSgId = selectedRehearsal.subGroupId || selectedRehearsal.sub_group_id || route?.params?.subgroupId;
-            const [primarySgRes, altSgRes] = await Promise.all([
+            const targetSgId = selectedRehearsal.subGroupId || selectedRehearsal.sub_group_id || route?.params?.subgroupId || currentChurch?.id;
+            const [primarySgRes, querySgRes] = await Promise.all([
               targetSgId ? api.subgroups.getSongs(targetSgId).catch(() => null) : null,
-              targetSgId ? api.songs.getSubgroupSongs({ subGroupId: targetSgId }).catch(() => null) : null,
+              targetSgId ? api.songs.getEndpoint(`/subgroups/songs?subGroupId=${encodeURIComponent(targetSgId)}`).catch(() => null) : null,
             ]);
-            const sgData = (primarySgRes?.success && Array.isArray(primarySgRes.data) && primarySgRes.data.length > 0)
+            const sgData = (primarySgRes?.success && Array.isArray(primarySgRes.data))
               ? primarySgRes.data
-              : (altSgRes?.data || []);
+              : (querySgRes?.success && Array.isArray(querySgRes.data))
+              ? querySgRes.data
+              : (Array.isArray(selectedRehearsal?.songs) ? selectedRehearsal.songs : []);
 
-            if (Array.isArray(sgData)) {
-              isSongsFetchSuccessful = true;
-              if (selectedRehearsal.songIds && selectedRehearsal.songIds.length > 0) {
-                dbSongs = sgData.filter((song: any) => selectedRehearsal.songIds.includes(song.id));
-              } else {
-                dbSongs = sgData;
-              }
+            isSongsFetchSuccessful = true;
+            if (selectedRehearsal.songIds && selectedRehearsal.songIds.length > 0) {
+              dbSongs = sgData.filter((song: any) => selectedRehearsal.songIds.includes(song.id));
+            } else {
+              dbSongs = sgData;
             }
           } else {
             const effectiveZone = resolvedZoneId ? `&zoneId=${encodeURIComponent(resolvedZoneId)}` : '';
@@ -872,10 +879,17 @@ export default function RehearsalScreen({ navigation, route }: any) {
 
         // Store the last successfully loaded program ID + zone so cold opens
         // (no internet, no program param) can find the exact right cache entry.
-        AsyncStorage.setItem(
-          `rehearsal_last_program_${contextZone?.id || 'none'}`,
-          JSON.stringify({ programId: selectedRehearsal.id, cacheKey })
-        ).catch(() => {});
+        if (!isSubgroupMode) {
+          AsyncStorage.setItem(
+            `rehearsal_last_program_${contextZone?.id || 'none'}`,
+            JSON.stringify({ programId: selectedRehearsal.id, cacheKey })
+          ).catch(() => {});
+        } else if (selectedRehearsal?.subGroupId) {
+          AsyncStorage.setItem(
+            `rehearsal_last_church_${selectedRehearsal.subGroupId}`,
+            JSON.stringify({ programId: selectedRehearsal.id, cacheKey })
+          ).catch(() => {});
+        }
 
         setSelectedCategory((prevSelected) => {
           if (prevSelected && uniqueCategories.includes(prevSelected)) {

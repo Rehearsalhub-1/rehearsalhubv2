@@ -216,11 +216,11 @@ async function loadZoneMemberships(
 }
 
 function persistCache() {
-  const { user, profile, currentZone, userZones } = useUserStore.getState();
+  const { user, profile, currentZone, userZones, currentChurch, userChurches } = useUserStore.getState();
   if (!user?.uid || !profile) return;
   AsyncStorage.setItem(
     `user_context_cache_${user.uid}`,
-    JSON.stringify({ profile, currentZone, userZones })
+    JSON.stringify({ profile, currentZone, userZones, currentChurch, userChurches })
   ).catch(() => {});
 }
 
@@ -261,13 +261,15 @@ export const useUserStore = create<UserStore>((set, get) => ({
         try {
           const cached = await AsyncStorage.getItem(`user_context_cache_${localUserId}`);
           if (cached) {
-            const { profile: cProfile, currentZone: cZone, userZones: cZones } = JSON.parse(cached);
+            const { profile: cProfile, currentZone: cZone, userZones: cZones, currentChurch: cChurch, userChurches: cChurches } = JSON.parse(cached);
             set({
               user: { uid: localUserId, email: cProfile?.email || null },
               isAuthenticated: true,
               ...(cProfile ? { profile: cProfile } : {}),
               ...(cZone ? { currentZone: cZone, isHQ: isHQGroup(cZone.id) } : {}),
               ...(cZones?.length ? { userZones: cZones } : {}),
+              ...(cChurch ? { currentChurch: cChurch } : {}),
+              ...(cChurches?.length ? { userChurches: cChurches } : {}),
               isProfileLoading: false,
               isZoneLoading: false,
             });
@@ -323,6 +325,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
             });
 
             await loadZoneMemberships(uid, data, resolved || null);
+            await get().loadUserChurches();
             persistCache();
             return true;
           }
