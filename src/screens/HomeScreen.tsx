@@ -150,7 +150,7 @@ export default function HomeScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const sidebarWidth = getSidebarWidth(windowWidth);
-  const styles = useMemo(() => getStyles(theme, insets, sidebarWidth), [theme, insets, sidebarWidth]);
+  const styles = useMemo(() => getStyles(theme, insets, sidebarWidth, windowWidth), [theme, insets, sidebarWidth, windowWidth]);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [cards, setCards] = useState([
@@ -481,8 +481,8 @@ export default function HomeScreen({ navigation }: any) {
                 
                   <View style={styles.weatherCardContent}>
                     <View style={styles.weatherCardLeft}>
-                      <Text style={styles.weatherCityText}>{card.title}</Text>
-                      <Text style={styles.weatherSubtext}>{card.subtitle}</Text>
+                      <Text style={styles.weatherCityText} numberOfLines={1} ellipsizeMode="tail">{card.title}</Text>
+                      <Text style={styles.weatherSubtext} numberOfLines={1} ellipsizeMode="tail">{card.subtitle}</Text>
                     </View>
 
                     <View style={styles.weatherCardRight}>
@@ -711,7 +711,7 @@ export default function HomeScreen({ navigation }: any) {
 
 }
 
-const getStyles = (theme: any, insets?: any, sidebarWidth: number = 300) => {
+const getStyles = (theme: any, insets?: any, sidebarWidth: number = 300, windowWidth: number = 390) => {
   const T = theme.colors;
   const topInset = Math.max(54, (insets?.top || 0) + 14);
   return StyleSheet.create({
@@ -948,7 +948,8 @@ const getStyles = (theme: any, insets?: any, sidebarWidth: number = 300) => {
   floatingVideoWrapper: {
     width: '94%',
     maxWidth: 640,
-    height: 240,
+    height: Math.min(Math.round(windowWidth * 0.48), 240),
+    minHeight: 160,
     borderRadius: 24,
     overflow: 'hidden',
     backgroundColor: theme.colors.background,
@@ -961,7 +962,7 @@ const getStyles = (theme: any, insets?: any, sidebarWidth: number = 300) => {
   smallVideoWrapper: {
     width: '94%',
     maxWidth: 640,
-    height: 70,
+    height: Math.max(68, Math.min(Math.round(windowWidth * 0.16), 72)),
     borderRadius: 18,
     overflow: 'hidden',
     backgroundColor: theme.colors.cardBackgroundLight,
