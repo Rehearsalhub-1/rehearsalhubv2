@@ -3,7 +3,7 @@ import ThemedHeader from '../components/ThemedHeader';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   StyleSheet, View, Text, TouchableOpacity, TextInput,
-  KeyboardAvoidingView, Platform, Dimensions, Modal,
+  KeyboardAvoidingView, Platform, Modal,
   ActivityIndicator, Animated, ScrollView,
   AppState, Alert, RefreshControl, Linking, FlatList,
   StatusBar as RNStatusBar, useWindowDimensions,
