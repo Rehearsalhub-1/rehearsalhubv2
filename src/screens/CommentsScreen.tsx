@@ -15,6 +15,8 @@ import RenderHtml from 'react-native-render-html';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { DoodleBackground } from '../components/DoodleBackground';
+import { formatLyricsHtml } from '../utils/lyricsFormatter';
+import { api } from '../services/api';
 
 export default function CommentsScreen({ route, navigation }: any) {
   const { theme } = useTheme();
@@ -30,6 +32,24 @@ export default function CommentsScreen({ route, navigation }: any) {
       setActiveTrack(paramTrack);
     }
   }, [paramTrack]);
+
+  useEffect(() => {
+    if (activeTrack?.id && !activeTrack.comments && !activeTrack.notes && !(activeTrack as any).coordinatorComment) {
+      api.songs
+        .getById(activeTrack.id)
+        .then((res: any) => {
+          const songData = res?.data || res;
+          if (songData) {
+            setActiveTrack((prev: any) => ({
+              ...prev,
+              ...songData,
+              comments: songData.comments || songData.notes || songData.coordinatorComment,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTrack?.id]);
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
 
@@ -121,66 +141,87 @@ export default function CommentsScreen({ route, navigation }: any) {
           showsVerticalScrollIndicator={false}>
           
           {(() => {
-            const parseMarkdown = (text: any) => {
-
-              if (!text) return '';
-              const str = typeof text === 'string' ? text : JSON.stringify(text);
-              return str
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.*?)\*/g, '<strong>$1</strong>');
-            };
-
-            let parsed = activeTrack?.comments;
-            if (typeof parsed === 'string') {
-              try { parsed = JSON.parse(parsed); } catch (e) {}
+            let raw = activeTrack?.comments || activeTrack?.notes || (activeTrack as any)?.coordinatorComment;
+            if (!raw) {
+              return (
+                <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+                  <Ionicons name="chatbubbles-outline" size={64} color="rgba(255,255,255,0.2)" style={{ marginBottom: 16 }} />
+                  <Text style={[styles.fullTextLine, { textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 18 }]}>
+                    No comments from directors.
+                  </Text>
+                </View>
+              );
             }
-            if (!parsed || (Array.isArray(parsed) && parsed.length === 0) || (typeof parsed === 'string' && !parsed.trim())) {
-              parsed = activeTrack?.notes || (activeTrack as any)?.coordinatorComment;
-              if (typeof parsed === 'string') {
-                try { parsed = JSON.parse(parsed); } catch (e) {}
+
+            if (typeof raw === 'string') {
+              const trimmed = raw.trim();
+              if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                try {
+                  raw = JSON.parse(trimmed);
+                } catch {}
               }
             }
-            
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              return parsed.map((comment: any, index: number) => (
-                <View key={index} style={{ marginBottom: 24 }}>
-                  <Text style={[styles.fullTextLine, { color: theme.colors.textMuted, marginBottom: 8 }]}>{comment.author || 'comment'}:</Text>
-                  <RenderHtml
-                    contentWidth={windowWidth - 48}
-                    source={{ html: parseMarkdown(comment.text || comment.comment || '') }}
-                    baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
-                    tagsStyles={{ p: { marginBottom: 20 }, strong: { color: theme.colors.accent, fontWeight: '800' }, b: { color: theme.colors.accent, fontWeight: '800' } }}
-                  />
-                </View>
-              ));
-            } else if (parsed && typeof parsed === 'object' && parsed.text) {
-              return (
-                <View style={{ marginBottom: 24 }}>
-                  <Text style={[styles.fullTextLine, { color: theme.colors.textMuted, marginBottom: 8 }]}>{parsed.author || 'Director Comment'}:</Text>
-                  <RenderHtml
-                    contentWidth={windowWidth - 48}
-                    source={{ html: parseMarkdown(parsed.text) }}
-                    baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
-                    tagsStyles={{ p: { marginBottom: 20 }, strong: { color: theme.colors.accent, fontWeight: '800' }, b: { color: theme.colors.accent, fontWeight: '800' } }}
-                  />
-                </View>
-              );
-            } else if (typeof parsed === 'string' && parsed.trim().length > 0) {
-              return (
-                <RenderHtml
-                  contentWidth={windowWidth - 48}
-                  source={{ html: parseMarkdown(parsed) }}
-                  baseStyle={{ ...theme.typography.htmlBase, fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier }}
-                  tagsStyles={{ p: { marginBottom: 20 }, strong: { color: theme.colors.accent, fontWeight: '800' }, b: { color: theme.colors.accent, fontWeight: '800' } }}
-                />
-              );
+
+            let htmlContent = '';
+            if (Array.isArray(raw)) {
+              if (raw.length === 0) {
+                return (
+                  <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+                    <Ionicons name="chatbubbles-outline" size={64} color="rgba(255,255,255,0.2)" style={{ marginBottom: 16 }} />
+                    <Text style={[styles.fullTextLine, { textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 18 }]}>
+                      No comments from directors.
+                    </Text>
+                  </View>
+                );
+              }
+              htmlContent = raw.map((c: any) => {
+                const author = typeof c === 'object' && c?.author ? `<strong style="font-size: 16px; color: ${theme.colors.accent}">${c.author}:</strong><br/>` : '';
+                const text = typeof c === 'string' ? c : (c?.text || c?.comment || c?.content || '');
+                return `${author}${formatLyricsHtml(text)}`;
+              }).join('<br/><br/><hr style="opacity: 0.15; margin: 16px 0;" /><br/>');
+            } else if (typeof raw === 'object' && raw !== null) {
+              const author = raw.author ? `<strong style="font-size: 16px; color: ${theme.colors.accent}">${raw.author}:</strong><br/>` : '';
+              const text = raw.text || raw.comment || raw.content || '';
+              htmlContent = `${author}${formatLyricsHtml(text)}`;
             } else {
+              htmlContent = formatLyricsHtml(String(raw));
+            }
+
+            if (!htmlContent.trim()) {
               return (
-                <View style={{ marginBottom: 24 }}>
-                  <Text style={[styles.fullTextLine, { color: theme.colors.textMuted }]}>No comments from directors.</Text>
+                <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+                  <Ionicons name="chatbubbles-outline" size={64} color="rgba(255,255,255,0.2)" style={{ marginBottom: 16 }} />
+                  <Text style={[styles.fullTextLine, { textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 18 }]}>
+                    No comments from directors.
+                  </Text>
                 </View>
               );
             }
+
+            return (
+              <RenderHtml
+                contentWidth={windowWidth - 48}
+                source={{ html: htmlContent }}
+                baseStyle={{
+                  ...theme.typography.htmlBase,
+                  fontSize: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier,
+                  lineHeight: (theme.typography.htmlBase.fontSize || 15) + fontSizeModifier + 8,
+                }}
+                tagsStyles={{
+                  p: { marginBottom: 16 },
+                  div: { marginBottom: 12 },
+                  strong: { color: theme.colors.accent, fontWeight: '800' },
+                  b: { color: theme.colors.accent, fontWeight: '800' },
+                  h1: { fontSize: 24, marginBottom: 12, fontWeight: '800' },
+                  h2: { fontSize: 20, marginBottom: 10, fontWeight: '700' },
+                  h3: { fontSize: 17, marginBottom: 8, fontWeight: '700' },
+                  ul: { marginBottom: 12, paddingLeft: 16 },
+                  ol: { marginBottom: 12, paddingLeft: 16 },
+                  li: { marginBottom: 6 },
+                  hr: { borderColor: theme.colors.cardBackgroundLight, marginVertical: 16 },
+                }}
+              />
+            );
           })()}
         </ScrollView>
 
