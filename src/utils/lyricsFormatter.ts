@@ -41,7 +41,8 @@ export function formatLyricsHtml(raw: any): string {
       '$1<strong>$2</strong><br>$4'
     )
     .replace(/\*{4,}/g, '**')
-    .replace(/(\*\*[^\n*]+\*\*)[ \t]+([A-Za-z0-9])/g, '$1\n$2');
+    // Only break glued headers when the bold tag starts a line:
+    .replace(/(^|\n)[ \t]*(\*\*[^\n*]+\*\*)[ \t]+([A-Za-z0-9"“'‘])/g, '$1$2\n$3');
 
   // 3. Convert markdown bold and italic markers, keeping spaces outside delimiters
   // Restrict bold to single line boundaries so bold never swallows subsequent verses
@@ -59,29 +60,23 @@ export function formatLyricsHtml(raw: any): string {
       return core ? `${leading}<strong>${core}</strong>${trailing}` : p1;
     });
 
-  // 4. Guarantee spaces adjacent to bold/strong tags are not collapsed by react-native-render-html
+  // 4. Guarantee horizontal spaces adjacent to bold/strong tags are not collapsed by react-native-render-html
+  // NOTE: Must match [ \t]+ only, NEVER \s+ so we don't eat newlines after bold headers!
   str = str
-    .replace(/<\/b>(\s+)/gi, '</b>&nbsp;')
-    .replace(/<\/strong>(\s+)/gi, '</strong>&nbsp;')
-    .replace(/(\s+)<b(\s|>)/gi, '&nbsp;<b$2')
-    .replace(/(\s+)<strong(\s|>)/gi, '&nbsp;<strong$2');
+    .replace(/<\/b>[ \t]+/gi, '</b>&nbsp;')
+    .replace(/<\/strong>[ \t]+/gi, '</strong>&nbsp;')
+    .replace(/[ \t]+<b(\s|>)/gi, '&nbsp;<b$1')
+    .replace(/[ \t]+<strong(\s|>)/gi, '&nbsp;<strong$1');
 
   // 5. Normalize CRLF to LF
   str = str.replace(/\r\n/g, '\n');
 
-  // 6. Preserve line breaks
-  if (/<(div|p|br|strong|b)[^>]*>/i.test(str)) {
-    // Has HTML structure: preserve HTML and turn any loose raw newlines into <br>
-    str = str
-      .replace(/(<\/div>|<\/p>|<br\s*\/?>)\s*\n/gi, '$1')
-      .replace(/\n\s*(<div|<p)/gi, '$1')
-      .replace(/\n/g, '<br>');
-  } else {
-    // Pure plain text: replace double newlines with paragraph break and single with <br>
-    str = str
-      .replace(/\n\s*\n/g, '<br><br>')
-      .replace(/\n/g, '<br>');
-  }
+  // 6. Preserve line breaks and paragraph gaps
+  str = str
+    .replace(/(<\/div>|<\/p>|<br\s*\/?>)[ \t]*\n/gi, '$1')
+    .replace(/\n[ \t]*(<div|<p)/gi, '$1')
+    .replace(/\n\s*\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
 
   return str;
 }
