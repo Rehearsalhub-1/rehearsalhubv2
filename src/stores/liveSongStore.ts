@@ -84,6 +84,55 @@ export function isSongExplicitlyOff(s: any): boolean {
   return false;
 }
 
+function getCurrentUserContext() {
+  try {
+    const { useUserStore } = require('../hooks/useUser');
+    const state = useUserStore.getState();
+    const zoneId = state.currentZone?.id || state.profile?.zoneId || null;
+    const churchId = state.currentChurch?.id || null;
+    const isHQ = Boolean(state.isHQ);
+    return { zoneId, churchId, isHQ };
+  } catch {
+    return { zoneId: null, churchId: null, isHQ: false };
+  }
+}
+
+function isSongForUserZone(
+  song: any,
+  userCtx: { zoneId: string | null; churchId: string | null; isHQ: boolean }
+): boolean {
+  if (userCtx.isHQ) return true;
+  if (!song || typeof song !== 'object') return false;
+
+  const songZone = song.organizationId || song.zoneId || song.audioUrls?._liveZoneId || null;
+  const songChurch = song.groupId || song.subGroupId || song.audioUrls?._liveGroupId || null;
+
+  // HQ global broadcast
+  if (song.scope === 'global' || songZone === 'all' || songZone === 'global') {
+    return true;
+  }
+
+  // If user has a selected zone and song has a target zone, enforce strict equality
+  if (userCtx.zoneId && songZone) {
+    const normSong = String(songZone).trim().toLowerCase();
+    const normUser = String(userCtx.zoneId).trim().toLowerCase();
+    if (normSong !== normUser && normSong !== 'all' && normSong !== 'global') {
+      return false;
+    }
+  }
+
+  // If user has a selected church and song has a target church, enforce strict equality
+  if (userCtx.churchId && songChurch) {
+    const normSongChurch = String(songChurch).trim().toLowerCase();
+    const normUserChurch = String(userCtx.churchId).trim().toLowerCase();
+    if (normSongChurch !== normUserChurch) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   activeSongs: [],
   isLoading: false,
@@ -119,14 +168,23 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
     const songId = String(update.id || update._id || '');
     if (!songId) return;
 
+    // 0. Verify Zonal & Church Isolation
+    const userCtx = getCurrentUserContext();
+    const existingIndex = get().activeSongs.findIndex(s => String(s.id) === songId);
+
+    if (!isSongForUserZone(update, userCtx)) {
+      // Incoming song belongs to a different zone: drop and remove if previously active
+      if (existingIndex >= 0) {
+        get().removeSong(songId);
+      }
+      return;
+    }
+
     // 1. Check if song is explicitly deleted or removed
     if (update.deleted || update.isDeleted || update._action === 'removed') {
       get().removeSong(songId);
       return;
     }
-
-    const currentLiveSongs = get().activeSongs;
-    const existingIndex = currentLiveSongs.findIndex(s => String(s.id) === songId);
 
     // 2. Check if this update explicitly turns off live status or sets status to non-live
     const statusStr = update.status !== undefined && update.status !== null ? String(update.status).toLowerCase().trim() : '';
@@ -207,9 +265,12 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
   fetchActiveSongs: async (zoneId?: string) => {
     try {
       set({ isLoading: true });
+      const userCtx = getCurrentUserContext();
+      const targetZone = zoneId || userCtx.zoneId;
+
       let rawData: any[] = [];
-      if (zoneId) {
-        const scopedRes = await api.songs.getActiveSongs(zoneId).catch(() => null);
+      if (targetZone) {
+        const scopedRes = await api.songs.getActiveSongs(targetZone).catch(() => null);
         if (scopedRes?.success && Array.isArray(scopedRes.data)) {
           rawData = scopedRes.data;
         }
@@ -229,6 +290,9 @@ export const useLiveSongStore = create<LiveSongStore>((set, get) => ({
 
         if (seenIds.has(idStr)) continue;
         seenIds.add(idStr);
+
+        // Defensive check: ensure song belongs to current user's zone
+        if (!isSongForUserZone(s, userCtx)) continue;
 
         if (!isSongExplicitlyOff(s) && isLiveSong(s)) {
           const resolvedAudioUrl = resolveSongAudioUrl(s);
