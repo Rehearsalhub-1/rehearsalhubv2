@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RenderHtml from 'react-native-render-html';
 import { ExpandableText } from './ExpandableText';
@@ -16,6 +16,7 @@ export interface PlayerPreviewContentProps {
   navigation: any;
   theme: any;
   isTablet?: boolean;
+  isFetching?: boolean;
 }
 
 export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
@@ -30,6 +31,7 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
   navigation,
   theme,
   isTablet: propIsTablet,
+  isFetching = false,
 }) => {
   if (!activeTrack) return null;
 
@@ -96,18 +98,35 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: theme.colors.textSecondary,
-                fontSize: 11,
-                fontWeight: '800',
-                marginBottom: 8,
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-              }}
-            >
-              Lyrics preview
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Text
+                style={{
+                  color: theme.colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1,
+                }}
+              >
+                Lyrics preview
+              </Text>
+              {isFetching && (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 10,
+                }}>
+                  <ActivityIndicator size={10} color={theme.colors.accent} />
+                  <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+                    Syncing...
+                  </Text>
+                </View>
+              )}
+            </View>
             {lyricsHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
@@ -121,6 +140,13 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                   tagsStyles={tagsStyles}
                 />
               </ScrollView>
+            ) : isFetching ? (
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}>
+                <ActivityIndicator size="small" color={theme.colors.accent} />
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
+                  Connecting...
+                </Text>
+              </View>
             ) : (
               <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
@@ -157,18 +183,35 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: theme.colors.textSecondary,
-                fontSize: 11,
-                fontWeight: '800',
-                marginBottom: 8,
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-              }}
-            >
-              Conductor preview
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Text
+                style={{
+                  color: theme.colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1,
+                }}
+              >
+                Conductor preview
+              </Text>
+              {isFetching && (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 10,
+                }}>
+                  <ActivityIndicator size={10} color={theme.colors.accent} />
+                  <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+                    Syncing...
+                  </Text>
+                </View>
+              )}
+            </View>
             {conductorHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
@@ -182,6 +225,13 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                   tagsStyles={tagsStyles}
                 />
               </ScrollView>
+            ) : isFetching ? (
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}>
+                <ActivityIndicator size="small" color={theme.colors.accent} />
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
+                  Connecting...
+                </Text>
+              </View>
             ) : (
               <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>
@@ -218,18 +268,35 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text
-              style={{
-                color: theme.colors.textSecondary,
-                fontSize: 11,
-                fontWeight: '800',
-                marginBottom: 8,
-                textTransform: 'uppercase',
-                letterSpacing: 1,
-              }}
-            >
-              Solfa preview
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Text
+                style={{
+                  color: theme.colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: '800',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1,
+                }}
+              >
+                Solfa preview
+              </Text>
+              {isFetching && (
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 10,
+                }}>
+                  <ActivityIndicator size={10} color={theme.colors.accent} />
+                  <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+                    Syncing...
+                  </Text>
+                </View>
+              )}
+            </View>
             {solfaHtmlSource ? (
               <ScrollView
                 nestedScrollEnabled
@@ -243,6 +310,13 @@ export const PlayerPreviewContent: React.FC<PlayerPreviewContentProps> = ({
                   tagsStyles={tagsStyles}
                 />
               </ScrollView>
+            ) : isFetching ? (
+              <View style={{ minHeight: emptyMinHeight, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}>
+                <ActivityIndicator size="small" color={theme.colors.accent} />
+                <Text style={{ color: theme.colors.textSecondary, fontSize: 12, fontWeight: '600', letterSpacing: 0.3 }}>
+                  Connecting...
+                </Text>
+              </View>
             ) : (
               <View style={{ minHeight: emptyMinHeight, justifyContent: 'center' }}>
                 <Text style={{ color: theme.colors.textMuted, fontStyle: 'italic', fontSize: 13 }}>

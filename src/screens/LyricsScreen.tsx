@@ -9,6 +9,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -37,6 +38,7 @@ export default function LyricsScreen({ route, navigation }: any) {
   const { activeTrack: initialTrack, bgColor = '#825a1e' } = route.params || {};
   const paramTrack = route.params?.activeTrack;
   const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack);
+  const [isFetchingLyrics, setIsFetchingLyrics] = useState(!activeTrack?.lyrics);
   const [fontSizeModifier, setFontSizeModifier] = useState(0);
   const [isTitleExpanded, setIsTitleExpanded] = useState(false);
 
@@ -104,23 +106,26 @@ export default function LyricsScreen({ route, navigation }: any) {
     }
   }, [currentTrack]);
 
-  // If lyrics missing on active track, fetch full song details
+  // Background-resync song details to check for fresh lyrics/updates
   useEffect(() => {
-    if (activeTrack?.id && !activeTrack?.lyrics) {
-      api.songs
-        .getById(activeTrack.id)
-        .then((res: any) => {
-          const songData = res?.data || res;
-          if (songData?.lyrics) {
-            setActiveTrack((prev: any) => ({
-              ...prev,
-              ...songData,
-              lyrics: songData.lyrics,
-            }));
-          }
-        })
-        .catch(() => {});
-    }
+    if (!activeTrack?.id) return;
+    setIsFetchingLyrics(true);
+    api.songs
+      .getById(activeTrack.id)
+      .then((res: any) => {
+        const songData = res?.data || res;
+        if (songData?.lyrics) {
+          setActiveTrack((prev: any) => ({
+            ...prev,
+            ...songData,
+            lyrics: songData.lyrics,
+          }));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setIsFetchingLyrics(false);
+      });
   }, [activeTrack?.id]);
 
   useEffect(() => {
@@ -260,6 +265,14 @@ export default function LyricsScreen({ route, navigation }: any) {
             >
               {activeTrack?.title || 'Lyrics'}
             </Text>
+            {isFetchingLyrics && Boolean(activeTrack?.lyrics) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+                <ActivityIndicator size={10} color={theme.colors.accent} />
+                <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
+                  Syncing updates...
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
 
@@ -301,14 +314,21 @@ export default function LyricsScreen({ route, navigation }: any) {
                   h2: { fontSize: 22, marginBottom: 16, fontWeight: '700' }
                 }}
               />
+            ) : isFetchingLyrics ? (
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 10 }}>
+                <ActivityIndicator size="small" color={theme.colors.accent} />
+                <Text style={{ color: isLight ? '#64748b' : 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>
+                  Connecting...
+                </Text>
+              </View>
             ) : (
-            <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
-              <Ionicons name="document-text-outline" size={64} color="rgba(255,255,255,0.2)" style={{ marginBottom: 16 }} />
-              <Text style={[styles.fullLyricsLine, { textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 20 }]}>
-                No lyrics have been added for this song yet.
-              </Text>
-            </View>
-          );
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+                <Ionicons name="document-text-outline" size={64} color="rgba(255,255,255,0.2)" style={{ marginBottom: 16 }} />
+                <Text style={[styles.fullLyricsLine, { textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: 20 }]}>
+                  No lyrics have been added for this song yet.
+                </Text>
+              </View>
+            );
           })()}
         </ScrollView>
 

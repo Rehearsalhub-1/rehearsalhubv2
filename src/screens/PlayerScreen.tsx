@@ -127,6 +127,7 @@ export default function PlayerScreen({ route, navigation }: any) {
 
   const paramTrack = route.params?.activeTrack;
   const [activeTrack, setActiveTrack] = useState(paramTrack || initialTrack || fallbackTrack);
+  const [isHydratingSong, setIsHydratingSong] = useState(false);
   const lastPlayedTrackIdRef = useRef<string | null>(null);
   const lastPlayedAudioUrlRef = useRef<string>('');
 
@@ -185,21 +186,14 @@ export default function PlayerScreen({ route, navigation }: any) {
   useEffect(() => {
     if (!activeTrack?.id) return;
 
-    const alreadyComplete = Boolean(
-      activeTrack.lyrics &&
-      (activeTrack.solfa || activeTrack.conductorGuide) &&
-      activeTrack.audioUrl
-    );
-    if (alreadyComplete) {
-      // Still write to per-song cache so offline access works later
-      AsyncStorage.setItem(
-        `song_cache_${activeTrack.id}`,
-        JSON.stringify({ ...activeTrack, _cachedAt: Date.now() })
-      ).catch(() => {});
-      return;
-    }
-
     let active = true;
+    setIsHydratingSong(true);
+
+    // Save current active track to offline cache immediately
+    AsyncStorage.setItem(
+      `song_cache_${activeTrack.id}`,
+      JSON.stringify({ ...activeTrack, _cachedAt: Date.now() })
+    ).catch(() => {});
 
     // Try per-song offline cache first — works with no network
     AsyncStorage.getItem(`song_cache_${activeTrack.id}`).then(raw => {
@@ -250,6 +244,10 @@ export default function PlayerScreen({ route, navigation }: any) {
       }
     }).catch(err => {
       console.warn('[PlayerScreen] Failed to hydrate song (offline?):', err);
+    }).finally(() => {
+      if (active) {
+        setIsHydratingSong(false);
+      }
     });
 
     return () => {
@@ -1296,6 +1294,7 @@ export default function PlayerScreen({ route, navigation }: any) {
 
               {/* Tab content: Lyrics / Conductor / Solfa / History / Comments / Details */}
               <PlayerPreviewContent
+                isFetching={isHydratingSong}
                 activePreviewTab={activePreviewTab}
                 activeTrack={activeTrack}
                 songHistorySummary={songHistorySummary}
