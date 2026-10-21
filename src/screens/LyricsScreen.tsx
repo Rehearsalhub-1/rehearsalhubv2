@@ -266,10 +266,10 @@ export default function LyricsScreen({ route, navigation }: any) {
               {activeTrack?.title || 'Lyrics'}
             </Text>
             {isFetchingLyrics && Boolean(activeTrack?.lyrics) && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4, backgroundColor: 'rgba(139, 92, 246, 0.15)', paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 10 }}>
                 <ActivityIndicator size={10} color={theme.colors.accent} />
                 <Text style={{ color: theme.colors.accent, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 }}>
-                  Syncing updates...
+                  Connecting...
                 </Text>
               </View>
             )}
@@ -315,7 +315,7 @@ export default function LyricsScreen({ route, navigation }: any) {
                 }}
               />
             ) : isFetchingLyrics ? (
-              <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 10 }}>
+              <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 80, flexDirection: 'row', gap: 8 }}>
                 <ActivityIndicator size="small" color={theme.colors.accent} />
                 <Text style={{ color: isLight ? '#64748b' : 'rgba(255,255,255,0.7)', fontSize: 13, fontWeight: '600', letterSpacing: 0.3 }}>
                   Connecting...

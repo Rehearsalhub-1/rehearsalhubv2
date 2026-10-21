@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { StyleSheet, View, Text, Animated, TouchableOpacity, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, Animated, TouchableOpacity, useWindowDimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useEventListener } from 'expo';
@@ -13,13 +13,13 @@ interface AnimatedSplashScreenProps {
 }
 
 const SPLASH_VIDEO = require('../../assets/splash_new.mp4');
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('screen');
 
 export default function AnimatedSplashScreen({
   isAppReady = true,
   onAnimationFinish,
   onFirstFrame,
 }: AnimatedSplashScreenProps) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [isMuted, setIsMuted] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
@@ -174,14 +174,14 @@ export default function AnimatedSplashScreen({
   };
 
   return (
-    <Animated.View style={[styles.container, { opacity: exitOpacity }]}>
+    <Animated.View style={[styles.container, { width: windowWidth, height: windowHeight, opacity: exitOpacity }]}>
       <StatusBar hidden={true} />
 
       {/* Video Layer (Plays splash_new.mp4 directly in full screen) */}
       {!videoFailed && (
-        <View style={styles.videoLayer}>
+        <View style={[styles.videoLayer, { width: windowWidth, height: windowHeight }]}>
           <VideoView
-            style={styles.videoView}
+            style={[styles.videoView, { width: windowWidth, height: windowHeight }]}
             player={player}
             contentFit="cover"
             nativeControls={false}
@@ -198,7 +198,7 @@ export default function AnimatedSplashScreen({
 
       {/* Top Right Skip Button */}
       <TouchableOpacity
-        style={styles.skipButton}
+        style={[styles.skipButton, { top: Math.max(Platform.OS === 'ios' ? 56 : 40, 40) }]}
         onPress={handleSkip}
         activeOpacity={0.7}
       >
@@ -209,7 +209,7 @@ export default function AnimatedSplashScreen({
       {/* Bottom Right Mute/Unmute Button */}
       {videoStarted && !videoFailed && (
         <TouchableOpacity
-          style={styles.muteButton}
+          style={[styles.muteButton, { bottom: Math.max(Platform.OS === 'ios' ? 50 : 36, 36) }]}
           onPress={() => setIsMuted((prev) => !prev)}
           activeOpacity={0.7}
         >
@@ -226,24 +226,17 @@ export default function AnimatedSplashScreen({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000000',
     zIndex: 9999,
   },
   videoLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
   },
   videoView: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    width: '100%',
+    height: '100%',
   },
   skipButton: {
     position: 'absolute',

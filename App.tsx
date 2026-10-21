@@ -213,9 +213,20 @@ function AppContent({ initialRoute, splashFinished }: { initialRoute: 'Login' | 
   );
 }
 
+// Persist splash finish state across remounts within the same session (e.g. window resize, orientation change)
+let globalSplashFinished = false;
+
+if (typeof window !== 'undefined' && window.sessionStorage) {
+  try {
+    if (window.sessionStorage.getItem('rehearsalhub_splash_finished') === 'true') {
+      globalSplashFinished = true;
+    }
+  } catch {}
+}
+
 function App() {
   const [appIsReady, setAppIsReady] = useState(false);
-  const [animationFinished, setAnimationFinished] = useState(false);
+  const [animationFinished, setAnimationFinished] = useState(() => globalSplashFinished);
   const [initialRoute, setInitialRoute] = useState<'Login' | 'Home' | null>(null);
   const hasHiddenNativeSplash = useRef(false);
 
@@ -224,6 +235,17 @@ function App() {
     hasHiddenNativeSplash.current = true;
     SplashScreen.hideAsync().catch(() => {});
   }, []);
+
+  const handleAnimationFinish = useCallback(() => {
+    globalSplashFinished = true;
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem('rehearsalhub_splash_finished', 'true');
+      } catch {}
+    }
+    hideNativeSplash();
+    setAnimationFinished(true);
+  }, [hideNativeSplash]);
 
   // Safety fallback: if firstFrameRender doesn't fire within 2.5s (e.g. slow device), hide native splash
   useEffect(() => {
@@ -269,7 +291,7 @@ function App() {
 
   // Run non-critical background maintenance ONLY after splash animation has fully finished
   useEffect(() => {
-    if (!animationFinished) return;
+    if (!animationFinished && !globalSplashFinished) return;
     flushDebugSessionLogs().catch(() => {});
     ensureCacheSchema().catch(() => {});
   }, [animationFinished]);
@@ -279,21 +301,18 @@ function App() {
       <ThemeProvider>
         {/* Render AppContent only when ready; show branded backdrop while bootstrapping */}
         {appIsReady && initialRoute ? (
-          <AppContent initialRoute={initialRoute} splashFinished={animationFinished} />
+          <AppContent initialRoute={initialRoute} splashFinished={animationFinished || globalSplashFinished} />
         ) : (
           <View style={{ flex: 1, backgroundColor: '#070a12' }} />
         )}
 
-        {/* Overlay the Splash Screen on top until it finishes */}
-        {!animationFinished && (
+        {/* Overlay the Splash Screen on top until it finishes (plays only once per session) */}
+        {!animationFinished && !globalSplashFinished && (
           <View style={[StyleSheet.absoluteFill, { zIndex: 9999, width: '100%', height: '100%' }]}>
             <AnimatedSplashScreen 
               isAppReady={appIsReady && Boolean(initialRoute)}
               onFirstFrame={hideNativeSplash}
-              onAnimationFinish={() => {
-                hideNativeSplash();
-                setAnimationFinished(true);
-              }} 
+              onAnimationFinish={handleAnimationFinish} 
             />
           </View>
         )}
