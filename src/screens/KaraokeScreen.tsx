@@ -168,7 +168,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
   const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
   const [lyricsMode, setLyricsMode] = useState<'auto' | 'manual'>('auto');
-  const lyricsScrollRef = useRef<ScrollView>(null);
+  const lyricsScrollRef = useRef<any>(null);
   const lineHeightsRef = useRef<number[]>([]);
   const { isPlaying, isLoading: isTrackPlayerBuffering, play: tpPlay, pause: tpPause, abLoop, setLoopPointA, setLoopPointB, clearABLoop, toggleABLoop, playbackRate, setPlaybackRate } = useTrackPlayer();
   const [isRecording, setIsRecording] = useState(false);
@@ -1348,7 +1348,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                   <ActivityIndicator size="small" color={T.accent} />
                   <Text style={{ color: T.textMuted, fontSize: 12 }}>Searching all songs…</Text>
                 </View>
-              ) : null}
+              ) : undefined}
               ListFooterComponent={
                 loadingMore ? (
                   <ActivityIndicator color={T.accent} style={{ marginVertical: 20 }} />
@@ -1360,7 +1360,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                     <Ionicons name="chevron-down-circle-outline" size={20} color={T.accent} />
                     <Text style={styles.loadMoreText}>LOAD MORE ({library.length} loaded)</Text>
                   </TouchableOpacity>
-                ) : null
+                ) : undefined
               }
               renderItem={({ item, index }) => (
                 <TouchableOpacity style={styles.libraryRow} onPress={() => handleSelectSong(item)}>
@@ -1383,7 +1383,7 @@ export default function KaraokeScreen({ route, navigation }: any) {
                     <Ionicons name="musical-notes-outline" size={40} color={theme.colors.textMuted} />
                     <Text style={styles.emptyLibraryText}>{searchQuery.trim() ? 'No results found' : 'Library Empty'}</Text>
                   </View>
-                ) : null
+                ) : undefined
               }
             />
           </View>

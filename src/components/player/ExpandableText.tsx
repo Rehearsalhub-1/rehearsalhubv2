@@ -9,6 +9,8 @@ export interface ExpandableTextProps {
   gradientColors?: readonly [string, string, ...string[]];
 }
 
+const MaskedViewAny: any = MaskedView;
+
 export const ExpandableText: React.FC<ExpandableTextProps> = ({
   style,
   children,
@@ -30,7 +32,7 @@ export const ExpandableText: React.FC<ExpandableTextProps> = ({
 
   if (gradientColors && gradientColors.length > 0) {
     return (
-      <MaskedView maskElement={textElement} style={style}>
+      <MaskedViewAny maskElement={textElement} style={style}>
         <LinearGradient
           colors={gradientColors}
           start={{ x: 0, y: 0 }}
@@ -40,7 +42,7 @@ export const ExpandableText: React.FC<ExpandableTextProps> = ({
         <Text style={[style, { opacity: 0 }]} {...textProps}>
           {children}
         </Text>
-      </MaskedView>
+      </MaskedViewAny>
     );
   }
 

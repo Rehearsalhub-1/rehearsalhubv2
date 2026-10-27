@@ -71,7 +71,7 @@ export default function SearchScreen({ navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFilter, setSearchFilter] = useState<'all' | 'comments'>('all');
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<any>(null);
 
   const [songs, setSongs] = useState<any[]>([]);
 

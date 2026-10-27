@@ -519,7 +519,7 @@ export default function NewChatScreen({ route, navigation }: any) {
                 <Text style={styles.loadMoreText}>Load more ({filteredAll.length - visibleCount} remaining)</Text>
                 <Ionicons name="chevron-down" size={16} color={T.accent} />
               </TouchableOpacity>
-            ) : null}
+            ) : undefined}
           />
         )}
 

@@ -667,7 +667,7 @@ export default function PlaylistsScreen({ navigation, route }: any) {
                 </View>
               </LinearGradient>
             </TouchableOpacity>
-          ) : null
+          ) : undefined
         }
         renderItem={({ item: pl }) => (
           <TouchableOpacity

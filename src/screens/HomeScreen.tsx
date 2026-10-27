@@ -414,7 +414,7 @@ export default function HomeScreen({ navigation }: any) {
               <BlurView intensity={30} tint="light" style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
                 <Pressable
                 onPress={navigateToSearch}
-                android_ripple={null}
+                android_ripple={undefined}
                 style={[styles.searchContainer, { backgroundColor: 'transparent', borderWidth: 0 }]}>
                 
                   <Ionicons name="search" size={16} color={theme.colors.textMuted} style={styles.searchIcon} />

@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import Swipeable from 'react-native-gesture-handler/Swipeable';
+import Swipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import Reanimated, { useAnimatedStyle, interpolate } from 'react-native-reanimated';
 import { SyncAvatar } from '../SyncAvatar';
 import { resolveMediaUrl } from '../../lib/mediaUtils';
 import CustomLinkPreview from './CustomLinkPreview';
@@ -48,7 +49,7 @@ export interface ChatMessageBubbleProps {
   waveformData: Record<string, number[]>;
   navigation: any;
   room: any;
-  swipeRefs: React.MutableRefObject<Record<string, Swipeable | null>>;
+  swipeRefs: React.MutableRefObject<Record<string, any>>;
   flashRef: React.MutableRefObject<any>;
   toggleSelectMessage: (id: string) => void;
   setSelectedMsg: (msg: ChatMessage) => void;
@@ -78,21 +79,27 @@ const ReplyPreview = ({
   onPress?: () => void;
   styles: any;
   APP_THEME: any;
-}) => (
-  <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.quoteBox}>
-    <Text style={[styles.quoteName, { color: APP_THEME.primaryAccent }]}>{replyTo.senderName}</Text>
-    {replyTo.imageUrl ? (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Image source={{ uri: replyTo.imageUrl }} style={{ width: 36, height: 36, borderRadius: 4 }} contentFit="cover" />
-        <Text style={[styles.quoteText, { color: APP_THEME.secondaryText }]}>📷 Photo</Text>
-      </View>
-    ) : (
-      <Text style={[styles.quoteText, { color: APP_THEME.secondaryText }]} numberOfLines={2}>
-        {replyTo.text || '🎤 Voice note'}
-      </Text>
-    )}
-  </TouchableOpacity>
-);
+}) => {
+  const replyObj: any = typeof replyTo === 'object' && replyTo !== null ? replyTo : { id: String(replyTo) };
+  const senderTitle = replyObj.senderName || 'Participant';
+  const displayText = replyObj.text || (replyObj.type === 'voice' ? '🎤 Voice note' : (replyObj.imageUrl ? '📷 Photo' : 'Message'));
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.quoteBox}>
+      <Text style={[styles.quoteName, { color: APP_THEME.primaryAccent }]}>{senderTitle}</Text>
+      {replyObj.imageUrl ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Image source={{ uri: replyObj.imageUrl }} style={{ width: 36, height: 36, borderRadius: 4 }} contentFit="cover" />
+          <Text style={[styles.quoteText, { color: APP_THEME.secondaryText }]}>{replyObj.text || '📷 Photo'}</Text>
+        </View>
+      ) : (
+        <Text style={[styles.quoteText, { color: APP_THEME.secondaryText }]} numberOfLines={2}>
+          {displayText}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
+};
 
 function ChatMessageBubble({
   msg,
@@ -332,6 +339,37 @@ function ChatMessageBubble({
     );
   };
 
+function LeftReplyAction({ progress, theme }: { progress: any; theme: any }) {
+  const animStyle = useAnimatedStyle(() => {
+    const p = progress?.value ?? 0;
+    const opacity = interpolate(p, [0, 0.15, 1], [0, 1, 1]);
+    const scale = interpolate(p, [0, 0.5, 1], [0.3, 0.8, 1]);
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
+  });
+
+  return (
+    <View style={{ justifyContent: 'center', alignItems: 'center', width: 50 }}>
+      <Reanimated.View style={animStyle}>
+        <View
+          style={{
+            backgroundColor: 'rgba(0,0,0,0.25)',
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <Ionicons name="arrow-undo" size={18} color={theme.colors.textPrimary} />
+        </View>
+      </Reanimated.View>
+    </View>
+  );
+}
+
   return (
     <View style={{ transform: [{ scaleY: -1 }] }}>
       {showDate && (
@@ -342,37 +380,16 @@ function ChatMessageBubble({
         </View>
       )}
       <Swipeable
-        ref={(ref) => {
+        ref={(ref: any) => {
           swipeRefs.current[msg.id] = ref;
         }}
         onSwipeableWillOpen={() => {
           setReplyingTo(msg);
           swipeRefs.current[msg.id]?.close();
         }}
-        renderLeftActions={(progress, dragX) => {
-          const trans = dragX.interpolate({
-            inputRange: [0, 50, 100, 101],
-            outputRange: [-20, 0, 0, 1],
-          });
-          return (
-            <View style={{ justifyContent: 'center', alignItems: 'center', width: 60 }}>
-              <Animated.View style={{ transform: [{ translateX: trans }] }}>
-                <View
-                  style={{
-                    backgroundColor: 'rgba(0,0,0,0.2)',
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Ionicons name="arrow-undo" size={20} color={theme.colors.textPrimary} />
-                </View>
-              </Animated.View>
-            </View>
-          );
-        }}
+        renderLeftActions={(progress: any) => (
+          <LeftReplyAction progress={progress} theme={theme} />
+        )}
         friction={2}
         leftThreshold={40}
       >
@@ -487,7 +504,7 @@ function ChatMessageBubble({
                   styles={styles}
                   APP_THEME={APP_THEME}
                   onPress={() => {
-                    const replyTargetId = msg.replyTo?.id;
+                    const replyTargetId = typeof msg.replyTo === 'object' && msg.replyTo !== null ? msg.replyTo.id : (typeof msg.replyTo === 'string' ? msg.replyTo : undefined);
                     if (!replyTargetId) return;
                     const idx = memoizedMessages.findIndex((m) => m.id === replyTargetId);
                     if (idx !== -1) {

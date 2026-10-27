@@ -311,7 +311,7 @@ export default function CreateGroupScreen({ navigation }: any) {
                   <Text style={styles.loadMoreText}>Load more ({filtered.length - visibleCount} remaining)</Text>
                   <Ionicons name="chevron-down" size={16} color={T.accent} />
                 </TouchableOpacity>
-              ) : null}
+              ) : undefined}
             />
           )}
         </SafeAreaView>

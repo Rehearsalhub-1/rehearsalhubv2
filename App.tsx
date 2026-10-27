@@ -261,7 +261,7 @@ function App() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', nextState => {
       if (
-        appState.current.match(/inactive|background/) &&
+        appState.current?.match(/inactive|background/) &&
         nextState === 'active'
       ) {
         // App came from background — restore state if needed without aborting splash prematurely

@@ -12,7 +12,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { Swipeable } from 'react-native-gesture-handler';
 import { DoodleBackground } from '../components/DoodleBackground';
 
 import { Image } from 'expo-image';
@@ -81,6 +80,68 @@ import ChatInputDeck from '../components/chat/ChatInputDeck';
 import ChatHeaderBar from '../components/chat/ChatHeaderBar';
 import ChatMessageBubble from '../components/chat/ChatMessageBubble';
 
+function parseReplyTo(rawReply: any): NonNullable<ChatMessage['replyTo']> | null {
+  if (!rawReply) return null;
+  if (typeof rawReply === 'object' && rawReply !== null) {
+    return {
+      id: rawReply.id || rawReply.messageId || rawReply.message_id || '',
+      text: rawReply.text || rawReply.content || (rawReply.type === 'voice' ? '🎤 Voice note' : (rawReply.imageUrl ? '📷 Photo' : 'Message')),
+      senderName: rawReply.senderName || rawReply.sender_name || rawReply.sender || 'Participant',
+      type: rawReply.type || 'text',
+      imageUrl: rawReply.imageUrl || rawReply.image_url || undefined,
+    };
+  }
+  if (typeof rawReply === 'string') {
+    if (rawReply.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawReply);
+        return {
+          id: parsed.id || parsed.messageId || '',
+          text: parsed.text || parsed.content || (parsed.type === 'voice' ? '🎤 Voice note' : (parsed.imageUrl ? '📷 Photo' : 'Message')),
+          senderName: parsed.senderName || parsed.sender || 'Participant',
+          type: parsed.type || 'text',
+          imageUrl: parsed.imageUrl || undefined,
+        };
+      } catch {}
+    }
+    return {
+      id: rawReply,
+      text: 'Message',
+      senderName: 'Participant',
+      type: 'text',
+      imageUrl: undefined,
+    };
+  }
+  return null;
+}
+
+function resolveRepliesAgainstList(items: ChatMessage[]): ChatMessage[] {
+  const map = new Map<string, ChatMessage>();
+  for (const item of items) {
+    if (item.id) map.set(item.id, item);
+  }
+  for (const item of items) {
+    if (item.replyTo && item.replyTo.id) {
+      const target = map.get(item.replyTo.id);
+      if (target) {
+        if (!item.replyTo.text || item.replyTo.text === 'Message') {
+          item.replyTo.text = target.isVoiceNote ? '🎤 Voice note' : (target.imageUrl ? '📷 Photo' : (target.text || 'Message'));
+        }
+        if (!item.replyTo.senderName || item.replyTo.senderName === 'Participant') {
+          item.replyTo.senderName = target.sender || 'Participant';
+        }
+        if (!item.replyTo.type) {
+          item.replyTo.type = target.type;
+        }
+        if (!item.replyTo.imageUrl && target.imageUrl) {
+          item.replyTo.imageUrl = target.imageUrl;
+        }
+      }
+    }
+  }
+  return items;
+}
+
 export default function ChatRoomScreen({ route, navigation }: any) {
 
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
@@ -137,7 +198,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isMountedRef = useIsMounted();
   
-  const swipeRefs = useRef<Record<string, Swipeable | null>>({});
+  const swipeRefs = useRef<Record<string, any>>({});
   const styles = useMemo(() => getStyles(theme, insets, windowWidth), [theme, insets, windowWidth]);
 
   const APP_THEME = {
@@ -472,8 +533,32 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     if (!eventData) return;
     if (eventData.type === 'message' || eventData.text || eventData.imageUrl || eventData.audioUrl) {
       setMessages(prev => {
-        if (prev.some(m => m.id === eventData.id)) return prev;
-        return [eventData, ...prev];
+        const rawParsedReply = parseReplyTo(eventData.replyTo || eventData.reply_to || eventData.replyToId);
+        if (prev.some(m => m.id === eventData.id)) {
+          return prev.map(m => m.id === eventData.id ? { ...m, ...eventData, replyTo: rawParsedReply || m.replyTo, status: 'sent' } : m);
+        }
+        let resolvedReply = rawParsedReply;
+        if (resolvedReply && resolvedReply.id && (!resolvedReply.text || resolvedReply.text === 'Message')) {
+          const targetId = resolvedReply.id;
+          const target = prev.find(m => m.id === targetId);
+          if (target) {
+            resolvedReply = {
+              id: target.id,
+              text: target.isVoiceNote ? '🎤 Voice note' : (target.imageUrl ? '📷 Photo' : (target.text || 'Message')),
+              senderName: target.sender || 'Participant',
+              type: target.type,
+              imageUrl: target.imageUrl || undefined,
+            };
+          }
+        }
+        const incomingMsg: ChatMessage = {
+          ...eventData,
+          replyTo: resolvedReply,
+          time: eventData.time || new Date(eventData.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          timestampObj: eventData.timestampObj ? new Date(eventData.timestampObj) : new Date(eventData.createdAt || Date.now()),
+          isMe: currentUser ? eventData.senderId === currentUser.uid : false,
+        };
+        return [incomingMsg, ...prev];
       });
     } else if (eventData.type === 'delete' && eventData.messageId) {
       setMessages(prev => prev.map(m => m.id === eventData.messageId ? { ...m, isDeleted: true, text: 'This message was deleted' } : m));
@@ -630,8 +715,10 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             isMe: cu ? m.senderId === cu.uid : false,
             senderColor: getSenderColor(m.senderId || '', themeName === 'light'),
             timestampObj: m.timestampObj ? new Date(m.timestampObj) : new Date(m.createdAt || m.created_at || m.timestamp || Date.now()),
+            replyTo: parseReplyTo(m.replyTo || m.reply_to || m.replyToId),
           };
         });
+        parsed = resolveRepliesAgainstList(parsed);
         if (clearedAt > 0) {
           parsed = parsed.filter(m => (m.timestampObj?.getTime?.() || 0) > clearedAt);
         }
@@ -645,7 +732,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
       try {
         const res = await api.chats.getMessages(room.id);
         if (res?.success && Array.isArray(res.data)) {
-          const msgs: ChatMessage[] = res.data.map((m: any) => {
+          let msgs: ChatMessage[] = res.data.map((m: any) => {
             const displayDt = new Date(m.createdAt || m.created_at || m.timestamp || Date.now());
             const rawSender = (room?.participantDetails?.[m.senderId]?.name && room.participantDetails[m.senderId].name !== 'Member' ? room.participantDetails[m.senderId].name : null)
               || (m.senderName && m.senderName !== 'Member' ? m.senderName : null)
@@ -680,7 +767,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               timestampObj: displayDt,
               status: m.status || 'sent',
               reactions: m.reactions || {},
-              replyTo: m.replyTo || pp.replyTo || null,
+              replyTo: parseReplyTo(m.replyTo || pp.replyTo || m.reply_to || pp.reply_to || m.replyToId),
               edited: m.edited || false,
               isDeleted: m.deleted || false,
               starred: m.starred || false,
@@ -702,6 +789,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               contactData: m.contactData || m.contact_data || m.profileData || pp.contactData || pp.profileData || undefined,
             };
           });
+          msgs = resolveRepliesAgainstList(msgs);
           let finalMsgs = msgs;
           const clearedAtStr = await AsyncStorage.getItem(`cleared_at_${currentUser?.uid}_${room.id}`).catch(() => null);
           const clearedAt = clearedAtStr ? parseInt(clearedAtStr, 10) : 0;
@@ -709,12 +797,14 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             finalMsgs = msgs.filter(m => (m.timestampObj?.getTime?.() || 0) > clearedAt);
           }
           finalMsgs.sort((a, b) => b.timestampObj.getTime() - a.timestampObj.getTime());
+          AsyncStorage.setItem(cacheKey, JSON.stringify(finalMsgs.slice(0, 50))).catch(() => {});
           setMessages(prev => {
             if (prev.length === finalMsgs.length && prev.length > 0) {
               const isSame = prev[0]?.id === finalMsgs[0]?.id &&
                 prev[prev.length - 1]?.id === finalMsgs[finalMsgs.length - 1]?.id &&
                 prev[0]?.status === finalMsgs[0]?.status &&
-                prev[0]?.text === finalMsgs[0]?.text;
+                prev[0]?.text === finalMsgs[0]?.text &&
+                prev[0]?.replyTo?.id === finalMsgs[0]?.replyTo?.id;
               if (isSame) return prev;
             }
             return finalMsgs;
@@ -830,16 +920,27 @@ export default function ChatRoomScreen({ route, navigation }: any) {
   const sendVoiceNote = async (uri: string, dur: number, waveform: number[] = []) => {
     const cu = currentUser;
     if (!cu || !room?.id) return;
+    const replyTarget = replyingTo;
+    if (replyTarget) setReplyingTo(null);
     try {
       setIsUploading(true); showToast('Sending voice note…');
       const audioUrl = await uploadImageToCloudinary(uri, 'video');
       const bars = downsampleWaveform(waveform, 40);
+      const replyData = replyTarget ? {
+        id: replyTarget.id,
+        text: replyTarget.isVoiceNote ? '🎤 Voice note' : (replyTarget.imageUrl ? '📷 Photo' : (replyTarget.text || 'Message')),
+        senderName: replyTarget.sender || 'Participant',
+        type: replyTarget.type,
+        imageUrl: replyTarget.imageUrl,
+      } : undefined;
       const res = await dispatchSendMessage(room.id, {
         content: '🎤 Voice note',
         type: 'voice',
         media_url: audioUrl,
         duration: fmtDur(dur),
         waveform: bars,
+        reply_to: replyTarget?.id,
+        replyTo: replyData,
       });
       notifyParticipants('🎤 Voice note');
       if (bars.length > 0 && res?.data?.id) setWaveformData(p => ({ ...p, [res.data.id]: bars }));
@@ -975,9 +1076,11 @@ export default function ChatRoomScreen({ route, navigation }: any) {
     const replyTarget = replyingTo;
     if (replyTarget) {
       msgData.replyTo = {
-        id:replyTarget.id,
-        text: replyTarget.isVoiceNote ? '🎤 Voice note' : (replyTarget.imageUrl ? '📷 Photo' : replyTarget.text),
-        senderName:replyTarget.sender, type:replyTarget.type, imageUrl:replyTarget.imageUrl,
+        id: replyTarget.id,
+        text: replyTarget.isVoiceNote ? '🎤 Voice note' : (replyTarget.imageUrl ? '📷 Photo' : (replyTarget.text || 'Message')),
+        senderName: replyTarget.sender || 'Participant',
+        type: replyTarget.type,
+        imageUrl: replyTarget.imageUrl,
       };
       setReplyingTo(null);
     }
@@ -1014,6 +1117,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         content: text,
         type: 'text',
         reply_to: msgData.replyTo?.id || replyTarget?.id,
+        replyTo: msgData.replyTo,
         ...msgData,
       });
       setMessages(prev => prev.map(message => message.id === msgData.id ? { ...message, status: 'sent' } : message));
@@ -1088,6 +1192,15 @@ export default function ChatRoomScreen({ route, navigation }: any) {
             );
             return;
           }
+          const replyTarget = replyingTo;
+          if (replyTarget) setReplyingTo(null);
+          const replyData = replyTarget ? {
+            id: replyTarget.id,
+            text: replyTarget.isVoiceNote ? '🎤 Voice note' : (replyTarget.imageUrl ? '📷 Photo' : (replyTarget.text || 'Message')),
+            senderName: replyTarget.sender || 'Participant',
+            type: replyTarget.type,
+            imageUrl: replyTarget.imageUrl,
+          } : null;
           const optimisticVideoId = 'pending-video-' + Date.now();
           try {
             setIsUploading(true);
@@ -1110,7 +1223,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               timestampObj: new Date(),
               status: 'sending',
               reactions: {},
-              replyTo: null,
+              replyTo: replyData,
               edited: false,
               isDeleted: false,
               starred: false,
@@ -1125,6 +1238,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
               type: 'video',
               videoUrl,
               media_url: videoUrl,
+              reply_to: replyTarget?.id,
+              replyTo: replyData,
             });
             // Update optimistic message to final URL + sent status
             setMessages(prev => prev.map(m => m.id === optimisticVideoId ? { ...m, videoUrl, status: 'sent' } : m));
@@ -1169,13 +1284,21 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           viewOnce, viewOnceViewed: false,
         };
         if (replyingTo && item === pendingItems[0]) {
-          data.replyTo = { id: replyingTo.id, text: '📷 Photo', senderName: replyingTo.sender };
+          const replyText = replyingTo.isVoiceNote ? '🎤 Voice note' : (replyingTo.imageUrl ? '📷 Photo' : (replyingTo.text || 'Message'));
+          data.replyTo = {
+            id: replyingTo.id,
+            text: replyText,
+            senderName: replyingTo.sender || 'Participant',
+            type: replyingTo.type,
+            imageUrl: replyingTo.imageUrl,
+          };
         }
         await dispatchSendMessage(room.id, {
           content: item.caption || '📷 Photo',
           type: 'image',
           media_url: imageUrl,
-          reply_to: replyingTo?.id,
+          reply_to: data.replyTo?.id || replyingTo?.id,
+          replyTo: data.replyTo,
           viewOnce,
           ...data,
         });
@@ -1399,6 +1522,16 @@ export default function ChatRoomScreen({ route, navigation }: any) {
         const cu = currentUser;
         if (!cu || !room?.id) return;
         
+        const replyTarget = replyingTo;
+        if (replyTarget) setReplyingTo(null);
+        const replyData = replyTarget ? {
+          id: replyTarget.id,
+          text: replyTarget.isVoiceNote ? '🎤 Voice note' : (replyTarget.imageUrl ? '📷 Photo' : (replyTarget.text || 'Message')),
+          senderName: replyTarget.sender || 'Participant',
+          type: replyTarget.type,
+          imageUrl: replyTarget.imageUrl,
+        } : null;
+
         const isAudio = asset.mimeType?.startsWith('audio/') || !!asset.name.match(/\.(mp3|wav|m4a|aac|ogg|opus|amr|flac|wma)$/i);
         const msgType = isAudio ? 'audio' : 'document';
         const optimisticDocId = 'pending-doc-' + Date.now();
@@ -1423,7 +1556,7 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           timestampObj: new Date(),
           status: 'sending',
           reactions: {},
-          replyTo: null,
+          replyTo: replyData,
           edited: false,
           isDeleted: false,
           starred: false,
@@ -1442,6 +1575,8 @@ export default function ChatRoomScreen({ route, navigation }: any) {
           content: isAudio ? '🎧 Audio' : `📄 ${asset.name}`,
           type: msgType,
           media_url: uploadedUrl,
+          reply_to: replyTarget?.id,
+          replyTo: replyData,
           ...(isAudio ? { audioUrl: uploadedUrl, duration: '0:00' } : { documentUrl: uploadedUrl, documentName: asset.name, documentSize: asset.size }),
         });
 
