@@ -449,8 +449,8 @@ export default function HomeScreen({ navigation }: any) {
           <View style={styles.smallCardsContainer}>
             {cards.filter(c => {
               const hf = getHiddenFeatures(contextProfile);
-              if (c.route === 'Rehearsal' && hf.hideOngoing) return false;
-              if (c.route === 'AllSongs' && hf.hideMinisteredSongs) return false;
+              const isHQ = isHQAdmin(contextProfile) || isHQAdmin(userProfile as any);
+              if (c.route === 'Rehearsal' && !isHQ && hf.hideOngoing) return false;
               return true;
             }).map((card) =>
             <TouchableOpacity
@@ -569,13 +569,13 @@ export default function HomeScreen({ navigation }: any) {
                   if (hf.hideArchives) return false;
                   return canAccessArchive(contextProfile);
                 }
-                if (item.id === 'songs' && hf.hideMinisteredSongs) return false;
-                if (item.id === 'ongoing' && hf.hideOngoing) return false;
-                if (item.id === 'submit' && hf.hideSubmissions) return false;
-                if (item.id === 'studio' && hf.hideAudioLab) return false;
-                if (item.id === 'media' && hf.hideAudioLab) return false;
+                const isHQ = isHQAdmin(contextProfile) || isHQAdmin(userProfile as any);
+                if (item.id === 'ongoing' && !isHQ && hf.hideOngoing) return false;
+                if (item.id === 'submit' && !isHQ && hf.hideSubmissions) return false;
+                if (item.id === 'studio' && !isHQ && hf.hideAudioLab) return false;
+                if (item.id === 'media' && !isHQ && hf.hideAudioLab) return false;
                 if (item.id === 'subgroups') {
-                  if (hf.hideSubgroups) return false;
+                  if (!isHQ && hf.hideSubgroups) return false;
                   return true;
                 }
                 return true;

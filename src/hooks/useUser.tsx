@@ -94,9 +94,13 @@ function parseProfile(uid: string, rawInput: Record<string, any>): UserProfile {
     try { rawData = JSON.parse(rawData); } catch (e) {}
   }
   const d = { ...rawInput, ...rawData };
-  const hiddenFeatures = (d.hidden_features || d.hiddenFeatures || {}) as Record<string, boolean>;
+  const rawHiddenFeatures = (d.hidden_features || d.hiddenFeatures || {}) as Record<string, boolean>;
   const role = d.role || 'member';
-  const isCoordinator = ['zone_admin', 'coordinator', 'admin', 'hq_admin', 'boss'].includes(role.toLowerCase());
+  const hasHqAccess = !!(d.has_hq_access || d.hasHqAccess || role.toLowerCase() === 'hq_admin');
+  const isCoordinator = ['zone_admin', 'coordinator', 'admin', 'hq_admin', 'boss'].includes(role.toLowerCase()) || hasHqAccess;
+  const hiddenFeatures = hasHqAccess
+    ? { ...rawHiddenFeatures, hideArchives: false, hidePreRehearsal: false, hideMinisteredSongs: false }
+    : { ...rawHiddenFeatures, hideMinisteredSongs: false };
   
   return {
     uid,
@@ -115,11 +119,11 @@ function parseProfile(uid: string, rawInput: Record<string, any>): UserProfile {
     designation: d.designation || '',
     administration: d.administration || '',
     avatar: d.profile_image_url || d.avatar_url || d.photoURL || d.avatar || d.avatarUrl || '',
-    role,
-    hasHqAccess: !!(d.has_hq_access || d.hasHqAccess),
-    canAccessArchive: !!(d.can_access_archive || d.canAccessArchive || d.canSeeArchive),
-    canAccessPreRehearsal: !!(d.can_access_pre_rehearsal || d.canAccessPreRehearsal),
-    canAnnotate: !!(d.canAnnotate || d.can_annotate),
+    role: hasHqAccess ? 'hq_admin' : role,
+    hasHqAccess,
+    canAccessArchive: hasHqAccess || !!(d.can_access_archive || d.canAccessArchive || d.canSeeArchive),
+    canAccessPreRehearsal: hasHqAccess || !!(d.can_access_pre_rehearsal || d.canAccessPreRehearsal),
+    canAnnotate: hasHqAccess || !!(d.canAnnotate || d.can_annotate),
     isZoneCoordinator: isCoordinator,
     hiddenFeatures,
     rehearsalCount: d.rehearsalCount || 0,
@@ -290,13 +294,22 @@ export const useUserStore = create<UserStore>((set, get) => ({
             await SecureStore.setItemAsync('userId', uid);
 
             const parsed = parseProfile(uid, data);
+            const existingZone = get().currentZone;
             const zoneCode = data.zone_code || data.zoneCode || data.zoneId || '';
-            const initialZone: Zone | null = (data.memberships?.[0]?.organization ? {
-              id: data.memberships[0].organization.id,
-              name: data.memberships[0].organization.name,
-              invitationCode: data.memberships[0].organization.invitationCode || data.memberships[0].organization.code,
-              isHq: !!data.memberships[0].organization.isHq,
-              region: data.memberships[0].organization.region,
+            const matchedMemOrg = (data.memberships || []).find((m: any) =>
+              m?.organization && (
+                String(m.organization.id) === String(data.zoneId) ||
+                String(m.organization.code || '').toLowerCase() === String(zoneCode).toLowerCase() ||
+                String(m.organization.invitationCode || '').toLowerCase() === String(zoneCode).toLowerCase()
+              )
+            )?.organization || data.memberships?.[0]?.organization;
+
+            const initialZone: Zone | null = (matchedMemOrg ? {
+              id: matchedMemOrg.id,
+              name: matchedMemOrg.name,
+              invitationCode: matchedMemOrg.invitationCode || matchedMemOrg.code,
+              isHq: !!matchedMemOrg.isHq,
+              region: matchedMemOrg.region,
             } : null) || (data.zoneId ? {
               id: data.zoneId,
               name: data.zoneName || data.zone_name || 'Your Loveworld Singers',
@@ -304,7 +317,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
               isHq: isHQGroup(data.zoneId),
               region: data.region || 'Headquarters',
             } : null);
-            const resolved = getZoneByInvitationCode(zoneCode) || initialZone;
+            const resolved = existingZone || getZoneByInvitationCode(zoneCode) || initialZone;
 
             const isPrem = checkPremium(
               parsed.hasHqAccess,
@@ -365,13 +378,19 @@ export const useUserStore = create<UserStore>((set, get) => ({
     if (!user?.uid) return false;
     try {
       const { apiClient } = require('../lib/apiClient');
-      await apiClient.patch(`/profiles/${user.uid}`, { zone_code: zone.invitationCode });
-      set(s => ({ currentZone: zone, isHQ: isHQGroup(zone.id), zoneVersion: s.zoneVersion + 1 }));
+      const patchRes: any = await apiClient.patch(`/profiles/${user.uid}`, { zone_code: zone.invitationCode || zone.id });
+      const updatedProfile = patchRes?.data?.id ? parseProfile(user.uid, patchRes.data) : null;
+      set(s => ({
+        currentZone: zone,
+        isHQ: isHQGroup(zone.id),
+        zoneVersion: s.zoneVersion + 1,
+        ...(updatedProfile ? { profile: updatedProfile } : {}),
+      }));
       clearCache();
       try {
         const allKeys = await AsyncStorage.getAllKeys();
         const purgeKeys = allKeys.filter((k) =>
-          ['screen_cache_', 'MINISTERED_', 'SEARCH_SONGS_', 'RESOLVED_TRACKS_'].some((p) => k.startsWith(p))
+          ['screen_cache_', 'SEARCH_SONGS_', 'RESOLVED_TRACKS_'].some((p) => k.startsWith(p))
         );
         if (purgeKeys.length > 0) await AsyncStorage.multiRemove(purgeKeys);
       } catch {}

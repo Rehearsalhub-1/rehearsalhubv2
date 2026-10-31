@@ -129,7 +129,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
     const resolvedZoneId = currentZone?.id || 'zone-001';
 
-    if (!force && cachedSongs && cachedPrograms) {
+    if (!force && cachedSongs && cachedSongs.length > 0 && cachedPrograms) {
       setSongs(cachedSongs);
       setSingers(cachedSingers || []);
       setPrograms(cachedPrograms);
@@ -139,16 +139,17 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       return;
     }
 
-    if (!force && !cachedSongs) {
+    if (!force && (!cachedSongs || cachedSongs.length === 0)) {
       try {
         const [storedSongs, storedPrograms, storedSingers, storedCategories] = await Promise.all([
-          AsyncStorage.getItem(`MINISTERED_SONGS_CACHE_${resolvedZoneId}`),
-          AsyncStorage.getItem(`MINISTERED_PROGRAMS_CACHE_${resolvedZoneId}`),
-          AsyncStorage.getItem(`MINISTERED_SINGERS_CACHE_${resolvedZoneId}`),
-          AsyncStorage.getItem(`MINISTERED_CATEGORIES_CACHE_${resolvedZoneId}`)
+          AsyncStorage.getItem('MINISTERED_SONGS_CACHE_GLOBAL'),
+          AsyncStorage.getItem('MINISTERED_PROGRAMS_CACHE_GLOBAL'),
+          AsyncStorage.getItem('MINISTERED_SINGERS_CACHE_GLOBAL'),
+          AsyncStorage.getItem('MINISTERED_CATEGORIES_CACHE_GLOBAL')
         ]);
-        if (storedSongs && storedPrograms && isMountedRef.current) {
-          cachedSongs = storedSongs ? JSON.parse(storedSongs) : [];
+        const parsedSongs = storedSongs ? JSON.parse(storedSongs) : [];
+        if (parsedSongs.length > 0 && storedPrograms && isMountedRef.current) {
+          cachedSongs = parsedSongs;
           cachedPrograms = storedPrograms ? JSON.parse(storedPrograms) : [];
           cachedSingers = storedSingers ? JSON.parse(storedSingers) : [];
           cachedCategories = storedCategories ? JSON.parse(storedCategories) : [];
@@ -220,7 +221,6 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       });
 
       const mappedSongs = (rawSongs || [])
-        .filter((song: any) => isHQ || !song.isHQOnly)
         .map((song: any, index: number) => {
           const songAudioUrl = resolveSongAudioUrl(song);
           const resolvedAudioUrls = resolveSongAudioUrls(song);
@@ -299,17 +299,19 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
       setCategories(distinctCategoriesSorted);
       setIsLoading(false);
 
-      cachedSongs = mappedSongs;
-      cachedSingers = [...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[];
-      cachedPrograms = validPrograms;
-      cachedCategories = distinctCategories;
+      if (mappedSongs.length > 0) {
+        cachedSongs = mappedSongs;
+        cachedSingers = [...new Set(mappedSongs.map((s: any) => s.leadSinger as string).filter(Boolean))].sort() as string[];
+        cachedPrograms = validPrograms;
+        cachedCategories = distinctCategories;
 
-      Promise.all([
-        AsyncStorage.setItem(`MINISTERED_SONGS_CACHE_${resolvedZoneId}`, JSON.stringify(mappedSongs)),
-        AsyncStorage.setItem(`MINISTERED_PROGRAMS_CACHE_${resolvedZoneId}`, JSON.stringify(validPrograms)),
-        AsyncStorage.setItem(`MINISTERED_SINGERS_CACHE_${resolvedZoneId}`, JSON.stringify(cachedSingers)),
-        AsyncStorage.setItem(`MINISTERED_CATEGORIES_CACHE_${resolvedZoneId}`, JSON.stringify(cachedCategories))
-      ]).catch(() => { });
+        Promise.all([
+          AsyncStorage.setItem('MINISTERED_SONGS_CACHE_GLOBAL', JSON.stringify(mappedSongs)),
+          AsyncStorage.setItem('MINISTERED_PROGRAMS_CACHE_GLOBAL', JSON.stringify(validPrograms)),
+          AsyncStorage.setItem('MINISTERED_SINGERS_CACHE_GLOBAL', JSON.stringify(cachedSingers)),
+          AsyncStorage.setItem('MINISTERED_CATEGORIES_CACHE_GLOBAL', JSON.stringify(cachedCategories))
+        ]).catch(() => { });
+      }
 
     } catch (err) {
       console.error('Error fetching ministered songs:', err);
@@ -326,17 +328,13 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
   };
 
   useEffect(() => {
-    if (isZoneLoading || isProfileLoading || !user) return;
+    if (!user) return;
     isMountedRef.current = true;
-    cachedSongs = null; // Invalidate on zone change
-    cachedPrograms = null;
-    cachedSingers = null;
-    cachedCategories = null;
     loadData();
     return () => {
       isMountedRef.current = false;
     };
-  }, [currentZone?.id, zoneVersion, isZoneLoading, isProfileLoading, user?.uid]);
+  }, [user?.uid]);
 
   const programMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -437,7 +435,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
 
   return (
     <View style={s.root}>
-      {!isProfileLoading && hf.hideMinisteredSongs && (
+      {false && (
         <>
           <StatusBar style="light" />
           <LinearGradient
@@ -459,7 +457,7 @@ export default function AllMinisteredSongsScreen({ navigation }: any) {
           </SafeAreaView>
         </>
       )}
-      {(isProfileLoading || !hf.hideMinisteredSongs) && (
+      {true && (
         <View style={s.root}>
           <StatusBar style="light" />
           <LinearGradient

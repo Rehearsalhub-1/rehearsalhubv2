@@ -58,7 +58,10 @@ function shouldCachePath(path: string): boolean {
   return true;
 }
 
-export function clearCache(): void { apiGetCache.clear(); }
+export function clearCache(): void {
+  apiGetCache.clear();
+  etagStore.clear();
+}
 
 export async function getAccessToken(): Promise<string | null> {
   return SecureStore.getItemAsync('jwt');
@@ -231,9 +234,9 @@ async function request<T>(
   // ─────────────────────────────────────────────────────────────────────────
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  // Send If-None-Match for GET requests that have a stored ETag
+  // Send If-None-Match for GET requests that have a stored ETag AND cached body
   // Server returns 304 (0 bytes) if nothing changed — key for the thundering herd fix
-  if (method === 'GET' && shouldCachePath(path)) {
+  if (method === 'GET' && shouldCachePath(path) && apiGetCache.has(path)) {
     const storedEtag = etagStore.get(path);
     if (storedEtag) headers['If-None-Match'] = storedEtag;
   }

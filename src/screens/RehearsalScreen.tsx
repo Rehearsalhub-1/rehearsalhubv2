@@ -27,7 +27,7 @@ import Constants from 'expo-constants';
 import { getZoneByInvitationCode, isHQGroup } from '../config/zones';
 import { useZone } from '../hooks/useZone';
 import { useUserStore, useChurch } from '../hooks/useUser';
-import { canAccessArchive, canAccessPreRehearsal, getHiddenFeatures } from '../config/roles';
+import { isHQAdmin, canAccessArchive, canAccessPreRehearsal, getHiddenFeatures } from '../config/roles';
 import { useTrackPlayer } from '../hooks/useTrackPlayer';
 import TrackOptionsModal from '../components/TrackOptionsModal';
 import { readCache, writeCache } from '../lib/screenCache';
@@ -753,8 +753,8 @@ export default function RehearsalScreen({ navigation, route }: any) {
         });
 
         const hf = getHiddenFeatures(profile);
-        const userCanSeeArchive = !hf.hideArchives && canAccessArchive(profile);
-        const userCanSeePreRehearsal = !hf.hidePreRehearsal && canAccessPreRehearsal(profile);
+        const userCanSeeArchive = isHQAdmin(profile) || (!hf.hideArchives && canAccessArchive(profile));
+        const userCanSeePreRehearsal = isHQAdmin(profile) || (!hf.hidePreRehearsal && canAccessPreRehearsal(profile));
 
         let finalSongs = mappedSongs;
         if (!userCanSeeArchive) {
@@ -1094,18 +1094,11 @@ export default function RehearsalScreen({ navigation, route }: any) {
   useWebSocket('song', 'all', handleLiveSongUpdate, true);
 
   // songs_changed: lightweight signal that the song list changed in our zone.
-  // No full song payload — just triggers a fresh fetch from the server/cache.
-  // This replaces the old full-payload 'songs'/'song' broadcasts.
+ 
   //
   // Thundering herd prevention:
   // - Random delay 1-5s before refetch so 300 phones don't all hit the server at once
-  // - Event coalescing: multiple events within the delay window collapse into one refetch
-  // - Only triggers when this component is mounted (triggerReload won't fire if unmounted)
-  // - Server sends ETag/304 so if nothing changed the response is 0 bytes
-  //
-  // Cache invalidation (from brief requirement):
-  // - On-device AsyncStorage cache is cleared before refetch so stale disk cache
-  //   is not served after a confirmed change event arrives
+
   const pendingSongsChangedRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useWebSocket(
     'songs_changed',

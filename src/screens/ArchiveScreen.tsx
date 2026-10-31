@@ -42,7 +42,7 @@ export default function ArchiveScreen({ navigation }: any) {
 
   const [visibleCount, setVisibleCount] = useState(10);
   const hf = getHiddenFeatures(profile);
-  const hasArchiveAccess = !hf.hideArchives && canAccessArchive(profile);
+  const hasArchiveAccess = isHQAdmin(profile) || (!hf.hideArchives && canAccessArchive(profile));
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

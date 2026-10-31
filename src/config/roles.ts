@@ -13,6 +13,15 @@ export function isHQAdminEmail(_email: string | null | undefined): boolean {
 export function isHQAdmin(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false;
 
+  if (
+    profile.hasHqAccess ||
+    (profile as any)?.has_hq_access ||
+    (profile as any)?.raw?.hasHqAccess ||
+    (profile as any)?.raw?.has_hq_access
+  ) {
+    return true;
+  }
+
   const role = (profile.role || (profile as any)?.raw?.role || '').toLowerCase();
   if (['hq_admin', 'super_admin', 'admin', 'boss', 'president', 'director', 'oftp', 'executive'].includes(role)) return true;
 
